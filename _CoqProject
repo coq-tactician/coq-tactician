@@ -9,6 +9,5 @@ src/ltacrecord.ml
 src/pknnmax.ml
 src/features.ml
 src/hh_term.ml
-src/hhlib.ml
 src/timeouttac.ml
 src/tactician_ltac1_plugin.mlpack
