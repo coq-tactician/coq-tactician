@@ -513,7 +513,7 @@ let rec tclSearchDiagonalDFS depth mark tcs : (int * string * string list) Proof
 let rec tclSearchDiagonalIterative d : (string * string list) Proofview.tactic =
     let open Proofview in
     let open Notations in
-    (tclLIFT (NonLogical.print_info (Pp.str ("Iterative depth: " ^ string_of_int d)))) <*>
+    (* (tclLIFT (NonLogical.print_info (Pp.str ("Iterative depth: " ^ string_of_int d)))) <*> *)
     tclOR
         (tclSearchDiagonalDFS d "" [] >>= (fun (d, m, tcs) -> tclUNIT (m, tcs)))
         (function
