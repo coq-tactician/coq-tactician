@@ -73,24 +73,24 @@ let locate_absolute_library dir : CUnix.physical_path locate_result =
 
 let try_locate_absolute_library dir =
   match locate_absolute_library dir with
-  | Ok res -> res
+  | Ok res -> Some res
   | Error LibUnmappedDir ->
-    CErrors.user_err (Pp.str "There is no physical path bound to the v file")
+    None
   | Error LibNotFound ->
-    CErrors.user_err (Pp.str "Cannot find the v file")
+    None
 
 let benchmarking = ref None
 let featureprinting = ref false
 
 let base_filename =
   let dirpath = Global.current_dirpath () in
-  Filename.remove_extension (try_locate_absolute_library dirpath)
+  Option.map (fun f -> Filename.remove_extension f) (try_locate_absolute_library dirpath)
 
 let feat_file =
   let file = ref None in
   (fun () ->
     match !file with
-      | None -> let filename = base_filename ^ ".feat" in
+      | None -> let filename = Option.default "" base_filename ^ ".feat" in
         let k = open_permanently filename in
         file := Some k;
         k
@@ -100,7 +100,7 @@ let eval_file =
   let file = ref None in
   (fun () ->
      match !file with
-     | None -> let filename = base_filename ^ ".bench" in
+     | None -> let filename = Option.default "" base_filename ^ ".bench" in
        let k = open_permanently filename in
        file := Some k;
        k
@@ -119,13 +119,23 @@ let benchoptions = Goptions.{optdepr = false;
                              optkey = ["Tactician"; "Benchmark"];
                              optread = (fun () -> !benchmarking);
                              optwrite = (fun b -> benchmarking := b;
-                                          match b with | Some _ -> ignore (eval_file ())
-                                                       | _ -> ())}
+                                          match b with
+                                          | Some _ -> (match base_filename with
+                                              | None -> Feedback.msg_notice (
+                                                  Pp.str "No source file could be found. Disabling benchmarking.");
+                                                benchmarking := None
+                                              | Some f -> ignore (eval_file ()))
+                                          | _ -> ())}
 let featureoptions = Goptions.{optdepr = false;
                                optname = "Tactician feature outputting";
                                optkey = ["Tactician"; "Output"; "Features"];
                                optread = (fun () -> !featureprinting);
-                               optwrite = (fun b -> featureprinting := b; if b then ignore (feat_file ()))}
+                               optwrite = (fun b -> featureprinting := b; if b then
+                                              (match base_filename with
+                                              | None -> Feedback.msg_notice (
+                                                  Pp.str "No source file could be found. Disabling feature writing.");
+                                                benchmarking := None
+                                              | Some f -> ignore (feat_file ())))}
 
 let _ = Goptions.declare_int_option benchoptions
 let _ = Goptions.declare_bool_option featureoptions
