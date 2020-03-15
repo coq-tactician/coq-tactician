@@ -1,0 +1,54 @@
+### Tactician ###
+*.feat
+*.bench
+
+### Coq ###
+.*.aux
+*.a
+*.cma
+*.cmi
+*.cmo
+*.cmx
+*.cmxa
+*.cmxs
+*.glob
+*.ml.d
+*.ml4.d
+*.mli.d
+*.mllib.d
+*.mlpack.d
+*.mlg.d
+*.native
+*.o
+*.v.d
+*.vio
+*.vo
+*.vos
+*.vok
+g_*.ml
+.coq-native/
+.csdp.cache
+.lia.cache
+.nia.cache
+.nlia.cache
+.nra.cache
+csdp.cache
+lia.cache
+nia.cache
+nlia.cache
+nra.cache
+.Makefile.coq.d
+Makefile.coq
+Makefile.coq.conf
+
+### OCaml ###
+*.annot
+
+# Merlin configuring file for Vim and Emacs
+.merlin
+
+# Dune generated files
+*.install
+
+# Local OPAM switch
+_opam/
