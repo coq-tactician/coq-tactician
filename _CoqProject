@@ -1,8 +1,7 @@
 -R theories Tactician
 -I src
 
-theories/Loader.v
-theories/Test.v
+theories/Ltac1.v
 
 src/g_tactician.mlg
 src/ltacrecord.ml
