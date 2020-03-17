@@ -581,16 +581,17 @@ let benchmarkSearch () : unit Proofview.tactic =
     let time = match !benchmarking with
       | None -> assert false
       | Some t -> t in
+    let full_name = Names.ModPath.to_string modpath ^ "." ^ Names.Id.to_string !current_name in
     let print_success (m, tcs) =
         let open NonLogical in
         let tstring = synthesize_tactic tcs in
         (make (fun () -> print_to_eval ("\t" ^ m ^ "\t" ^ tstring))) >>
-        (print_info (Pp.str "Proof found!")) in
+        (print_info (Pp.str ("Proof found for " ^ full_name ^ "!"))) in
     let print_name = NonLogical.make (fun () ->
-        print_to_eval ("\n" ^ (Names.ModPath.to_string modpath ^ "." ^ Names.Id.to_string !current_name) ^ "\t" ^ string_of_int time)) in
+        print_to_eval ("\n" ^ (full_name) ^ "\t" ^ string_of_int time)) in
     if !searched then Tacticals.New.tclZEROMSG (Pp.str "Already searched") else
       (searched := true;
-       tclTIMEOUT2 time (tclLIFT (NonLogical.print_info (Pp.str "Proof search start")) <*>
+       tclTIMEOUT2 time (tclLIFT (NonLogical.print_info (Pp.str ("Start proof search for " ^ full_name))) <*>
                               tclLIFT print_name <*>
                               commonSearch () >>=
                               fun m -> tclLIFT (print_success m)) <*>
