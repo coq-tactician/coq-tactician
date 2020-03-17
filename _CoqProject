@@ -1,6 +1,8 @@
 -R theories Tactician
 -I src
 
+COQEXTRAFLAGS = -noinit
+
 theories/Ltac1.v
 
 src/g_tactician.mlg
