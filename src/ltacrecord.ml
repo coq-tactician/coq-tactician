@@ -585,8 +585,7 @@ let benchmarkSearch () : unit Proofview.tactic =
         let open NonLogical in
         let tstring = synthesize_tactic tcs in
         (make (fun () -> print_to_eval ("\t" ^ m ^ "\t" ^ tstring))) >>
-        (print_info (Pp.str "Proof found!")) >>
-        (make (fun () -> print_endline tstring)) in
+        (print_info (Pp.str "Proof found!")) in
     let print_name = NonLogical.make (fun () ->
         print_to_eval ("\n" ^ (Names.ModPath.to_string modpath ^ "." ^ Names.Id.to_string !current_name) ^ "\t" ^ string_of_int time)) in
     if !searched then Tacticals.New.tclZEROMSG (Pp.str "Already searched") else
