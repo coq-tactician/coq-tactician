@@ -51,6 +51,15 @@ let pr_ltac_use_default b =
 
 }
 
+GRAMMAR EXTEND Gram
+  GLOBAL: tactician_mode;
+
+  tactician_mode:
+    [ [ g = OPT toplevel_selector; tac = G_vernac.query_command -> { tac g }
+      | g = OPT toplevel_selector; "{" -> { Vernacexpr.VernacSubproof g } ] ]
+  ;
+  END
+
 (* TODO: A truly evil memoization trick is happening here, remove *)
 VERNAC ARGUMENT EXTEND ltac_use_default_hack PRINTED BY { pr_ltac_use_default }
 | [ "." ] -> { (Random.int64 (Int64.max_int), false) }
