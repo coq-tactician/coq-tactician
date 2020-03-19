@@ -567,8 +567,9 @@ let commonSearch () =
     let open Proofview in
     let open Notations in
     tclLIFT (NonLogical.make (fun () -> CWarnings.get_flags ())) >>= (fun oldFlags ->
-        let setFlags () = tclLIFT (NonLogical.make (fun () -> CWarnings.set_flags (oldFlags))) in
-        tclLIFT (NonLogical.make (fun () -> CWarnings.set_flags ("-all"))) <*>
+        let setFlags () = tclLIFT (NonLogical.make (fun () ->
+          Dumpglob.continue (); CWarnings.set_flags (oldFlags))) in
+        tclLIFT (NonLogical.make (fun () -> Dumpglob.pause(); CWarnings.set_flags ("-all"))) <*>
         tclOR
           (tclONCE (Tacticals.New.tclCOMPLETE (tclSearchDiagonalIterative 1)) >>=
            fun m -> setFlags () <*> tclUNIT m)
