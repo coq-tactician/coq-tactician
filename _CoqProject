@@ -3,12 +3,15 @@
 
 COQEXTRAFLAGS = -noinit
 
-theories/Ltac1.v
+theories/Ltac1Record.v
+theories/Ltac1Tactics.v
 
-src/g_tactician.mlg
+src/g_ltac1_record.mlg
+src/g_ltac1_tactics.mlg
 src/ltacrecord.ml
 src/pknnmax.ml
 src/features.ml
 src/hh_term.ml
 src/timeouttac.ml
-src/tactician_ltac1_plugin.mlpack
+src/tactician_ltac1_record_plugin.mlpack
+src/tactician_ltac1_tactics_plugin.mlpack

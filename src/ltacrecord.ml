@@ -645,7 +645,8 @@ let record_tac (tac : string) = Proofview.Goal.enter
            add_to_db2 (feat, (raw_tac, tac));
            Proofview.tclUNIT ()
          with
-         | Stream.Error txt -> append "parse_errors.txt" (txt ^ " : " ^ tac ^ "\n"); Proofview.tclUNIT ())
+         | Stream.Error txt -> append "parse_errors.txt" (txt ^ " : " ^ tac ^ "\n"); Proofview.tclUNIT ()
+         | CErrors.UserError (_, txt)  -> append "parse_errors.txt" (Pp.string_of_ppcmds txt ^ " : " ^ tac ^ "\n"); Proofview.tclUNIT ())
 
     (* Print predictions *)
     (*(Proofview.tclTHEN (Proofview.tclLIFT (Proofview.NonLogical.print_info (pp_str)))

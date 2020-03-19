@@ -1,21 +1,9 @@
-DECLARE PLUGIN "tactician_ltac1_plugin"
+DECLARE PLUGIN "tactician_ltac1_record_plugin"
 
 {
 
 open Ltac_plugin
 open Ltacrecord
-
-}
-
-TACTIC EXTEND predict
-| [ "suggest" ] -> { userPredict }
-END
-
-TACTIC EXTEND search
-| [ "search" ] ->   { userSearch }
-END
-
-{
 
 open Pcoq
 open G_ltac
