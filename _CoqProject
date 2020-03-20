@@ -1,10 +1,11 @@
--R theories Tactician
+-Q theories Tactician
 -I src
 
 COQEXTRAFLAGS = -noinit
 
-theories/Ltac1Record.v
-theories/Ltac1Tactics.v
+theories/Ltac1/Record.v
+theories/Ltac1/Tactics.v
+theories/Ltac1.v
 
 src/g_ltac1_record.mlg
 src/g_ltac1_tactics.mlg
