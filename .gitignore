@@ -52,3 +52,4 @@ Makefile.coq.conf
 
 # Local OPAM switch
 _opam/
+opam
