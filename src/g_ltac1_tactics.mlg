@@ -8,9 +8,9 @@ open Tactician_ltac1_record_plugin.Ltacrecord
 }
 
 TACTIC EXTEND predict
-| [ "suggest" ] -> { userPredict }
+| [ "ml_suggest" ] -> { userPredict }
 END
 
 TACTIC EXTEND search
-| [ "search" ] ->   { userSearch }
+| [ "ml_search" ] ->   { userSearch }
 END
