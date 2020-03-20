@@ -1,4 +1,4 @@
--Q theories Tactician
+-R theories Tactician
 -I src
 
 COQEXTRAFLAGS = -noinit
