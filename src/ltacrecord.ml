@@ -461,10 +461,10 @@ let tclFoldList tacs =
 
 let synthesize_tactic tcs =
     let res = Pp.string_of_ppcmds (Pp.h 0 (Pp.str "search" ++ Pp.ws 1 ++ Pp.str "failing" ++ Pp.ws 1 ++
-        Pp.str "ltac2:([#" ++ (Pp.prlist_with_sep
-        (fun () -> Pp.str "#")
+        Pp.str "ltac2:(x|--" ++ (Pp.prlist_with_sep
+        (fun () -> Pp.str "-")
         (fun t -> Pp.str "ltac1:(" ++ Pp.str t ++ Pp.str ")")
-        (Stdlib.List.rev tcs)) ++ Pp.str ("#])."))) in
+        (Stdlib.List.rev tcs)) ++ Pp.str ("--|x)."))) in
     if String.contains res '\n' then (print_endline res; assert false) else res
 
 let tclDebugTac t i mark tcs debug =
