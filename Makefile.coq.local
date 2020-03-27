@@ -1,0 +1,3 @@
+post-all::
+	@echo "Compiling tactician.ml"
+	@ocamlopt -o tactician unix.cmxa src/tactician.ml
