@@ -5,19 +5,21 @@ let usage () = print_endline "\
 This is a utility for Tactician that will help you configure it correctly.
 Options:
 
-- To configure the main package coq-tactician after installation, run
-  tactician configure
+- To enable Tactician, run
+  tactician enable
+
+- To disable Tactician, run
+  tactician disable
 
 - To inject tactician into the installation or build of Coq packages, run
   eval $(tactician inject)
 
-- After you have installed the package coq-tactician-stdlib run the
+- After you have installed or removed the package coq-tactician-stdlib run the
   following command to help you with recompilation of other packages:
-  tactician stdlib
+  tactician recompile
 "
 
 let coqrc_string = "From Tactician Require Import Ltac1.\n"
-let bashrc_string = "eval $(tactician inject)"
 
 let syscall cmd =
   let ic, oc = Unix.open_process cmd in
@@ -48,17 +50,15 @@ let configdir () =
     Sys.getenv "XDG_CONFIG_HOME"
   with Not_found -> homedir () ^ ".config/"
 
-let first_exists files =
+let find_exists files =
   let exists = List.map Sys.file_exists files in
   let exists_text = List.map (fun b -> if b then "exists" else "does not exist") exists in
   List.iter2 (fun f e -> printf "File %s %s\n" f e) files exists_text;
   let combined = List.map2 (fun a b -> (a, b)) files exists in
   let coqrcs = List.filter (fun (f, e) -> e) combined in
-  match coqrcs with
-  | [] -> None
-  | _ -> Some (fst (List.hd coqrcs))
+  List.map fst coqrcs
 
-let find_coqrc_file () =
+let find_coqrc_files () =
   let homedir = homedir () in
   let configdir = configdir () in
   let coqbin =
@@ -72,19 +72,19 @@ let find_coqrc_file () =
   let files = [configdir ^ "coq/coqrc." ^ coqversion
               ; homedir ^ ".coqrc." ^ coqversion
               ; homedir ^ ".coqrc" ] in
-  first_exists files
+  find_exists files
 
 let check_file f str =
   let rec aux chan =
     try
       let line = input_line chan in
-      print_endline line;
       if String.equal (String.trim line) (String.trim str) then true else aux chan
     with End_of_file -> false in
   let chan = open_in f in
   let ans = aux chan in
   close_in chan;
   ans
+
 let check_coqrc_file f = check_file f coqrc_string
 
 let append file str =
@@ -108,15 +108,15 @@ From Tactician Require Import Ltac1Dummy.
 During development, you can still use Tactician as normal.
 " in
   print_endline string1;
-  match find_coqrc_file () with
-  | None ->
+  match find_coqrc_files () with
+  | [] ->
     let ans = question "\nNo coqrc file appears to exist on your system.\n\
                         Would you like us to create and populate the file ~/.coqrc?" in
     if ans then (
       append (homedir () ^ ".coqrc")  coqrc_string;
       print_endline "File created!"
     )
-  | Some f ->
+  | f::_ ->
     let already_installed = check_coqrc_file f in
     if already_installed then
       print_endline ("\nIt appears that your coqrc file " ^ f ^ " already properly loads Tactician")
@@ -127,28 +127,40 @@ During development, you can still use Tactician as normal.
         print_endline "File patched!"
       )
 
+let write f lines =
+  let rec aux chan lines =
+    match lines with
+    | [] -> close_out chan
+    | l::lines' -> fprintf chan "%s\n" l; aux chan lines' in
+  let chan = open_out f in
+  aux chan lines
+
+let remove_from_file f str =
+  let rec aux chan acc =
+    try
+      let line = input_line chan in
+      if String.equal (String.trim line) (String.trim str) then aux chan acc else aux chan (line::acc)
+    with End_of_file -> write f acc in
+  let chan = open_in f in
+  aux chan [];
+  close_in chan
+
+let remove_rcfile () =
+  let string1 = "\
+In order to disable Tactician, the following snippet needs to be removed from your coqrc files:
+
+From Tactician Require Import Ltac1.
+" in
+  print_endline string1;
+  let ans = question "Would you like to proceed?" in
+  if ans then (
+    let coqrcs = find_coqrc_files () in
+    List.iter (fun f -> remove_from_file f coqrc_string) coqrcs;
+    print_endline "Files patched!"
+  )
+
 let inject () =
-  print_endline "whatever"
-
-let find_bash_profile_file () =
-  let homedir = homedir () in
-  let files = [ homedir ^ ".bash_profile"
-              ; homedir ^ ".bashrc" ] in
-  first_exists files
-
-let install_inject () =
-  let string1 = "\n\
-----------------------------------------------------------------------------------------
-
-When you install a new Coq package through Opam or by building it manually, and you want
-Tactician to instrument it, you should run
-
-eval (tactician inject)
-
-to properly update environment variables before building/installing. In order to do this
-automatically, you can add the snippet to your ~/.bash_profile file. Just make sure that
-Opam's environment variables are also configured (for this, run 'opam init')." in
-  print_endline string1
+  print_endline "COQEXTRAFLAGS='-rifrom Tactician Ltac1.Record'; export COQEXTRAFLAGS;"
 
 let string_in str ls =
   let filtered = List.filter (fun s -> String.equal s str) ls in
@@ -158,8 +170,10 @@ let string_in str ls =
 
 let stdlib () =
   let installed = not (String.equal "" (String.trim (syscall "opam list -i coq-tactician-stdlib --short"))) in
-  if not installed then
-    print_endline "First install package coq-tactician-stdlib before running this command"
+  if not installed then (
+    print_endline "This utility helps you recompile packages if you have just installed or removed";
+    print_endline "the package coq-tactician-stdlib. Otherwise, you do not have to run this command"
+  )
   else (
     print_endline "If you just installed coq-tactician-stdlib, you should recompile all Coq packages.";
     let packages = String.split_on_char '\n' (String.trim (syscall ("opam list -i --depends-on coq --short"))) in
@@ -188,9 +202,9 @@ let () =
     let arg = Sys.argv.(1) in
     match arg with
     | "inject" -> inject ()
-    | "enable" -> install_rcfile (); install_inject ()
-    | "disable" -> print_endline "hi"
-    | "stdlib" -> stdlib ()
+    | "enable" -> install_rcfile ()
+    | "disable" -> remove_rcfile ()
+    | "recompile" -> stdlib ()
     | "--help" | "-h" | "help" -> usage ()
     | _ -> printf "Error: Unknown subcommand '%s'\n\n" arg; usage ()
   );
