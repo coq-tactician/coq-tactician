@@ -6,6 +6,7 @@ open Tacexpr
 open Tacenv
 open Context
 open Loadpath
+open Learner_helper
 
 open Pknnmax
 module TacticNaiveKnn = MakeNaiveKnn (struct
@@ -156,7 +157,7 @@ let rec ref_tag ?(freeze=fun ~marshallable r -> r) ~name x =
   let _ = Summary.(declare_summary_tag name
     { freeze_function = (fun ~marshallable -> freeze ~marshallable !db_test);
       unfreeze_function = (fun a -> db_test := a);
-      init_function = (fun () -> print_endline "hehe"; db_test := x) }) in ()
+      init_function = (fun () -> (* print_endline "hehe"; *) db_test := x) }) in ()
 
 and ref2 ?freeze ~name x = ref_tag ?freeze ~name x
 
@@ -176,16 +177,47 @@ let in_db : data_in -> Libobject.obj = Libobject.(declare_object { (default_obje
 let add_to_db (x : data_in) =
   Lib.add_anonymous_leaf (in_db x)
 
-let add_to_db2 ((feat, obj) : data_in) =
+let features term = List.map Hashtbl.hash (Features.extract_features (Hh_term.hhterm_of (Hh_term.econstr_to_constr term)))
+
+let goal_to_features gl =
+       let goal = Proofview.Goal.concl gl in
+       let hyps = Proofview.Goal.hyps gl in
+       let hyps_features =
+          List.map
+            (fun pt -> match pt with
+                 | Context.Named.Declaration.LocalAssum (id, typ) ->
+                   features typ
+                 | Context.Named.Declaration.LocalDef (id, term, typ) ->
+                   List.append (features term) (features typ))
+            hyps in
+       let feats = (List.append (features goal) (List.concat hyps_features)) in
+       (*let feats = List.map Hashtbl.hash feats in*)
+       List.sort(*_uniq*) Int.compare feats
+
+let record_map (gls : Proofview.Goal.t Proofview.tactic list)
+    (f : Proofview.Goal.t -> 'a) : 'a list Proofview.tactic =
+  let rec aux gls acc =
+    let open Proofview.Notations in
+    match gls with
+    | [] -> Proofview.tclUNIT (acc)
+    | gl::gls' -> gl >>= fun gl' -> aux gls' (f gl' :: acc) in
+  aux gls []
+
+let add_to_db2 ((before, obj) : Proofview.Goal.t * (Tacexpr.raw_tactic_expr * string))
+                (after : Proofview.Goal.t list) =
+  let feat = goal_to_features before in
   add_to_db (feat, obj);
   let db = Hashtbl.find int64_to_knn !current_int64 in
   Hashtbl.replace int64_to_knn !current_int64 (Knn.add db feat obj);
   if !featureprinting then (
     let h s = string_of_int (Hashtbl.hash s) in
-    let l2s fs = "[" ^ (String.concat ", " (List.map (fun x -> string_of_int x) fs)) ^ "]" in
-    let entry (feats, (raw_tac, obj)) =
-      l2s feats ^ " : " ^ (*Base64.encode_string*) h obj ^ "\n" in
-    print_to_feat (entry (feat, obj)))
+    (* let l2s fs = "[" ^ (String.concat ", " (List.map (fun x -> string_of_int x) fs)) ^ "]" in *)
+    let p2s x = proof_state_to_json (goal_to_proof_state_feats x) in
+    let entry (before, (raw_tac, obj), after) =
+      "{\"before\": " ^ p2s before ^
+      ", \"tacid\": " ^ (*Base64.encode_string*) h obj ^
+      ", \"after\": [" ^ String.concat ", " (List.map p2s after) ^ "]}\n" in
+    print_to_feat (entry (before, obj, after)))
 
 let _ = ref2 ~name:"ltacrecord-db" dbsingle
 (* let _ = ref3 ~name:"ltacrecord-db-tmp" dbsingle *)
@@ -226,29 +258,12 @@ let register tac name =
 
 let run_ml_tac name = TacML (CAst.make ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = name}; mltac_index = 0}, []))
 
-let features term = List.map Hashtbl.hash (Features.extract_features (Hh_term.hhterm_of (Hh_term.econstr_to_constr term)))
-
 let print_rank rank =
     let rank = firstn 10 rank in
     let strs = List.map (fun (x, f, o) -> (Pp.str (Printf.sprintf "%.4f" x)) ++ (Pp.str " ") ++ (Pp.str o) ++ (Pp.str "\n")) rank in
     Pp.seq strs
 
 (** Goal printing tactic *)
-
-let goal_to_features gl =
-       let goal = Proofview.Goal.concl gl in
-       let hyps = Proofview.Goal.hyps gl in
-       let hyps_features =
-          List.map
-            (fun pt -> match pt with
-                 | Context.Named.Declaration.LocalAssum (id, typ) ->
-                   features typ
-                 | Context.Named.Declaration.LocalDef (id, term, typ) ->
-                   List.append (features term) (features typ))
-            hyps in
-       let feats = (List.append (features goal) (List.concat hyps_features)) in
-       (*let feats = List.map Hashtbl.hash feats in*)
-       List.sort(*_uniq*) Int.compare feats
 
 let print_goal = Proofview.Goal.enter
     (fun gl ->
@@ -628,26 +643,53 @@ let run_benchmarkSearch =
 
 (* Tactic recording tactic *)
 
-let record_tac (tac : string) = Proofview.Goal.enter
+let last_state : Proofview.Goal.t option ref = ref None
+let precord_tac () = Proofview.Goal.enter
     (fun gl ->
-       (*let tac_str = Pp.string_of_ppcmds (Pptactic.pr_glob_tactic env tac) in*)
-       if (String.equal tac "suggest" || String.equal tac "search") then Proofview.tclUNIT () else
-         let feat = goal_to_features gl in
+       last_state := Some gl; Proofview.tclUNIT ())
 
-         (* Make predictions *)
-         (*let r = Knn.knn db feat in
+(* let record_tac (tac : string) = Proofview.Goal.enter
+ *     (fun gl ->
+ *        (\*let tac_str = Pp.string_of_ppcmds (Pptactic.pr_glob_tactic env tac) in*\)
+ *        if (String.equal tac "suggest" || String.equal tac "search") then Proofview.tclUNIT () else
+ *          let feat = goal_to_features gl in
+ * 
+ *          (\* Make predictions *\)
+ *          (\*let r = Knn.knn db feat in
+ *            let r = List.map (fun (x, y, (z, q)) -> (x, y, q)) r in
+ *            let pp_str = Pp.int (get_k_str r tac) ++ (\*(Pp.str " ") ++ (Pptactic.pr_raw_tactic tac) ++*\) (Pp.str "\n") in
+ *            append "count.txt" (Pp.string_of_ppcmds pp_str);*\)
+ * 
+ *          (\* Parse into raw tactic and store in db *\)
+ *          try
+ *            let raw_tac = Pcoq.parse_string Pltac.tactic_eoi tac in
+ *            add_to_db2 (!last_state, (raw_tac, tac)) feat;
+ *            Proofview.tclUNIT ()
+ *          with
+ *          | Stream.Error txt -> append "parse_errors.txt" (txt ^ " : " ^ tac ^ "\n"); Proofview.tclUNIT ()
+ *          | CErrors.UserError (_, txt)  -> append "parse_errors.txt" (Pp.string_of_ppcmds txt ^ " : " ^ tac ^ "\n"); Proofview.tclUNIT ()) *)
+
+let record_tac2 (tac : string) =
+  let open Proofview.Notations in
+  if (String.equal tac "suggest" || String.equal tac "search") then Proofview.tclUNIT () else
+    Proofview.Goal.goals >>= (fun gls ->
+        record_map gls (fun x -> x) >>= fun gls ->
+        (*let tac_str = Pp.string_of_ppcmds (Pptactic.pr_glob_tactic env tac) in*)
+
+        (* Make predictions *)
+        (*let r = Knn.knn db feat in
            let r = List.map (fun (x, y, (z, q)) -> (x, y, q)) r in
            let pp_str = Pp.int (get_k_str r tac) ++ (*(Pp.str " ") ++ (Pptactic.pr_raw_tactic tac) ++*) (Pp.str "\n") in
            append "count.txt" (Pp.string_of_ppcmds pp_str);*)
 
          (* Parse into raw tactic and store in db *)
-         try
-           let raw_tac = Pcoq.parse_string Pltac.tactic_eoi tac in
-           add_to_db2 (feat, (raw_tac, tac));
-           Proofview.tclUNIT ()
-         with
-         | Stream.Error txt -> append "parse_errors.txt" (txt ^ " : " ^ tac ^ "\n"); Proofview.tclUNIT ()
-         | CErrors.UserError (_, txt)  -> append "parse_errors.txt" (Pp.string_of_ppcmds txt ^ " : " ^ tac ^ "\n"); Proofview.tclUNIT ())
+        try
+          let raw_tac = Pcoq.parse_string Pltac.tactic_eoi tac in
+          add_to_db2 (Option.get !last_state, (raw_tac, tac)) gls;
+          Proofview.tclUNIT ()
+        with
+        | Stream.Error txt -> append "parse_errors.txt" (txt ^ " : " ^ tac ^ "\n"); Proofview.tclUNIT ()
+        | CErrors.UserError (_, txt)  -> append "parse_errors.txt" (Pp.string_of_ppcmds txt ^ " : " ^ tac ^ "\n"); Proofview.tclUNIT ())
 
     (* Print predictions *)
     (*(Proofview.tclTHEN (Proofview.tclLIFT (Proofview.NonLogical.print_info (pp_str)))
@@ -688,27 +730,18 @@ let ml_record_tac args is =
   let t = prj (List.hd args) in record_tac t
 *)
 
-let record_tac tac_num = record_tac (find_tac tac_num)
+let record_tac tac_num = record_tac2 (find_tac tac_num)
 
 let ml_record_tac args is =
   (*let num = Tacinterp.Value.cast (Genarg.topwit Tacarg.wit_tactic) (List.hd args) in*)
   let num = Tacinterp.Value.cast (Genarg.topwit Stdarg.wit_int) (List.hd args) in
   record_tac num
 
-let () = register ml_record_tac "recordtac"
+let ml_precord_tac args is =
+  precord_tac ()
 
-let rec format_oneline t =
-  let open Pp in
-  let d = repr t in
-  let d' = match d with
-  | Ppcmd_glue ls -> Ppcmd_glue (List.map format_oneline ls)
-  | Ppcmd_force_newline -> Ppcmd_print_break (1, 0)
-  | Ppcmd_box (bl, d') -> Ppcmd_box (bl, format_oneline d')
-  | Ppcmd_tag (tag, d') -> Ppcmd_tag (tag, format_oneline d')
-  | Ppcmd_comment _ -> assert false (* not expected *)
-  | Ppcmd_string s -> if String.contains s '\n' then (print_endline s; assert false) (* can happen but is problematic *) else d
-  | _ -> d in
-  h 0 (unrepr d')
+let () = register ml_record_tac "recordtac"
+let () = register ml_precord_tac "precordtac"
 
 let run_record_tac env (tac : glob_tactic_expr) : glob_tactic_expr =
   (*let tac_glob = Tacintern.intern_pure_tactic*)
@@ -718,10 +751,15 @@ let run_record_tac env (tac : glob_tactic_expr) : glob_tactic_expr =
   let hash = add_hash_hash tac_str in
   let enc = Genarg.in_gen (Genarg.glbwit Stdarg.wit_int) hash in
   TacML (CAst.make ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = "recordtac"}; mltac_index = 0},
-                [TacGeneric enc]))
+                    [TacGeneric enc]))
+
+let run_precord_tac (): glob_tactic_expr =
+  (*let tac_glob = Tacintern.intern_pure_tactic*)
+  TacML (CAst.make ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = "precordtac"}; mltac_index = 0},
+                []))
 
 let record_tac_complete env tac : glob_tactic_expr =
-  let record_tmp = TacThen (run_record_tac env tac, tac) in
+  let record_tmp = TacThen (run_precord_tac (), TacThen (tac, run_record_tac env tac)) in
   match !benchmarking with
   | None -> record_tmp
   | Some _ -> TacOr (run_benchmarkSearch, record_tmp)
@@ -760,7 +798,7 @@ let qualid_of_global env r =
 let pre_vernac_solve pstate id =
   let new_name = Proof_global.get_proof_name pstate in
   if not (Names.Id.equal !current_name new_name) then (
-    if !featureprinting then print_to_feat ("#lemma " ^ (Names.Id.to_string new_name) ^ "\n");
+    (* if !featureprinting then print_to_feat ("#lemma " ^ (Names.Id.to_string new_name) ^ "\n"); *)
 
     (* TODO: For purposes of benchmarking we want to know when a new proof is started
      * Note that this only works in batch mode, when no undo/back commands are issued. *)

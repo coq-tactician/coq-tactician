@@ -3,5 +3,7 @@ Hhlib
 Hh_term
 Features
 Pknnmax
+Tactic_learner
+Learner_helper
 Ltacrecord
 G_ltac1_record

@@ -61,4 +61,4 @@ let extract_features (t : hhterm) : string list =
     | Abs(_) ->
       failwith "extract_features"
   in
-  List.sort_uniq compare (pom t [])
+  List.sort(*_uniq*) compare (pom t [])

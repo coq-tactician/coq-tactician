@@ -14,5 +14,8 @@ src/pknnmax.ml
 src/features.ml
 src/hh_term.ml
 src/timeouttac.ml
+src/learner_helper.ml
+src/tactic_learner.ml
+src/tactic_learner.mli
 src/tactician_ltac1_record_plugin.mlpack
 src/tactician_ltac1_tactics_plugin.mlpack
