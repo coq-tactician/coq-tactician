@@ -258,10 +258,11 @@ let register tac name =
 
 let run_ml_tac name = TacML (CAst.make ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = name}; mltac_index = 0}, []))
 
-let print_rank rank =
-    let rank = firstn 10 rank in
-    let strs = List.map (fun (x, f, o) -> (Pp.str (Printf.sprintf "%.4f" x)) ++ (Pp.str " ") ++ (Pp.str o) ++ (Pp.str "\n")) rank in
-    Pp.seq strs
+let print_rank env rank =
+  let rank = firstn 10 rank in
+  let tac_pp tac = format_oneline (Pptactic.pr_glob_tactic env tac) in
+  let strs = List.map (fun (x, t) -> (*(Pp.str (Printf.sprintf "%.4f" x)) ++*) (Pp.str " ") ++ (tac_pp t) ++ (Pp.str "\n")) rank in
+  Pp.seq strs
 
 (** Goal printing tactic *)
 
@@ -322,9 +323,31 @@ let run_print_tac tac =
 
 exception PredictionsEnd
 
+let hide_interp_custom global t ot =
+  let open Tacinterp in
+  let open Tacintern in
+  let open Proofview in
+  let open Notations in
+  let hide_interp env =
+    let ist = Genintern.empty_glob_sign env in
+    let te = intern_pure_tactic ist t in
+    (*let te = Tactic_constr_map.tactic_constr_map (fun x -> x) te in *)
+    let t = eval_tactic te in
+    match ot with
+    | None -> t
+    | Some t' -> Tacticals.New.tclTHEN t t'
+  in
+  if global then
+    Proofview.tclENV >>= fun env ->
+    hide_interp env
+  else
+    Proofview.Goal.enter begin fun gl ->
+      hide_interp (Proofview.Goal.env gl)
+    end
+
 let parse_tac tac =
     try
-       Tacinterp.hide_interp false tac None
+      hide_interp_custom false tac None
     with
     e -> print_endline (Printexc.to_string e); flush_all (); assert false
 
@@ -622,8 +645,15 @@ let userPredict = Proofview.Goal.enter
     let r = List.map (fun (x, y, (z, q)) -> (x, (y, z, q))) r in
     let r = removeDups r in
     let r = List.map (fun (x, (y, z, q)) -> (x, z, q)) r in
+    let env = Proofview.Goal.env gl in
+    let ist = Genintern.empty_glob_sign env in
+    let r = List.map (fun (x, y, z) ->
+        (x,
+         Tactic_constr_map.tactic_constr_map (Proofview.Goal.hyps gl)
+           (Tacintern.intern_pure_tactic ist y), z)) r in
+    let r = List.map (fun (x, y, _) -> (x, y)) r in
     (* Print predictions *)
-    (Proofview.tclLIFT (Proofview.NonLogical.print_info (print_rank r))))
+    (Proofview.tclLIFT (Proofview.NonLogical.print_info (print_rank env r))))
 
 let userSearch =
     let open Proofview in
@@ -684,6 +714,7 @@ let record_tac2 (tac : string) =
 
          (* Parse into raw tactic and store in db *)
         try
+          let tac = Str.global_replace (Str.regexp "change_no_check") "change" tac in
           let raw_tac = Pcoq.parse_string Pltac.tactic_eoi tac in
           add_to_db2 (Option.get !last_state, (raw_tac, tac)) gls;
           Proofview.tclUNIT ()

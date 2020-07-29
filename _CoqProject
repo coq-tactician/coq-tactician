@@ -17,5 +17,6 @@ src/timeouttac.ml
 src/learner_helper.ml
 src/tactic_learner.ml
 src/tactic_learner.mli
+src/tactic_constr_map.ml
 src/tactician_ltac1_record_plugin.mlpack
 src/tactician_ltac1_tactics_plugin.mlpack
