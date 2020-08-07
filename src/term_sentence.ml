@@ -1,5 +1,4 @@
 open Names
-open Learner_helper
 open Tactic_learner_internal
 open Glob_term
 open Constr

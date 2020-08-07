@@ -6,7 +6,6 @@ open Tacexpr
 open Tacenv
 open Loadpath
 open Tactic_learner_internal
-open Learner_helper
 open Geninterp
 
 let append file str =
@@ -163,9 +162,9 @@ let add_to_db (x : data_in) =
   Lib.add_anonymous_leaf (in_db x)
 
 let add_to_db2 ((mem, before, tac, after) : (glob_tactic_expr * int) list * Proofview.Goal.t list * (glob_tactic_expr * int) * Proofview.Goal.t list) =
-  let before = List.map goal_to_proof_state_feats before in
+  let before = List.map goal_to_proof_state before in
   let after = [] in
-  (* let after = List.map goal_to_proof_state_feats after in *)
+  (* let after = List.map goal_to_proof_state after in *)
   add_to_db (mem, before, tac, after);
   let semidb = Hashtbl.find int64_to_knn !current_int64 in
   Hashtbl.replace int64_to_knn !current_int64 ((mem, before, tac, after)::semidb);
@@ -174,7 +173,7 @@ let add_to_db2 ((mem, before, tac, after) : (glob_tactic_expr * int) list * Proo
     (* let l2s fs = "[" ^ (String.concat ", " (List.map (fun x -> string_of_int x) fs)) ^ "]" in *)
     let p2s x = proof_state_to_json x in
     let entry (before, tac, after) =
-      "{\"before\": [" ^ String.concat ", " (List.map p2s after) ^ "]\n" ^
+      "{\"before\": [" ^ String.concat ", " (List.map p2s before) ^ "]\n" ^
       ", \"tacid\": " ^ (*Base64.encode_string*) h tac ^  "\n" ^
       ", \"after\": [" ^ String.concat ", " (List.map p2s after) ^ "]}\n" in
     print_to_feat (entry (before, tac, after)))
@@ -237,8 +236,8 @@ let run_ml_tac name = TacML (CAst.make ({mltac_name = {mltac_plugin = "recording
 
 let print_rank env rank =
   let rank = firstn 10 rank in
-  let tac_pp tac = format_oneline (Pptactic.pr_glob_tactic env tac) in
-  let strs = List.map (fun (x, t) -> (*(Pp.str (Printf.sprintf "%.4f" x)) ++*) (Pp.str " ") ++ (tac_pp t) ++ (Pp.str "\n")) rank in
+  let tac_pp env t = format_oneline (Pptactic.pr_glob_tactic env t) in
+  let strs = List.map (fun (x, t) -> (Pp.str (Printf.sprintf "%.4f" x)) ++ (Pp.str " ") ++ (tac_pp env t) ++ (Pp.str "\n")) rank in
   Pp.seq strs
 
 (* Running predicted tactics *)
@@ -331,7 +330,7 @@ let removeDups ranking =
     List.sort (fun (x, _) (y, _) -> Float.compare y x) new_ranking
 
 let predict (gls : Proofview.Goal.t list) =
-  let feat = List.map goal_to_proof_state_feats gls in
+  let feat = List.map goal_to_proof_state gls in
   let r = learner_predict feat in
   (* TODO: Make this lazy for speed!!! *)
   let r = List.map (fun (score, focus, (tac, h)) -> (score, focus, tac, h)) r in
@@ -547,7 +546,7 @@ let userPredict =
     let open Proofview in
     let open Notations in
     tclENV >>= fun env -> Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
-    let feat = List.map goal_to_proof_state_feats gls in
+    let feat = List.map goal_to_proof_state gls in
     let r = learner_predict feat in
     let r = List.map (fun (score, focus, (tac, h)) -> (score, focus, tac, h)) r in
     let r = removeDups r in
@@ -798,20 +797,19 @@ let recorder (tac : glob_tactic_expr) : unit Proofview.tactic =
     | TacAlias _        ->                 record_tac_complete tcom (*TacAlias (guard 1<=1, auto, assert_fails auto, assert_succeeds auto)*)
   in
   let save_db (db : localdb) =
-      let tac_pp t = format_oneline (Pptactic.pr_glob_tactic Environ.empty_env t) in
-      let string_tac t = Pp.string_of_ppcmds (tac_pp t) in
-      let raw_tac t = Pcoq.parse_string Pltac.tactic_eoi t in
-      let tryadd (before_gls, tac, after_gls) =
-        let s = string_tac tac in
-        let s = Str.global_replace (Str.regexp "change_no_check") "change" s in
-        try
-          (* TODO: Fix parsing bugs and remove parsing *)
-          let _ = raw_tac s in
-          List.iter (fun x -> add_to_db2 ([], [x], (tac, Hashtbl.hash s), after_gls)) before_gls
-        with
-        | Stream.Error txt -> append "parse_errors.txt" (txt ^ " : " ^ s ^ "\n")
-        | CErrors.UserError (_, txt)  -> append "parse_errors.txt" (Pp.string_of_ppcmds txt ^ " : " ^ s ^ "\n") in
-      List.iter (fun trp -> tryadd trp) db; tclUNIT () in
+    let tac_pp t = format_oneline (Pptactic.pr_glob_tactic Environ.empty_env t) in
+    let string_tac t = Pp.string_of_ppcmds (tac_pp t) in
+    let raw_tac t = Pcoq.parse_string Pltac.tactic_eoi t in
+    let tryadd (before_gls, tac, after_gls) =
+      let s = string_tac tac in
+      try
+        (* TODO: Fix parsing bugs and remove parsing *)
+        let _ = raw_tac s in
+        List.iter (fun x -> add_to_db2 ([], [x], (tac, Hashtbl.hash s), after_gls)) before_gls
+      with
+      | Stream.Error txt -> append "parse_errors.txt" (txt ^ " : " ^ s ^ "\n")
+      | CErrors.UserError (_, txt)  -> append "parse_errors.txt" (Pp.string_of_ppcmds txt ^ " : " ^ s ^ "\n") in
+    List.iter (fun trp -> tryadd trp) db; tclUNIT () in
   let rtac = annotate tac in
   let ptac = Tacinterp.eval_tactic rtac in
   let ptac = init_local_stack () <*> init_localdb () <*> ptac <*> get_localdb () >>= save_db in

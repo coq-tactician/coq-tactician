@@ -10,6 +10,7 @@ theories/Ltac1.v
 src/g_ltac1_record.mlg
 src/g_ltac1_tactics.mlg
 src/ltacrecord.ml
+src/pknnmax.ml
 src/features.ml
 src/hh_term.ml
 src/timeouttac.ml
@@ -18,7 +19,6 @@ src/tactic_learner.ml
 src/tactic_learner.mli
 src/learner_helper.ml
 src/term_sentence.ml
-src/pknnmax.ml
 src/tactic_constr_map.ml
 src/naiveknn_learner.ml
 src/trivial_learners.ml
