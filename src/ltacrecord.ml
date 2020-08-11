@@ -246,22 +246,21 @@ let push_state_id_stack () =
   modify_field_goals state_id_stack_field (fun i st -> i::st, ()) (fun i -> []) >>=
   fun _ -> tclUNIT ()
 
-let special_tactic_warn () =
-  Feedback.msg_warning (Pp.str ("You have discovered a special type of tactic unknown to Tactician." ^
-                                " Please open an issue"))
-
 let pop_state_id_stack () =
   let open Proofview in
   let open Notations in
-  modify_field_goals state_id_stack_field (fun i st -> List.tl st, List.hd st)
-    (fun _ -> special_tactic_warn (); []) >>=
+  (* Sometimes, a new goal does not inherit its id from its parent, and thus the id stack
+     is too short. Therefore, we are permissive with List.tl and List.hd here *)
+  modify_field_goals state_id_stack_field (fun i st -> match st with | [] -> [], 0 | _ -> List.tl st, List.hd st)
+    (fun _ -> []) >>=
   fun _ -> tclUNIT ()
 
 (* TODO: We access this field from the Proofview.Goal.state, because I want to make
 sure we only process user-visible goals. This is a bit convoluted though, because now
 we access the top of the stack here, and then pop the stack with `pop_state_id_stac`. *)
 let get_state_id_goal_top gl =
-  List.hd (get_field_goal2 state_id_stack_field gl (fun _ -> special_tactic_warn (); [0]))
+  (* Sometimes, a new goal does not inherit its id from its parent. In that case, we assign 0 *)
+  List.hd (get_field_goal2 state_id_stack_field gl (fun _ -> [0]))
 
 let push_tactic_trace tac =
   let open Proofview in
