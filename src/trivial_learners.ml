@@ -24,7 +24,7 @@ module PrintLearner : TacticianLearnerType = struct
         print_endline (proof_state_to_sexpr before);
         print_endline ("Generated " ^ string_of_int (List.length after) ^ " states:");
         List.iteri (fun j pf ->
-            print_endline (string_of_int i ^ ": " ^ proof_state_to_sexpr pf)
+            print_endline (string_of_int j ^ ": " ^ proof_state_to_sexpr pf)
           ) after;
       ) execs;
     print_endline "\n";
@@ -65,5 +65,5 @@ end
 let () = Feedback.msg_warning (Pp.str ("You have installed and enabled the coq-tactician-plugin-example " ^
                                        "package.\n This is only meant for demonstration purposes, and does " ^
                                        "not actually provide good predictions."))
-
-let () = register_learner "ReverseAddedOrder" (module ReverseAddedOrder) *)
+let () = register_learner "ReverseAddedOrder" (module PrintLearner)
+*)
