@@ -225,7 +225,7 @@ let get_field_goal2 fi gl d =
   | None -> d ()
   | Some x -> x
 
-let war () = Feedback.msg_warning (Pp.str "Problem")
+let war x = Feedback.msg_warning (Pp.str ("Problem" ^ x))
 
 let push_localdb x =
   modify_field localdb_field (fun db -> x::db, ()) (fun () -> [])
@@ -253,8 +253,8 @@ let pop_state_id_stack () =
   let open Notations in
   (* Sometimes, a new goal does not inherit its id from its parent, and thus the id stack
      is too short. Therefore, we are permissive with List.tl and List.hd here *)
-  modify_field_goals state_id_stack_field (fun i st -> match st with | [] -> war (); [], 0 | _ -> List.tl st, List.hd st)
-    (fun _ -> war (); []) >>=
+  modify_field_goals state_id_stack_field (fun i st -> match st with | [] -> war "a"; [], 0 | _ -> List.tl st, List.hd st)
+    (fun _ -> war "b"; []) >>=
   fun _ -> tclUNIT ()
 
 (* TODO: We access this field from the Proofview.Goal.state, because I want to make
@@ -262,7 +262,7 @@ sure we only process user-visible goals. This is a bit convoluted though, becaus
 we access the top of the stack here, and then pop the stack with `pop_state_id_stac`. *)
 let get_state_id_goal_top gl =
   (* Sometimes, a new goal does not inherit its id from its parent. In that case, we assign 0 *)
-  List.hd (get_field_goal2 state_id_stack_field gl (fun _ -> war(); [0]))
+  List.hd (get_field_goal2 state_id_stack_field gl (fun _ -> war "c"; [0]))
 
 let push_tactic_trace tac =
   let open Proofview in
@@ -271,7 +271,7 @@ let push_tactic_trace tac =
   fun _ -> tclUNIT ()
 
 let get_tactic_trace gl =
-  get_field_goal2 tactic_trace_field gl (fun _ -> war (); [])
+  get_field_goal2 tactic_trace_field gl (fun _ -> [])
 
 let features term = List.map Hashtbl.hash (Features.extract_features (Hh_term.hhterm_of (Hh_term.econstr_to_constr term)))
 
