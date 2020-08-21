@@ -1,6 +1,7 @@
 ### Tactician ###
 *.feat
 *.bench
+tactician
 
 ### Coq ###
 *.cmt
