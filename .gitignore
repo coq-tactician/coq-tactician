@@ -3,6 +3,8 @@
 *.bench
 
 ### Coq ###
+*.cmt
+*.cmti
 .*.aux
 *.a
 *.cma
