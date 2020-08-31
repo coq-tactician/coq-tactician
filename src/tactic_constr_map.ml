@@ -6,6 +6,8 @@ open Glob_term
 open Locus
 open Tactics
 open Context
+open Genredexpr
+open Pattern_ops
 
 let context_to_vars lc = List.map (function
     | Named.Declaration.LocalAssum (id, _) -> id.binder_name
@@ -26,6 +28,14 @@ let replace_free_variables (lc : EConstr.named_context) t =
   let lc_vars = context_to_vars lc in
   let map = List.map (fun x -> (x, find_in_lc x lc_vars)) free in
   Glob_ops.rename_glob_vars map t
+
+let replace_pattern_free_variables (lc : EConstr.named_context) p =
+  let free = Names.Id.Set.elements (pattern_free_vars p) in
+  print_endline "free2";
+    List.iter (fun id -> print_endline (Names.Id.to_string id)) free;
+  let lc_vars = context_to_vars lc in
+  let map = List.map (fun x -> (x, find_in_lc x lc_vars)) free in
+  pattern_rename_vars map p
 
 let id_map f id =
   let lc_vars = context_to_vars f in
@@ -89,7 +99,7 @@ let induction_clause_map f (((cflg, da), (eqn, p), ce) : ('k, 'i) induction_clau
    (Option.map (CAst.map (intro_pattern_naming_map f)) eqn,
     Option.map (or_var_map (CAst.map (intro_pattern_orand_map f))) p), ce)
 
-let g_pat_map f (id, c, p) = (Names.Id.Set.map (id_map f) id, constr_and_expr_map f c, p) (* What to do with 'p' (Pattern.constr_pattern)*)
+let g_pat_map f (id, c, p) = (Names.Id.Set.map (id_map f) id, constr_and_expr_map f c, replace_pattern_free_variables f p) (* TODO: What to do with 'p' (Pattern.constr_pattern)*)
 
 let clause_expr_map f { onhyps = oh; concl_occs = oe } =
   {onhyps = Option.map (List.map (fun ((o, id), l) -> ((o, id_map2 f id), l))) oh; concl_occs = oe}
@@ -99,9 +109,37 @@ let inversion_strength_map f = function
   | DepInversion (k, c, p) -> DepInversion (k, Option.map (constr_and_expr_map f) c, Option.map (or_var_map (CAst.map (intro_pattern_orand_map f))) p)
   | InversionUsing (c, ids) -> InversionUsing (constr_and_expr_map f c, List.map (id_map2 f) ids)
 
-let match_rule_map f = function (* TODO: Finish *)
-  | Pat (x, y, z) -> Pat (x, y, z)
-  | All x -> All (f x)
+let match_pattern_map f = function
+  | Term x -> Term (g_pat_map f x)
+  | Subterm (id, x) -> Subterm (id, g_pat_map f x)
+
+let match_context_hyps_map f = function
+  | Hyp (id, p) -> Hyp (id, match_pattern_map f p)
+  | Def (id, p1, p2) -> Def (id, match_pattern_map f p1, match_pattern_map f p2)
+
+let match_rule_map f re (x : (Ltac_plugin.Tacexpr.g_pat,
+ Ltac_plugin.Tacexpr.g_dispatch Ltac_plugin.Tacexpr.gen_tactic_expr)
+Ltac_plugin.Tacexpr.match_rule) = match x with
+  | Pat (x, y, z) -> Pat (List.map (match_context_hyps_map f) x, match_pattern_map f y, re z)
+  | All x -> All (re x)
+
+let may_eval_map f (x: (Ltac_plugin.Tacexpr.g_trm, Ltac_plugin.Tacexpr.g_cst,
+ Ltac_plugin.Tacexpr.g_pat)
+                        Genredexpr.may_eval) = match x with
+  | ConstrTerm x -> ConstrTerm (constr_and_expr_map f x)
+  | ConstrEval (r, c) -> ConstrEval (r, (constr_and_expr_map f c)) (* TODO: r should be mapped here, too much effort*)
+  | ConstrContext (id, c) -> ConstrContext (id, constr_and_expr_map f c)
+  | ConstrTypeOf c -> ConstrTypeOf (constr_and_expr_map f c)
+
+let rec tacarg_map f re (a : Ltac_plugin.Tacexpr.g_dispatch Ltac_plugin.Tacexpr.gen_tactic_arg) : Ltac_plugin.Tacexpr.g_dispatch Ltac_plugin.Tacexpr.gen_tactic_arg = match a with
+  | TacGeneric a -> TacGeneric a (* TODO: Can we do something here? *)
+  | ConstrMayEval c -> ConstrMayEval (may_eval_map f c)
+  | Reference x -> Reference x
+  | TacCall x -> TacCall (CAst.map (fun (x, y) -> (x, List.map (tacarg_map f re) y)) x)
+  | TacFreshId ls -> TacFreshId ls
+  | Tacexp t -> Tacexp (re t)
+  | TacPretype t -> TacPretype (constr_and_expr_map f t)
+  | TacNumgoals -> TacNumgoals
 
 let rec atomic_map (f : EConstr.named_context) (t : glob_atomic_tactic_expr) : glob_atomic_tactic_expr =
   match t with
@@ -120,7 +158,7 @@ let rec atomic_map (f : EConstr.named_context) (t : glob_atomic_tactic_expr) : g
                                                        Option.map (CAst.map (intro_pattern_naming_map f )) eqpat)
   | TacInductionDestruct (isrec, ev, (l, el)) ->
     TacInductionDestruct (isrec, ev, (List.map (induction_clause_map f) l, Option.map (with_bindings_map f) el))
-  | TacReduce (r, cl) -> TacReduce (r, clause_expr_map f cl) (* TODO: Do something with r here *)
+  | TacReduce (r, cl) -> TacReduce (r, clause_expr_map f cl) (* TODO: r should be mapped here, but too much effort *)
   | TacChange (check, op, c, cl) -> TacChange (check, Option.map (g_pat_map f) op, constr_and_expr_map f c,
                                                clause_expr_map f cl)
   | TacRewrite (ev, l, cl, by) ->
@@ -133,8 +171,9 @@ and tactic_constr_map (f : EConstr.named_context) (tac : glob_tactic_expr) : glo
   | TacAtom { CAst.v= t } -> TacAtom (CAst.make @@ atomic_map f t)
   | TacFun (ids, t) -> TacFun (ids, tactic_constr_map f t)
   | TacLetIn (r, l, u) -> TacLetIn (r, List.map (fun (id, t) -> (id, t)) l, tactic_constr_map f u)
-  | TacMatchGoal (lz, lr, lmr) -> TacMatchGoal (lz, lr, List.map (match_rule_map (fun x -> x)) lmr) (* TODO: finish from here *)
-  | TacMatch (lz, c, lmr) -> TacMatch (lz, c, lmr)
+  | TacMatchGoal (lz, lr, lmr) -> TacMatchGoal (lz, lr, List.map (match_rule_map f (tactic_constr_map f)) lmr)
+  | TacMatch (lz, c, lmr) ->
+    TacMatch (lz, tactic_constr_map f c, List.map (match_rule_map f (tactic_constr_map f)) lmr)
   | TacId ls -> TacId ls
   | TacFail (flg, n, ls) -> TacFail (flg, n, ls)
   | TacProgress tac -> TacProgress (tactic_constr_map f tac)
@@ -162,7 +201,7 @@ and tactic_constr_map (f : EConstr.named_context) (tac : glob_tactic_expr) : glo
   | TacFirst l -> TacFirst (List.map (tactic_constr_map f) l)
   | TacSolve l -> TacSolve (List.map (tactic_constr_map f) l)
   | TacComplete tac -> TacComplete (tactic_constr_map f tac)
-  | TacArg { CAst.v=a } -> TacArg (CAst.make @@ a)
+  | TacArg a -> TacArg (CAst.map (tacarg_map f (tactic_constr_map f)) a)
   | TacSelect (s, tac) -> TacSelect (s, tactic_constr_map f tac)
-  | TacAlias { CAst.v=(s,l) } -> TacAlias (CAst.make (s, l))
-  | TacML { CAst.loc; v=(opn, l)} -> TacML (CAst.(make ?loc (opn, l)))
+  | TacAlias x -> TacAlias (CAst.map (fun (id, args) -> (id, List.map (tacarg_map f (tactic_constr_map f)) args)) x)
+  | TacML x -> TacML (CAst.map (fun (id, args) -> (id, List.map (tacarg_map f (tactic_constr_map f)) args)) x)

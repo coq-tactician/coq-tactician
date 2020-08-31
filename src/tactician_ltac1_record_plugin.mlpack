@@ -2,9 +2,11 @@ Timeouttac
 Hhlib
 Hh_term
 Features
-Pknnmax
+Tactic_learner_internal
 Tactic_learner
 Learner_helper
+Pattern_ops
 Tactic_constr_map
+Pknnmax
 Ltacrecord
 G_ltac1_record
