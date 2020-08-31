@@ -1,36 +1,19 @@
-module Id = struct
-  type t = Names.Id.t
-  let equal = Names.Id.equal
-end
-type id = Id.t
+module Id = Tactic_learner_internal.Id
+type id = Tactic_learner_internal.id
 
-let mk_id x = x
-let id_mk x = x
+module IdMap = Tactic_learner_internal.IdMap
+type id_map = Tactic_learner_internal.id_map
 
-module IdMap = Map.Make(struct
-    type t = Id.t
-    let compare = Names.Id.compare
-  end)
-type id_map = Id.t IdMap.t
+type sentence = Tactic_learner_internal.sentence = Node of sentence list | Leaf of string
 
-type sentence = Node of string * sentence list
-
-type proof_state =
+type proof_state = Tactic_learner_internal.proof_state =
 { hypotheses : (id * sentence) list
 ; goal       : sentence }
 
-type tactic = string
-let tactic_sentence t =  Node (t, [])
-let local_variables t = []
-let substitute t map = t
+type tactic = Tactic_learner_internal.tactic
+let tactic_sentence = Tactic_learner_internal.tactic_sentence
+let local_variables = Tactic_learner_internal.local_variables
+let substitute = Tactic_learner_internal.substitute
 
-module type TacticianLearnerType = sig
-  type t
-  val create  : unit -> t
-  val add     : t -> before:proof_state ->
-                            tactic ->
-                      after:proof_state list -> t
-  val predict : t -> proof_state -> (float * tactic) list
-end
-
-let register_learner (name : string) (learner : (module TacticianLearnerType)) : unit = ()
+module type TacticianLearnerType = Tactic_learner_internal.TacticianLearnerType
+let register_learner = Tactic_learner_internal.register_learner

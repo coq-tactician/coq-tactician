@@ -7,6 +7,7 @@ open Tacenv
 open Context
 open Loadpath
 open Learner_helper
+open Geninterp
 
 open Pknnmax
 module TacticNaiveKnn = MakeNaiveKnn (struct
@@ -194,8 +195,8 @@ let goal_to_features gl =
        (*let feats = List.map Hashtbl.hash feats in*)
        List.sort(*_uniq*) Int.compare feats
 
-let record_map (gls : Proofview.Goal.t Proofview.tactic list)
-    (f : Proofview.Goal.t -> 'a) : 'a list Proofview.tactic =
+let record_map (f : Proofview.Goal.t -> 'a)
+    (gls : Proofview.Goal.t Proofview.tactic list) : 'a list Proofview.tactic =
   let rec aux gls acc =
     let open Proofview.Notations in
     match gls with
@@ -212,7 +213,7 @@ let add_to_db2 ((before, obj) : Proofview.Goal.t * (Tacexpr.raw_tactic_expr * st
   if !featureprinting then (
     let h s = string_of_int (Hashtbl.hash s) in
     (* let l2s fs = "[" ^ (String.concat ", " (List.map (fun x -> string_of_int x) fs)) ^ "]" in *)
-    let p2s x = proof_state_to_json (goal_to_proof_state_feats x) in
+    let p2s x = "" in
     let entry (before, (raw_tac, obj), after) =
       "{\"before\": " ^ p2s before ^
       ", \"tacid\": " ^ (*Base64.encode_string*) h obj ^
@@ -288,66 +289,13 @@ let print_goal = Proofview.Goal.enter
         (Proofview.tclLIFT (Proofview.NonLogical.print_warning (Pp.seq hyps_str)))
         (Proofview.tclLIFT (Proofview.NonLogical.print_warning (Pp.seq (List.map (fun s -> Pp.pr_comma () ++ (Pp.str (string_of_int s))) (goal_to_features gl)))))))
 
-let () = register (mk_ml_tac print_goal) "printgoal"
-
-let ml_print_goal () = run_ml_tac "printgoal"
-
-let hash_hash : (int, string) Hashtbl.t = Hashtbl.create 100
-
-let add_hash_hash tac = Hashtbl.replace hash_hash (Hashtbl.hash tac) tac; (Hashtbl.hash tac)
-
-let find_tac num = Hashtbl.find hash_hash num
-
-(* Tactic printing tactic *)
-
-let print_tac tac =
-  Proofview.tclLIFT (Proofview.NonLogical.print_warning (Pp.str tac))
-
-let print_tac tac_num = print_tac (find_tac tac_num)
-
-let ml_print_tac args is =
-  let str = Tacinterp.Value.cast (Genarg.topwit Stdarg.wit_int) (List.hd args) in
-  print_tac str
-
-let () = register ml_print_tac "printtac"
-
-(*let () = append "count.txt" "newfile\n"**)
-
-let run_print_tac tac =
-  let hash = add_hash_hash tac in
-  let enc = Genarg.in_gen (Genarg.rawwit Stdarg.wit_int) hash in
-  TacML (CAst.make ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = "printtac"}; mltac_index = 0},
-                [TacGeneric enc]))
-
 (* Running predicted tactics *)
 
 exception PredictionsEnd
 
-let hide_interp_custom global t ot =
-  let open Tacinterp in
-  let open Tacintern in
-  let open Proofview in
-  let open Notations in
-  let hide_interp env =
-    let ist = Genintern.empty_glob_sign env in
-    let te = intern_pure_tactic ist t in
-    (*let te = Tactic_constr_map.tactic_constr_map (fun x -> x) te in *)
-    let t = eval_tactic te in
-    match ot with
-    | None -> t
-    | Some t' -> Tacticals.New.tclTHEN t t'
-  in
-  if global then
-    Proofview.tclENV >>= fun env ->
-    hide_interp env
-  else
-    Proofview.Goal.enter begin fun gl ->
-      hide_interp (Proofview.Goal.env gl)
-    end
-
 let parse_tac tac =
     try
-      hide_interp_custom false tac None
+      Tacinterp.hide_interp false tac None
     with
     e -> print_endline (Printexc.to_string e); flush_all (); assert false
 
@@ -636,24 +584,7 @@ let benchmarkSearch () : unit Proofview.tactic =
                               fun m -> tclLIFT (print_success m)) <*>
        Tacticals.New.tclZEROMSG (Pp.str "Proof benchmark search does not actually find proofs"))
 
-let userPredict = Proofview.Goal.enter
-    (fun gl ->
-    let feat = goal_to_features gl in
-    (* print_endline (String.concat " : " (List.map string_of_int feat)); *)
-    (* Make predictions *)
-    let r = Knn.knn !db_test feat in
-    let r = List.map (fun (x, y, (z, q)) -> (x, (y, z, q))) r in
-    let r = removeDups r in
-    let r = List.map (fun (x, (y, z, q)) -> (x, z, q)) r in
-    let env = Proofview.Goal.env gl in
-    let ist = Genintern.empty_glob_sign env in
-    let r = List.map (fun (x, y, z) ->
-        (x,
-         Tactic_constr_map.tactic_constr_map (Proofview.Goal.hyps gl)
-           (Tacintern.intern_pure_tactic ist y), z)) r in
-    let r = List.map (fun (x, y, _) -> (x, y)) r in
-    (* Print predictions *)
-    (Proofview.tclLIFT (Proofview.NonLogical.print_info (print_rank env r))))
+let userPredict = Proofview.tclUNIT ()
 
 let userSearch =
     let open Proofview in
@@ -661,139 +592,6 @@ let userSearch =
     commonSearch () >>= (fun (tr, tcs) ->
         tclLIFT (NonLogical.print_info (
             Pp.str ("Tactician found a proof! The following tactic caches the proof:\n" ^ synthesize_tactic tcs))))
-
-let ml_benchmarkSearch args is = benchmarkSearch ()
-
-let () = register ml_benchmarkSearch "benchmarksearchtac"
-
-let run_benchmarkSearch =
-  TacML (CAst.make ({mltac_name = {mltac_plugin = "recording";
-                                   mltac_tactic = "benchmarksearchtac"};
-                     mltac_index = 0}, []))
-
-(* Tactic recording tactic *)
-
-let last_state : Proofview.Goal.t option ref = ref None
-let precord_tac () = Proofview.Goal.enter
-    (fun gl ->
-       last_state := Some gl; Proofview.tclUNIT ())
-
-(* let record_tac (tac : string) = Proofview.Goal.enter
- *     (fun gl ->
- *        (\*let tac_str = Pp.string_of_ppcmds (Pptactic.pr_glob_tactic env tac) in*\)
- *        if (String.equal tac "suggest" || String.equal tac "search") then Proofview.tclUNIT () else
- *          let feat = goal_to_features gl in
- * 
- *          (\* Make predictions *\)
- *          (\*let r = Knn.knn db feat in
- *            let r = List.map (fun (x, y, (z, q)) -> (x, y, q)) r in
- *            let pp_str = Pp.int (get_k_str r tac) ++ (\*(Pp.str " ") ++ (Pptactic.pr_raw_tactic tac) ++*\) (Pp.str "\n") in
- *            append "count.txt" (Pp.string_of_ppcmds pp_str);*\)
- * 
- *          (\* Parse into raw tactic and store in db *\)
- *          try
- *            let raw_tac = Pcoq.parse_string Pltac.tactic_eoi tac in
- *            add_to_db2 (!last_state, (raw_tac, tac)) feat;
- *            Proofview.tclUNIT ()
- *          with
- *          | Stream.Error txt -> append "parse_errors.txt" (txt ^ " : " ^ tac ^ "\n"); Proofview.tclUNIT ()
- *          | CErrors.UserError (_, txt)  -> append "parse_errors.txt" (Pp.string_of_ppcmds txt ^ " : " ^ tac ^ "\n"); Proofview.tclUNIT ()) *)
-
-let record_tac2 (tac : string) =
-  let open Proofview.Notations in
-  if (String.equal tac "suggest" || String.equal tac "search") then Proofview.tclUNIT () else
-    Proofview.Goal.goals >>= (fun gls ->
-        record_map gls (fun x -> x) >>= fun gls ->
-        (*let tac_str = Pp.string_of_ppcmds (Pptactic.pr_glob_tactic env tac) in*)
-
-        (* Make predictions *)
-        (*let r = Knn.knn db feat in
-           let r = List.map (fun (x, y, (z, q)) -> (x, y, q)) r in
-           let pp_str = Pp.int (get_k_str r tac) ++ (*(Pp.str " ") ++ (Pptactic.pr_raw_tactic tac) ++*) (Pp.str "\n") in
-           append "count.txt" (Pp.string_of_ppcmds pp_str);*)
-
-         (* Parse into raw tactic and store in db *)
-        try
-          let tac = Str.global_replace (Str.regexp "change_no_check") "change" tac in
-          let raw_tac = Pcoq.parse_string Pltac.tactic_eoi tac in
-          add_to_db2 (Option.get !last_state, (raw_tac, tac)) gls;
-          Proofview.tclUNIT ()
-        with
-        | Stream.Error txt -> append "parse_errors.txt" (txt ^ " : " ^ tac ^ "\n"); Proofview.tclUNIT ()
-        | CErrors.UserError (_, txt)  -> append "parse_errors.txt" (Pp.string_of_ppcmds txt ^ " : " ^ tac ^ "\n"); Proofview.tclUNIT ())
-
-    (* Print predictions *)
-    (*(Proofview.tclTHEN (Proofview.tclLIFT (Proofview.NonLogical.print_info (pp_str)))
-                      (Proofview.tclLIFT (Proofview.NonLogical.print_info (print_rank r))))))*)
-
-(*
-let wit_ours : (raw_tactic_expr, glob_tactic_expr, glob_tactic_expr) genarg_type =
-  make0 "ours"
-
-let lift intern = (); fun ist x -> (ist, intern ist x)
-
-let out_ty : glob_tactic_expr Geninterp.Val.typ = Geninterp.Val.create "leave_me_alone"
-
-let lifts f = (); fun ist x -> Ftactic.enter begin fun gl ->
-  let env = Proofview.Goal.env gl in
-  let sigma = Proofview.Goal.sigma gl in
-  let (sigma, v) = f ist env sigma x in
-  Proofview.tclTHEN (Proofview.Unsafe.tclEVARS sigma)
-  (Ftactic.return v)
-end
-
-let () =
-  Genintern.register_intern0 wit_ours (lift Tacintern.intern_tactic_or_tacarg);
-  Genintern.register_subst0 wit_ours Tacsubst.subst_tactic;
-  register_interp0 wit_ours (lifts  (fun _ _ sigma gtac -> (sigma, gtac)));
-  register_val0 wit_ours None
-
-let my_ty : glob_tactic_expr Geninterp.Val.typ = Geninterp.Val.create "leave_me_alone"
-let in_f c = Geninterp.Val.Dyn (my_ty, c)
-
-let prj : Val.t -> glob_tactic_expr =
-fun v -> let Val.Dyn (t', x) = v in
-  match Val.eq my_ty t' with
-  | None -> assert false
-  | Some Refl -> x
-
-let ml_record_tac args is =
-  let t = prj (List.hd args) in record_tac t
-*)
-
-let record_tac tac_num = record_tac2 (find_tac tac_num)
-
-let ml_record_tac args is =
-  (*let num = Tacinterp.Value.cast (Genarg.topwit Tacarg.wit_tactic) (List.hd args) in*)
-  let num = Tacinterp.Value.cast (Genarg.topwit Stdarg.wit_int) (List.hd args) in
-  record_tac num
-
-let ml_precord_tac args is =
-  precord_tac ()
-
-let () = register ml_record_tac "recordtac"
-let () = register ml_precord_tac "precordtac"
-
-let run_record_tac env (tac : glob_tactic_expr) : glob_tactic_expr =
-  (*let tac_glob = Tacintern.intern_pure_tactic*)
-  let tac_pp = format_oneline (Pptactic.pr_glob_tactic env tac) in
-  let tac_str = Pp.string_of_ppcmds tac_pp in
-  if String.contains tac_str '\n' then print_endline ("Found!\n" ^ tac_str ^ "\n" ^ (Pp.db_string_of_pp tac_pp));
-  let hash = add_hash_hash tac_str in
-  let enc = Genarg.in_gen (Genarg.glbwit Stdarg.wit_int) hash in
-  TacML (CAst.make ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = "recordtac"}; mltac_index = 0},
-                    [TacGeneric enc]))
-
-let run_precord_tac (): glob_tactic_expr =
-  (*let tac_glob = Tacintern.intern_pure_tactic*)
-  TacML (CAst.make ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = "precordtac"}; mltac_index = 0},
-                []))
-
-let record_tac_complete env tac : glob_tactic_expr =
-  let record_tmp = TacThen (run_precord_tac (), TacThen (tac, run_record_tac env tac)) in
-  match !benchmarking with
-  | None -> record_tmp
-  | Some _ -> TacOr (run_benchmarkSearch, record_tmp)
 
 (* Name globalization *)
 
@@ -850,34 +648,148 @@ let pre_vernac_solve pstate id =
     false
   )
 
-let hide_interp_t global t ot transform =
-  let open Proofview.Notations in
-  let hide_interp env =
-    let ist = Genintern.empty_glob_sign env in
-    let te = Tacintern.intern_pure_tactic ist t in
-    let te = transform env te in
-    let t = Tacinterp.eval_tactic te in
-    match ot with
-    | None -> t
-    | Some t' -> Tacticals.New.tclTHEN t t'
-  in
-  if global then
-    Proofview.tclENV >>= fun env ->
-    hide_interp env
-  else
-    Proofview.Goal.enter begin fun gl ->
-      hide_interp (Proofview.Goal.env gl)
-    end
+(* Structures for local database in evar_map during tactic execution *)
+type localdb = (Proofview.Goal.t list * glob_tactic_expr * Proofview.Goal.t list) list
+type local_stack = Proofview.Goal.t list list
+type tactic_trace = glob_tactic_expr list
 
-let recorder env tac :  glob_tactic_expr =
-  (*let extern_ref ?loc vars r =
-      try CAst.make ?loc @@ Libnames.Qualid (qualid_of_global env r)
-      with Not_found -> print_endline "error"; CAst.make (Libnames.Qualid (Libnames.qualid_of_string "blupblupblup")) in
-  Constrextern.set_extern_reference extern_ref;*)
-  (*let tac = Globalize.globalize_glob_tactic_expr tac in*)
-  (*print_endline (Pp.string_of_ppcmds (Pptactic.pr_glob_tactic env tac));*)
-  let record_tac_complete tac = record_tac_complete env tac in
-  let rec annotate tcom : glob_tactic_expr =
+let localdb_field : localdb Evd.Store.field = Evd.Store.field ()
+let local_stack_field : local_stack Evd.Store.field = Evd.Store.field ()
+let tactic_trace_field : local_stack Evd.Store.field = Evd.Store.field ()
+
+let modify_field fi g =
+  let open Proofview in
+  let open Notations in
+  tclEVARMAP >>= fun evm ->
+  let store = Evd.get_extra_data evm in
+  let data = Option.get (Evd.Store.get store fi) in
+  let data', ret = g data in
+  let evm' = Evd.set_extra_data (Evd.Store.set store fi data') evm in
+  Unsafe.tclEVARS evm' <*> tclUNIT ret
+
+let set_field fi d =
+  let open Proofview in
+  let open Notations in
+  tclEVARMAP >>= fun evm ->
+  let store = Evd.get_extra_data evm in
+  let evm' = Evd.set_extra_data (Evd.Store.set store fi d) evm in
+  Unsafe.tclEVARS evm'
+
+(*
+let modify_field_goals fi g =
+  let open Proofview in
+  let open Notations in
+  tclEVARMAP >>= fun evm ->
+  let store = Evd.get_extra_data evm in
+  let data = Option.get (Evd.Store.get store fi) in
+  let data', ret = g data in
+  let evm' = Evd.set_extra_data (Evd.Store.set store fi data') evm in
+  Unsafe.tclEVARS evm' <*> tclUNIT ret
+
+let set_field_goals fi d =
+  let open Proofview in
+  let open Notations in
+  tclEVARMAP >>= fun evm ->
+  let store = Evd.get_extra_data evm in
+  let evm' = Evd.set_extra_data (Evd.Store.set store fi d) evm in
+  Unsafe.tclEVARS evm'
+   *)
+
+let push_local_stack gl =
+  modify_field local_stack_field (fun st -> gl::st, ())
+
+let pop_local_stack () =
+  modify_field local_stack_field (fun st -> List.tl st, List.hd st)
+
+let init_local_stack () =
+  set_field local_stack_field []
+
+let push_localdb x =
+  modify_field localdb_field (fun db -> x::db, ())
+
+let get_localdb () =
+  modify_field localdb_field (fun db -> [], db)
+
+let init_localdb () =
+  set_field localdb_field []
+
+let push_tactic_trace tac =
+  modify_field local_stack_field (fun tr -> tac::tr, ())
+
+(*
+let get_tactic_trace () =
+  modify_field localdb_field (fun tr -> [], tr)
+
+let init_tactic_trace () =
+  set_field tactic_trace_field []
+*)
+
+(* Tactic recording tactic *)
+
+let val_tag wit = val_tag (Genarg.topwit wit)
+let register_interp0 wit f =
+  let open Ftactic.Notations in
+  let interp ist v =
+    f ist v >>= fun v -> Ftactic.return (Val.inject (val_tag wit) v)
+  in
+  Geninterp.register_interp0 wit interp
+
+let (wit_glbtactic : (Empty.t, glob_tactic_expr, glob_tactic_expr) Genarg.genarg_type) =
+  let wit = Genarg.create_arg "glbtactic" in
+  let () = register_val0 wit None in
+  wit
+
+let () = register_interp0 wit_glbtactic (fun ist v -> Ftactic.return v)
+
+let push_state_tac () =
+  let open Proofview in
+  let open Notations in
+  Goal.goals >>= record_map (fun x -> x) >>= fun gls -> push_local_stack gls
+
+let record_tac2 (tac2 : glob_tactic_expr) : unit Proofview.tactic =
+  let open Proofview.Notations in
+  let tac_pp t = format_oneline (Pptactic.pr_glob_tactic Environ.empty_env t) in
+  let tac = Pp.string_of_ppcmds (tac_pp tac2) in
+  pop_local_stack () >>= fun before_gls ->
+  if (String.equal tac "suggest" || String.equal tac "search") then Proofview.tclUNIT () else
+    Proofview.Goal.goals >>= record_map (fun x -> x) >>= fun after_gls ->
+    push_localdb (before_gls, tac2, after_gls)
+        (*let tac_str = Pp.string_of_ppcmds (Pptactic.pr_glob_tactic env tac) in*)
+
+        (* Make predictions *)
+        (*let r = Predictor.knn db feat in
+           let r = List.map (fun (x, y, (z, q)) -> (x, y, q)) r in
+           let pp_str = Pp.int (get_k_str r tac) ++ (*(Pp.str " ") ++ (Pptactic.pr_raw_tactic tac) ++*) (Pp.str "\n") in
+           append "count.txt" (Pp.string_of_ppcmds pp_str);*)
+
+let ml_record_tac args is =
+  (*let num = Tacinterp.Value.cast (Genarg.topwit Tacarg.wit_tactic) (List.hd args) in*)
+  let tac = Tacinterp.Value.cast (Genarg.topwit wit_glbtactic) (List.hd args) in
+  record_tac2 tac
+
+let ml_push_state_tac args is =
+  push_state_tac ()
+
+let () = register ml_record_tac "recordtac"
+let () = register ml_push_state_tac "pushstatetac"
+
+let run_record_tac (tac : glob_tactic_expr) : glob_tactic_expr =
+  let enc = Genarg.in_gen (Genarg.glbwit wit_glbtactic) tac in
+  TacML (CAst.make ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = "recordtac"}; mltac_index = 0},
+                    [TacGeneric enc]))
+
+let run_pushs_state_tac (): glob_tactic_expr =
+  (*let tac_glob = Tacintern.intern_pure_tactic*)
+  TacML (CAst.make ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = "pushstatetac"}; mltac_index = 0},
+                []))
+
+let record_tac_complete tac : glob_tactic_expr =
+  TacThen (run_pushs_state_tac (), TacThen (tac, run_record_tac tac))
+
+let recorder (tac : glob_tactic_expr) : unit Proofview.tactic =
+  let open Proofview in
+  let open Notations in
+  let rec annotate (tcom : glob_tactic_expr) : glob_tactic_expr =
     match tcom with
     | TacAtom _         ->                 record_tac_complete tcom (*TacAtom (intros, destruct, etc)*)
     | TacThen (t1, t2)  ->                 TacThen (annotate t1, annotate t2) (*TacThen (a; b)*)
@@ -915,5 +827,44 @@ let recorder env tac :  glob_tactic_expr =
     | TacSelect _       ->                 assert false (*TacSelect (only 1: intros)*)
     | TacML _           ->                 record_tac_complete tcom (*TacML ?*)
     | TacAlias _        ->                 record_tac_complete tcom (*TacAlias (guard 1<=1, auto, assert_fails auto, assert_succeeds auto)*)
-    in
-  annotate tac
+  in
+  let save_db (db : localdb) =
+      let tac_pp t = format_oneline (Pptactic.pr_glob_tactic Environ.empty_env t) in
+      let string_tac t = Pp.string_of_ppcmds (tac_pp t) in
+      let raw_tac t = Pcoq.parse_string Pltac.tactic_eoi t in
+      let tryadd (before_gls, tac, after_gls) =
+        let s = string_tac tac in
+        let s = Str.global_replace (Str.regexp "change_no_check") "change" s in
+        try
+          (* TODO: Fix parsing bugs and remove parsing *)
+          let tmptac = raw_tac s in
+          List.iter (fun x -> add_to_db2 (x, (tmptac, s)) after_gls) before_gls
+        with
+        | Stream.Error txt -> append "parse_errors.txt" (txt ^ " : " ^ s ^ "\n")
+        | CErrors.UserError (_, txt)  -> append "parse_errors.txt" (Pp.string_of_ppcmds txt ^ " : " ^ s ^ "\n") in
+      List.iter (fun trp -> tryadd trp) db; tclUNIT () in
+  let rtac = annotate tac in
+  let ptac = Tacinterp.eval_tactic rtac in
+  let ptac = init_local_stack () <*> init_localdb () <*> ptac <*> get_localdb () >>= save_db in
+  match !benchmarking with
+  | None -> ptac
+  | Some _ -> (tclUNIT () >>= fun () -> benchmarkSearch ()) <+> ptac
+
+let hide_interp_t global t ot =
+  let open Proofview in
+  let open Notations in
+  let hide_interp env =
+    let ist = Genintern.empty_glob_sign env in
+    let te = Tacintern.intern_pure_tactic ist t in
+    let t = recorder te in
+    match ot with
+    | None -> t
+    | Some t' -> Tacticals.New.tclTHEN t t'
+  in
+  if global then
+    Proofview.tclENV >>= fun env ->
+    hide_interp env
+  else
+    Proofview.Goal.enter begin fun gl ->
+      hide_interp (Proofview.Goal.env gl)
+    end
