@@ -462,32 +462,47 @@ let rec tclFold2 (d : 'a) (tac : 'a -> 'a Proofview.tactic) : 'a Proofview.tacti
     let open Proofview in
     let open Notations in
     (tclFOCUS ~nosuchgoal:(tclUNIT None) 1 1 (tac d >>= (fun x -> tclUNIT (Some x)))) >>=
-    (function
-     | None -> tclUNIT d
-     | Some x -> tclFold2 x tac)
+    function
+    | None -> tclUNIT d
+    | Some x -> tclFold2 x tac
 
+let tclFoldPredictions tacs =
+  let rec aux tacs depth =
+    let open Proofview in
+    match tacs with
+    | [] -> tclZERO (if depth then DepthEnd else PredictionsEnd)
+    | tac::tacs' -> tclOR tac
+                      (fun e ->
+                         let depth = depth || (match e with
+                           | (DepthEnd, _) -> true
+                           | _ -> false) in
+                         aux tacs' depth) in
+  aux tacs false
 
-let rec tclSearchDiagonalDFS depth mark tcs : (int * string * glob_tactic_expr list) Proofview.tactic =
+let rec tclSearchDiagonalDFS (depth, mark, tcs) : (int * string * glob_tactic_expr list) Proofview.tactic =
     let open Proofview in
     let open Notations in
-    tclFold2 (depth, mark, tcs) (fun (depth, mark, tcs) -> Goal.enter_one (fun gl ->
-        let predictions = predict gl in
-        tclFoldList
-            (List.mapi
-                 (fun i (t, ts) ->
-                      let ndepth = depth - i in
-                      if ndepth <= 0 then tclZERO DepthEnd else
-                        (tclDebugTac t i mark Environ.empty_env tcs false <*>
-                         (tclSearchDiagonalDFS (ndepth - 1) (mark ^ "." ^ string_of_int i) (t::tcs))))
-                 predictions)
-        ))
+    tclENV >>= fun env -> Goal.goals >>= record_map (fun x -> x) >>= function
+    | [] -> tclUNIT (depth, mark, tcs)
+    | gls ->
+      let predictions = predict (List.hd (List.rev gls)) in
+      (tclFoldPredictions
+        (List.mapi
+           (fun i (t, ts) ->
+              let ndepth = depth - i in
+              if ndepth <= 0 then tclZERO DepthEnd else
+                tclFOCUSLIST ~nosuchgoal:(Tacticals.New.tclZEROMSG (Pp.str "Predictor gave wrong focus list"))
+                  (List.map_filter_i (fun i b -> if b then Some (i + 1, i + 1) else None) [true])
+                  (tclDebugTac t i mark env tcs false <*>
+                   (tclSearchDiagonalDFS ((ndepth - 1), (mark ^ "." ^ string_of_int i), (t::tcs)))))
+           predictions)) >>= tclSearchDiagonalDFS
 
 let rec tclSearchDiagonalIterative d : (string * glob_tactic_expr list) Proofview.tactic =
     let open Proofview in
     let open Notations in
     (* (tclLIFT (NonLogical.print_info (Pp.str ("Iterative depth: " ^ string_of_int d)))) <*> *)
     tclOR
-        (tclSearchDiagonalDFS d "" [] >>= (fun (d, m, tcs) -> tclUNIT (m, tcs)))
+      (tclSearchDiagonalDFS (d, "", []) >>= (fun (d, m, tcs) -> tclUNIT (m, tcs)))
         (function
         | (PredictionsEnd, _) -> Tacticals.New.tclZEROMSG (Pp.str "Tactician failed: there are no more tactics left")
         | _ -> tclSearchDiagonalIterative (d + 1))
