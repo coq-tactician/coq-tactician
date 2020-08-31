@@ -203,7 +203,7 @@ let record_map (f : Proofview.Goal.t -> 'a)
 
 let add_to_db2 ((before, obj) : Proofview.Goal.t * (glob_tactic_expr * string))
                 (after : Proofview.Goal.t list) =
-  let feat = goal_to_features before in
+  let feat = proof_state_feats_to_feats (goal_to_proof_state_feats before) in
   add_to_db (feat, obj);
   let db = Hashtbl.find int64_to_knn !current_int64 in
   Hashtbl.replace int64_to_knn !current_int64 ((feat, obj, [])::db);
@@ -369,7 +369,7 @@ let removeDups ranking =
     List.sort (fun (x, _) (y, _) -> Float.compare y x) new_ranking
 
 let predict gl =
-  let feat = goal_to_features gl in
+  let feat = proof_state_feats_to_feats (goal_to_proof_state_feats gl) in
   let r = Knn.knn !db_test feat in
   let r = List.map (fun (a, b, (c, d)) -> (a, (b, c, d))) r in
   let r = removeDups r in
