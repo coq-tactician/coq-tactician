@@ -145,12 +145,12 @@ let just_classified = ref false
 let current_int64 = ref Int64.minus_one
 
 (* TODO: In interactive mode this is a memory leak, but it seems difficult to properly clean this table *)
-type semilocaldb = (int list * (glob_tactic_expr * string) * proof_state list) list
+type semilocaldb = (int list * (glob_tactic_expr * int) * proof_state list) list
 let int64_to_knn : (Int64.t, semilocaldb) Hashtbl.t = Hashtbl.create 10
 
 let current_name = ref (Names.Id.of_string "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 
-type data_in = int list * (glob_tactic_expr * string)
+type data_in = int list * (glob_tactic_expr * int)
 let rec ref_tag ?(freeze=fun ~marshallable r -> r) ~name x =
   let _ = Summary.(declare_summary_tag name
     { freeze_function = (fun ~marshallable -> freeze ~marshallable !db_test);
@@ -201,7 +201,7 @@ let record_map (f : Proofview.Goal.t -> 'a)
     | gl::gls' -> gl >>= fun gl' -> aux gls' (f gl' :: acc) in
   aux gls []
 
-let add_to_db2 ((before, obj) : Proofview.Goal.t * (glob_tactic_expr * string))
+let add_to_db2 ((before, obj) : Proofview.Goal.t * (glob_tactic_expr * int))
                 (after : Proofview.Goal.t list) =
   let feat = proof_state_feats_to_feats (goal_to_proof_state_feats before) in
   add_to_db (feat, obj);
@@ -348,8 +348,8 @@ let rec tclInterleaveWrong tac1 tac2 =
     | Fail iexn -> tac2
     | Next ((), tac1') -> tclOR (tclUNIT ()) (fun e -> (tclInterleaveWrong tac2 (tac1' e)))
 
-module IntMap = Stdlib.Map.Make(struct type t = string
-                                       let compare = String.compare end)
+module IntMap = Stdlib.Map.Make(struct type t = int
+                                       let compare = Int.compare end)
 
 let removeDups ranking =
     let ranking_map = List.fold_left
@@ -841,7 +841,7 @@ let recorder (tac : glob_tactic_expr) : unit Proofview.tactic =
         try
           (* TODO: Fix parsing bugs and remove parsing *)
           let _ = raw_tac s in
-          List.iter (fun x -> add_to_db2 (x, (tac, s)) after_gls) before_gls
+          List.iter (fun x -> add_to_db2 (x, (tac, Hashtbl.hash s)) after_gls) before_gls
         with
         | Stream.Error txt -> append "parse_errors.txt" (txt ^ " : " ^ s ^ "\n")
         | CErrors.UserError (_, txt)  -> append "parse_errors.txt" (Pp.string_of_ppcmds txt ^ " : " ^ s ^ "\n") in
