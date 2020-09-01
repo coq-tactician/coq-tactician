@@ -30,6 +30,7 @@ module type TacticianStructures = sig
   val tactic_sexpr           : tactic -> sexpr
   val tactic_repr            : tactic -> glob_tactic_expr
   val tactic_make            : glob_tactic_expr -> tactic
+  val tactic_hash            : tactic -> int
   val tactic_local_variables : tactic -> id list
   val tactic_substitute      : tactic -> id_map -> tactic
   val tactic_globally_equal  : tactic -> tactic -> bool
@@ -78,6 +79,7 @@ module TS = struct
       Pptactic.pr_glob_tactic Environ.empty_env tac)))
   let tactic_repr (tac, _) = tac
   let tactic_make tac = tac, Hashtbl.hash tac
+  let tactic_hash (_, hash) = hash
   let tactic_local_variables (tac, _) = []
   let tactic_substitute tac ls = tac
   let tactic_globally_equal tac1 tac2 = false
@@ -144,7 +146,7 @@ let new_database name (module Learner : TacticianOnlineLearnerType) =
   ( (fun exes tac -> db := Learner.learn !db exes tac)
   , (fun t -> Learner.predict !db t) )
 
-module NullLearner : TacticianOnlineLearnerType = functor (S : TacticianStructures) -> struct
+module NullLearner : TacticianOnlineLearnerType = functor (_ : TacticianStructures) -> struct
   type model = unit
   let empty () = ()
   let learn  () _ _ = ()

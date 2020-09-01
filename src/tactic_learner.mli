@@ -31,6 +31,7 @@ module type TacticianStructures = sig
   val tactic_sexpr           : tactic -> sexpr
   val tactic_repr            : tactic -> glob_tactic_expr
   val tactic_make            : glob_tactic_expr -> tactic
+  val tactic_hash            : tactic -> int
   val tactic_local_variables : tactic -> id list (* TODO: Add global variables *)
   val tactic_substitute      : tactic -> id_map -> tactic
   val tactic_globally_equal  : tactic -> tactic -> bool

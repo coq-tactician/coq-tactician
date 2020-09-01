@@ -232,7 +232,7 @@ let get_field_goal2 fi gl d =
   | None -> d ()
   | Some x -> x
 
-let war x = Feedback.msg_warning (Pp.str ("Problem" ^ x))
+let war x = Feedback.msg_warning (Pp.str ("Tactician has uncovered a bug. Please report. " ^ x))
 
 let push_localdb x =
   modify_field localdb_field (fun db -> x::db, ()) (fun () -> [])
@@ -260,15 +260,18 @@ let pop_state_id_stack () =
   let open Notations in
   (* Sometimes, a new goal does not inherit its id from its parent, and thus the id stack
      is too short. Therefore, we are permissive with List.tl and List.hd here *)
-  modify_field_goals state_id_stack_field (fun i st -> match st with | [] -> war "a"; [], 0 | _ -> List.tl st, List.hd st)
+  (* TODO: Improve using heuristics *)
+  modify_field_goals state_id_stack_field (fun i st ->
+      match st with | [] -> war "a"; [], 0 | _ -> List.tl st, List.hd st)
     (fun _ -> war "b"; []) >>=
   fun _ -> tclUNIT ()
 
 (* TODO: We access this field from the Proofview.Goal.state, because I want to make
 sure we only process user-visible goals. This is a bit convoluted though, because now
-we access the top of the stack here, and then pop the stack with `pop_state_id_stac`. *)
+we access the top of the stack here, and then pop the stack with `pop_state_id_stack`. *)
 let get_state_id_goal_top gl =
   (* Sometimes, a new goal does not inherit its id from its parent. In that case, we assign 0 *)
+  (* TODO: Improve this using heuristics *)
   List.hd (get_field_goal2 state_id_stack_field gl (fun _ -> war "c"; [0]))
 
 let push_tactic_trace tac =
@@ -337,10 +340,9 @@ let register tac name =
 let run_ml_tac name = TacML (CAst.make ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = name}; mltac_index = 0}, []))
 
 let print_rank env rank =
-  let rank = firstn 10 rank in
   let tac_pp env t = Sexpr.format_oneline (Pptactic.pr_glob_tactic env t) in
-  let strs = List.map (fun (x, t) -> (Pp.str (Printf.sprintf "%.4f" x)) ++ (Pp.str " ") ++ (tac_pp env t) ++ (Pp.str "\n")) rank in
-  Pp.seq strs
+  let strs = List.map (fun (x, t) -> (Printf.sprintf "%.4f " x) ^ (Pp.string_of_ppcmds (tac_pp env t))) rank in
+  Pp.str (String.concat "\n" strs)
 
 (* Running predicted tactics *)
 
@@ -411,26 +413,6 @@ let rec tclInterleaveWrong tac1 tac2 =
     | Fail iexn -> tac2
     | Next ((), tac1') -> tclOR (tclUNIT ()) (fun e -> (tclInterleaveWrong tac2 (tac1' e)))
 
-module IntMap = Stdlib.Map.Make(struct type t = int
-                                       let compare = Int.compare end)
-
-let removeDups ranking =
-    let ranking_map = List.fold_left
-      (fun map (score, focus, tac, str) ->
-        IntMap.update
-          str
-          (function
-            | None -> Some (score, focus, tac)
-            | Some (lscore, lfl, ltac) -> if score > lscore then Some (score, focus, tac) else Some (lscore, lfl, ltac)
-          )
-          map
-      )
-      IntMap.empty
-      ranking
-    in
-    let new_ranking = List.map (fun (str, (score, fl, tac)) -> (score, (fl, tac, str))) (IntMap.bindings ranking_map) in
-    List.sort (fun (x, _) (y, _) -> Float.compare y x) new_ranking
-
 let predict (gls : Proofview.Goal.t list) =
   let states = List.map (fun gl ->
       let ps = goal_to_proof_state gl in
@@ -439,9 +421,8 @@ let predict (gls : Proofview.Goal.t list) =
       ; siblings = End
       ; state = ps}) gls in
   let r = learner_predict states in
-  let r = List.map (fun {confidence; focus; tactic = (tac, h)} -> (confidence, focus, tac, h)) (Stream.npeek 20 r) in
-  let r = removeDups r in
-  List.map (fun (a, (b, c, d)) -> (c, b, d)) r
+  (* TODO: Actually use the stream properly *)
+  List.map (fun {confidence; focus; tactic} -> (confidence, focus, tactic)) (Stream.npeek 20 r)
 
 let print_goal_short = Proofview.Goal.enter
     (fun gl ->
@@ -473,7 +454,7 @@ and tclSearchGoalBFS ps mark =
     let open Proofview in
     let open Notations in
       tclUNIT Intermediate <+> tclInterleaveList
-        (List.mapi (fun i (tac, foc, _) ->
+        (List.mapi (fun i (_, foc, (tac, _)) ->
           let tac2 = parse_tac tac in
           tclFold (
            (tclLIFT (NonLogical.print_info (Pp.str "------------------------------"))) <*>
@@ -546,7 +527,7 @@ let rec tclSearchDiagonalDFS (depth, mark, tcs) : (int * string * glob_tactic_ex
       let predictions = predict gls in
       (tclFoldPredictions
         (List.mapi
-           (fun i (t, foc, ts) ->
+           (fun i (_, foc, (t, _)) ->
               let ndepth = depth - i in
               if ndepth <= 0 then tclZERO DepthEnd else
                 tclFOCUS ~nosuchgoal:(Tacticals.New.tclZEROMSG (Pp.str "Predictor gave wrong focus"))
@@ -668,9 +649,8 @@ let userPredict =
         ; siblings = End
         ; state = ps}) gls in
     let r = learner_predict states in
-    let r = List.map (fun {confidence; focus; tactic = (tac, h)} -> (confidence, focus, tac, h)) (Stream.npeek 20 r) in
-    let r = removeDups r in
-    let r = List.map (fun (x, (_, y, _)) -> (x, y)) r in
+    let r = List.map (fun {confidence; focus; tactic} -> (confidence, focus, tactic)) (Stream.npeek 10 r) in
+    let r = List.map (fun (x, _, (y, _)) -> (x, y)) r in
     (* Print predictions *)
     (Proofview.tclLIFT (Proofview.NonLogical.print_info (print_rank env r)))
 

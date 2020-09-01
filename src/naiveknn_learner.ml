@@ -22,6 +22,27 @@ module NaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStructures
   open TS
   open LH
 
+  module IntMap = Stdlib.Map.Make(struct type t = int
+      let compare = Int.compare end)
+
+  let remove_dups_and_sort ranking =
+    let ranking_map = List.fold_left
+        (fun map (score, tac) ->
+           IntMap.update
+             (tactic_hash tac)
+             (function
+               | None -> Some (score, tac)
+               | Some (lscore, ltac) ->
+                 if score > lscore then Some (score, tac) else Some (lscore, ltac)
+             )
+             map
+        )
+        IntMap.empty
+        ranking
+    in
+    let new_ranking = List.map (fun (hash, (score, tac)) -> (score, tac)) (IntMap.bindings ranking_map) in
+    List.sort (fun (x, _) (y, _) -> Float.compare y x) new_ranking
+
   let proof_state_to_ints ps =
     let feats = proof_state_to_features 2 ps in
     (* print_endline (String.concat ", " feats); *)
@@ -58,38 +79,42 @@ module NaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStructures
 
     let add db b obj =
       let feats = proof_state_to_ints b in
-      let flsort = List.sort_uniq compare feats in
-      let comb = {features = flsort; obj = obj} in
+      let comb = {features = feats; obj = obj} in
       let newfreq = List.fold_left
           (fun freq f ->
              Frequencies.update f (fun y -> Some ((default 0 y) + 1)) freq)
           db.frequencies
-          flsort in
+          feats in
       let max = 1000 in
-      let (last, purgedentries) = if db.length >= max then deletelast db.entries else ([], db.entries) in
+      let last, purgedentries = if db.length >= max then deletelast db.entries else ([], db.entries) in
       let newfreq = List.fold_left
           (fun freq f ->
              Frequencies.update f (fun y -> Some ((default 1 y) - 1)) freq)
           newfreq
           last in
+      (* TODO: Length needs to be adjusted if we want to use multisets  *)
       let l = if db.length >= max then db.length else db.length + 1 in
       {entries = comb::purgedentries; length = l; frequencies = newfreq}
 
     let learn db outcomes tac =
       List.fold_left (fun a out -> add db out.before tac) db outcomes
 
+    (* TODO: This doesn't work on multisets *)
     let rec intersect l1 l2 =
-        match l1 with [] -> []
-            | h1::t1 -> (
-              match l2 with [] -> []
-                  | h2::t2 when compare h1 h2 < 0 -> intersect t1 l2
-                  | h2::t2 when compare h1 h2 > 0 -> intersect l1 t2
-                  | h2::t2 -> (
-                    match intersect t1 t2 with [] -> [h1]
-                        | h3::t3 as l when h3 = h1 -> l
-                        | h3::t3 as l -> h1::l
-                  )
+      match l1 with
+      | [] -> []
+      | h1::t1 -> (
+          match l2 with
+          | [] -> []
+          | h2::t2 when compare h1 h2 < 0 -> intersect t1 l2
+          | h2::t2 when compare h1 h2 > 0 -> intersect l1 t2
+          | h2::t2 -> (
+              match intersect t1 t2 with
+              | [] -> [h1]
+              | h3::t3 as l when h3 = h1 -> l
+              | h3::t3 as l -> h1::l
             )
+        )
 
     let tfidf db ls1 ls2 =
         let inter = intersect ls1 ls2 in
@@ -103,10 +128,10 @@ module NaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStructures
     let predict db f =
       let feats = proof_state_to_ints (List.hd f).state in
       let tdidfs = List.map
-          (fun ent -> let x = tfidf db feats ent.features in (x, ent.features, ent.obj))
+          (fun ent -> let x = tfidf db feats ent.features in (x, ent.obj))
           db.entries in
-      let out = List.sort (fun (x, _, _) (y, _, _) -> Float.compare y x) tdidfs in
-      let out = List.map (fun (a, b, c) -> { confidence = a; focus = 0; tactic = c }) out in
+      let out = remove_dups_and_sort tdidfs in
+      let out = List.map (fun (a, c) -> { confidence = a; focus = 0; tactic = c }) out in
       Stream.of_list out
 
     let evaluate db _ = 1., db

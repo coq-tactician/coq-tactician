@@ -1,6 +1,6 @@
 open Tactic_learner
 
-module NullLearner : TacticianOnlineLearnerType = functor (TS : TacticianStructures) -> struct
+module NullLearner : TacticianOnlineLearnerType = functor (_ : TacticianStructures) -> struct
   type model = unit
   let empty () = ()
   let learn () _ _ = ()
@@ -75,6 +75,5 @@ end
 (*
 let () = Feedback.msg_warning (Pp.str ("You have installed and enabled the coq-tactician-plugin-example " ^
                                        "package.\n This is only meant for demonstration purposes, and does " ^
-                                       "not actually provide good predictions."))
-let () = register_learner "ReverseAddedOrder" (module PrintLearner)
-*)
+                                       "not actually provide good predictions.")) *)
+(* let () = register_online_learner "ReverseAddedOrder" (module PrintLearner) *)
