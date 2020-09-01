@@ -15,8 +15,8 @@ let proof_state_feats_to_feats {hypotheses = hyps; goal = goal} =
     | _ -> assert false in
   gf @ List.flatten hf
 
-let proof_states_to_ints ls =
-  let feats = List.flatten (List.map (proof_state_to_features 2) ls) in
+let proof_state_to_ints ps =
+  let feats = proof_state_to_features 2 ps in
   (* print_endline (String.concat ", " feats); *)
 
   (* Tail recursive version of map, because these lists can get very large. *)
@@ -51,8 +51,8 @@ module NaiveKnn: TacticianLearnerType = struct
       | [x] -> (x.features, [])
       | x::ls' -> let (last, lsn) = deletelast ls' in (last, x::lsn)
 
-    let add db ~memory:m ~before:b obj ~after:a =
-      let feats = proof_states_to_ints b in
+    let add db b obj =
+      let feats = proof_state_to_ints b in
       let flsort = List.sort_uniq compare feats in
       let comb = {features = flsort; obj = obj} in
       let newfreq = List.fold_left
@@ -69,6 +69,9 @@ module NaiveKnn: TacticianLearnerType = struct
           last in
       let l = if db.length >= max then db.length else db.length + 1 in
       {entries = comb::purgedentries; length = l; frequencies = newfreq}
+
+    let add db exes tac =
+      List.fold_left (fun a (_, b, _) -> add db b tac) db exes
 
     let rec intersect l1 l2 =
         match l1 with [] -> []
@@ -93,7 +96,7 @@ module NaiveKnn: TacticianLearnerType = struct
                 inter)
 
     let predict db f =
-      let feats = proof_states_to_ints f in
+      let feats = proof_state_to_ints (snd (List.hd f)) in
       let flsort = List.sort_uniq compare feats in
       let tdidfs = List.map
           (fun ent -> let x = tfidf db flsort ent.features in (x, ent.features, ent.obj))

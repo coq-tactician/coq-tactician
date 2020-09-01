@@ -15,5 +15,6 @@ let tactic_sentence = Tactic_learner_internal.tactic_sentence
 let local_variables = Tactic_learner_internal.local_variables
 let substitute = Tactic_learner_internal.substitute
 
+type execution = Tactic_learner_internal.execution
 module type TacticianLearnerType = Tactic_learner_internal.TacticianLearnerType
 let register_learner = Tactic_learner_internal.register_learner

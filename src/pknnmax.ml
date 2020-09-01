@@ -133,11 +133,11 @@ module ConversionModule: TacticianLearnerType = struct
 
   type t  = Knn.t
   let create = Knn.create
-  let add db ~memory:m ~before:b tac ~after:a =
-    let feats = proof_states_feats_to_feats b in
-    Knn.add db feats tac
+  let add db ls tac =
+    let feats x = proof_state_feats_to_feats x in
+    List.fold_left (fun db (_, b, _) -> Knn.add db (feats b) tac) db ls
   let predict db f =
-    let feats = proof_states_feats_to_feats f in
+    let feats = proof_state_feats_to_feats (snd (List.hd f)) in
     List.map (fun (a, b, c) -> (a, (focus_first f), c)) (Knn.knn db feats)
 
 end

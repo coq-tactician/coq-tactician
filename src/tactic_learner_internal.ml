@@ -26,31 +26,29 @@ let tactic_sentence t =  Leaf (Pp.string_of_ppcmds (Pptactic.pr_glob_tactic Envi
 let local_variables t = []
 let substitute t map = t
 
+type execution = tactic list * proof_state * proof_state list
 module type TacticianLearnerType = sig
   type t
   val create  : unit -> t
-  val add     : t -> memory:tactic list ->
-                     before:proof_state list ->
-                            tactic ->
-                      after:proof_state list -> t
-  val predict : t -> proof_state list -> (float * bool list * tactic) list
+  val add     : t -> execution list -> tactic -> t
+  val predict : t -> (tactic list * proof_state) list -> (float * bool list * tactic) list
 end
 
 module NullLearner : TacticianLearnerType = struct
     type t = unit
     let create () = ()
-    let add db ~memory:_ ~before:_ tac ~after:_ = ()
-    let predict db ls = []
+    let add  () _ _ = ()
+    let predict () _ = []
   end
 
 let new_database name (module Learner : TacticianLearnerType) =
   let db = Summary.ref ~name:("tactician-db-" ^ name) (Learner.create ()) in
-  ( (fun ~memory:m ~before:b tac ~after:a -> db := Learner.add !db ~memory:m ~before:b tac ~after:a)
+  ( (fun exes tac -> db := Learner.add !db exes tac)
   , (fun t -> Learner.predict !db t))
 
 let current_learner = ref (new_database "null" (module NullLearner : TacticianLearnerType))
 
-let learner_add ~memory:m ~before:b tac ~after:a = fst !current_learner ~memory:m ~before:b tac ~after:a
+let learner_add exes tac = fst !current_learner exes tac
 let learner_predict ps  = snd !current_learner ps
 
 let register_learner (name : string) (learner : (module TacticianLearnerType)) : unit =

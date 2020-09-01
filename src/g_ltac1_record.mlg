@@ -48,7 +48,7 @@ GRAMMAR EXTEND Gram
   ;
   END
 
-(* TODO: A truly evil memoization trick is happening here, remove *)
+(* TODO: A truly evil memoization trick is happening here *)
 VERNAC ARGUMENT EXTEND ltac_use_default_hack PRINTED BY { pr_ltac_use_default }
 | [ "." ] -> { (Random.int64 (Int64.max_int), false) }
 | [ "..." ] -> { (Random.int64 (Int64.max_int), true) }
@@ -56,7 +56,7 @@ END
 
 VERNAC { tactician_mode } EXTEND VernacSolveTactician STATE proof
 | [ ltac_selector_opt(g) ltac_info_opt(n) tactic(t) ltac_use_default_hack(def) ] =>
-    { (* TODO: Enormously ugly hack, remove! *)
+    { (* TODO: Enormously ugly hack *)
     just_classified := true;
     VtSideff ([], VtLater)
     } -> {

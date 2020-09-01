@@ -3,14 +3,13 @@ DECLARE PLUGIN "tactician_ltac1_tactics_plugin"
 {
 
 open Ltac_plugin
-open Tactician_ltac1_record_plugin.Ltacrecord
 
 }
 
 TACTIC EXTEND predict
-| [ "ml_suggest" ] -> { userPredict }
+| [ "ml_suggest" ] -> { Tactician_ltac1_record_plugin.Ltacrecord.userPredict }
 END
 
 TACTIC EXTEND search
-| [ "ml_search" ] ->   { userSearch }
+| [ "ml_search" ] ->   { Tactician_ltac1_record_plugin.Ltacrecord.userSearch }
 END

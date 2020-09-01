@@ -1,1 +1,1 @@
-From Tactician Require Export Ltac1.Record Ltac1.Tactics.
+From Tactician Require Export Ltac1.Tactics Ltac1.Record.
