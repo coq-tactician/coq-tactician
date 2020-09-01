@@ -422,7 +422,7 @@ let predict (gls : Proofview.Goal.t list) =
       ; state = ps}) gls in
   let r = learner_predict states in
   (* TODO: Actually use the stream properly *)
-  List.map (fun {confidence; focus; tactic} -> (confidence, focus, tactic)) (Stream.npeek 20 r)
+  List.map (fun {confidence; focus; tactic} -> (confidence, focus, tactic)) (Stream.npeek 100 r)
 
 let print_goal_short = Proofview.Goal.enter
     (fun gl ->
@@ -524,7 +524,7 @@ let rec tclSearchDiagonalDFS (depth, mark, tcs) : (int * string * glob_tactic_ex
     tclENV >>= fun env -> Goal.goals >>= record_map (fun x -> x) >>= function
     | [] -> tclUNIT (depth, mark, tcs)
     | gls ->
-      let predictions = predict gls in
+      let predictions = predict [List.hd (List.rev gls)] in
       (tclFoldPredictions
         (List.mapi
            (fun i (_, foc, (t, _)) ->
