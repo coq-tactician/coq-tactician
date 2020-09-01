@@ -125,8 +125,8 @@ module ConversionModule = struct
   module Knn = MakeNaiveKnn (struct
       type feature = int
       type obj = tactic * string
-      let compare = compare
-      let equal = (=)
+      let compare = Int.compare
+      let equal = Int.equal
       let hash = Hashtbl.hash
     end)
 

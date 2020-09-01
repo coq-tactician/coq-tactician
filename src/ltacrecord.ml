@@ -11,14 +11,7 @@ open Learner_helper
 open Geninterp
 
 open Pknnmax
-module TacticNaiveKnn = MakeNaiveKnn (struct
-                                          type feature = int
-                                          type obj = (Tacexpr.glob_tactic_expr * string)
-                                          let compare = Int.compare
-                                          let equal = Int.equal
-                                          let hash = Hashtbl.hash
-                                      end)
-module Knn = TacticNaiveKnn
+module Knn = ConversionModule
 
 let append file str =
   let oc = open_out_gen [Open_creat; Open_text; Open_append] 0o640 file in
@@ -168,9 +161,9 @@ and ref2 ?freeze ~name x = ref_tag ?freeze ~name x
 
 let in_db : data_in -> Libobject.obj = Libobject.(declare_object { (default_object "LTACRECORD") with
   cache_function = (fun (_,((feat, obj) : data_in)) ->
-    db_test := Knn.add !db_test feat obj);
+    db_test := Knn.add2 !db_test feat obj);
   load_function = (fun i (name, (feat, obj)) ->
-    db_test := Knn.add !db_test feat obj; (*print_endline "load"*));
+    db_test := Knn.add2 !db_test feat obj; (*print_endline "load"*));
   open_function = (fun i (name, (feat, obj)) ->
     () (*;db_test := Knn.add !db_test feat obj*) (*;print_endline "open"*));
   classify_function = (fun data -> (*print_endline "classify";*) Libobject.Keep data);
