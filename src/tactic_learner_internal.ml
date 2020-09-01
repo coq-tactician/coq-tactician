@@ -18,8 +18,8 @@ type proof_state =
 { hypotheses : (id * sentence) list
 ; goal       : sentence }
 
-type tactic = Ltac_plugin.Tacexpr.glob_tactic_expr
-let tactic_sentence t =  Leaf (Pp.string_of_ppcmds (Pptactic.pr_glob_tactic Environ.empty_env t))
+type tactic = Ltac_plugin.Tacexpr.glob_tactic_expr * int
+let tactic_sentence t =  Leaf (Pp.string_of_ppcmds (Pptactic.pr_glob_tactic Environ.empty_env (fst t)))
 let local_variables t = []
 let substitute t map = t
 

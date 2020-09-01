@@ -18,14 +18,14 @@ let proof_state_feats_to_feats {hypotheses = hyps; goal = goal} =
 let proof_states_feats_to_feats ls =
   let feats = List.flatten (List.map proof_state_feats_to_feats ls) in
   (*let feats = List.map Hashtbl.hash feats in*)
-  List.sort(*_uniq*) Int.compare feats
+  List.sort_uniq Int.compare feats
 
 module NaiveKnn: TacticianLearnerType = struct
 
     type feature = int
     module FeatureOrd = struct
         type t = feature
-        let compare = compare
+        let compare = Int.compare
     end
     module Frequencies = Map.Make(FeatureOrd)
     type db_entry =

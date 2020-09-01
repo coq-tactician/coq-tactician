@@ -10,9 +10,6 @@ open Tactic_learner_internal
 open Learner_helper
 open Geninterp
 
-open Pknnmax
-module Knn = ConversionModule
-
 let append file str =
   let oc = open_out_gen [Open_creat; Open_text; Open_append] 0o640 file in
   output_string oc str;
@@ -138,42 +135,50 @@ let _ = Goptions.declare_bool_option featureoptions
 
 let _ = Random.self_init ()
 
-let dbsingle = Knn.create ()
-
-let db_test : Knn.t ref = ref dbsingle
 let just_classified = ref false
 let current_int64 = ref Int64.minus_one
 
 (* TODO: In interactive mode this is a memory leak, but it seems difficult to properly clean this table *)
-type semilocaldb = (int list * (glob_tactic_expr * int) * proof_state list) list
+type semilocaldb = ((glob_tactic_expr * int) list * proof_state list * (glob_tactic_expr * int) * proof_state list) list
 let int64_to_knn : (Int64.t, semilocaldb) Hashtbl.t = Hashtbl.create 10
 
 let current_name = ref (Names.Id.of_string "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 
-type data_in = int list * (glob_tactic_expr * int)
-let rec ref_tag ?(freeze=fun ~marshallable r -> r) ~name x =
-  let _ = Summary.(declare_summary_tag name
-    { freeze_function = (fun ~marshallable -> freeze ~marshallable !db_test);
-      unfreeze_function = (fun a -> db_test := a);
-      init_function = (fun () -> (* print_endline "hehe"; *) db_test := x) }) in ()
+type data_in = (glob_tactic_expr * int) list * proof_state list * (glob_tactic_expr * int) * proof_state list
 
-and ref2 ?freeze ~name x = ref_tag ?freeze ~name x
-
-let in_db : data_in -> Libobject.obj = Libobject.(declare_object { (default_object "LTACRECORD") with
-  cache_function = (fun (_,((feat, obj) : data_in)) ->
-    db_test := Knn.add2 !db_test feat obj);
-  load_function = (fun i (name, (feat, obj)) ->
-    db_test := Knn.add2 !db_test feat obj; (*print_endline "load"*));
-  open_function = (fun i (name, (feat, obj)) ->
-    () (*;db_test := Knn.add !db_test feat obj*) (*;print_endline "open"*));
-  classify_function = (fun data -> (*print_endline "classify";*) Libobject.Keep data);
-  subst_function = (fun (s, data) -> print_endline "subst"; data);
-  discharge_function = (fun (obj, data) -> (*print_endline "discharge";*) Some data);
-  rebuild_function = (fun a -> (*print_endline "rebuild";*) a)
-})
+let in_db : data_in -> Libobject.obj =
+  Libobject.(declare_object { (default_object "LTACRECORD") with
+                              cache_function = (fun (_,((mem, b_ps, tac, a_ps) : data_in)) ->
+                                  learner_add ~memory:mem ~before:b_ps tac ~after:a_ps)
+                            ; load_function = (fun i (name, (mem, b_ps, tac, a_ps)) ->
+                                  learner_add ~before:b_ps tac ~memory:mem ~after:a_ps (*print_endline "load"*) )
+                            ; open_function = (fun i (name, (mem, b_ps, tac, a_ps)) ->
+                                () (*;db_test := Predictor.add !db_test feat obj*) (*;print_endline "open"*))
+                            ; classify_function = (fun data -> (*print_endline "classify";*) Libobject.Keep data)
+                            ; subst_function = (fun (s, data) -> (*print_endline "subst";*) data)
+                            ; discharge_function = (fun (obj, data) -> (*print_endline "discharge";*) Some data)
+                            ; rebuild_function = (fun a -> (*print_endline "rebuild";*) a)
+                            })
 
 let add_to_db (x : data_in) =
   Lib.add_anonymous_leaf (in_db x)
+
+let add_to_db2 ((mem, before, tac, after) : (glob_tactic_expr * int) list * Proofview.Goal.t list * (glob_tactic_expr * int) * Proofview.Goal.t list) =
+  let before = List.map goal_to_proof_state_feats before in
+  let after = [] in
+  (* let after = List.map goal_to_proof_state_feats after in *)
+  add_to_db (mem, before, tac, after);
+  let semidb = Hashtbl.find int64_to_knn !current_int64 in
+  Hashtbl.replace int64_to_knn !current_int64 ((mem, before, tac, after)::semidb);
+  if !featureprinting then (
+    let h s = string_of_int (Hashtbl.hash s) in
+    (* let l2s fs = "[" ^ (String.concat ", " (List.map (fun x -> string_of_int x) fs)) ^ "]" in *)
+    let p2s x = proof_state_to_json x in
+    let entry (before, tac, after) =
+      "{\"before\": [" ^ String.concat ", " (List.map p2s after) ^ "]\n" ^
+      ", \"tacid\": " ^ (*Base64.encode_string*) h tac ^  "\n" ^
+      ", \"after\": [" ^ String.concat ", " (List.map p2s after) ^ "]}\n" in
+    print_to_feat (entry (before, tac, after)))
 
 let features term = List.map Hashtbl.hash (Features.extract_features (Hh_term.hhterm_of (Hh_term.econstr_to_constr term)))
 
@@ -200,24 +205,6 @@ let record_map (f : Proofview.Goal.t -> 'a)
     | [] -> Proofview.tclUNIT (acc)
     | gl::gls' -> gl >>= fun gl' -> aux gls' (f gl' :: acc) in
   aux gls []
-
-let add_to_db2 ((before, obj) : Proofview.Goal.t * (glob_tactic_expr * int))
-                (after : Proofview.Goal.t list) =
-  let feat = proof_state_feats_to_feats (goal_to_proof_state_feats before) in
-  add_to_db (feat, obj);
-  let db = Hashtbl.find int64_to_knn !current_int64 in
-  Hashtbl.replace int64_to_knn !current_int64 ((feat, obj, [])::db);
-  if !featureprinting then (
-    let h s = string_of_int (Hashtbl.hash s) in
-    (* let l2s fs = "[" ^ (String.concat ", " (List.map (fun x -> string_of_int x) fs)) ^ "]" in *)
-    let p2s x = "" in
-    let entry (before, (raw_tac, obj), after) =
-      "{\"before\": " ^ p2s before ^
-      ", \"tacid\": " ^ (*Base64.encode_string*) h obj ^
-      ", \"after\": [" ^ String.concat ", " (List.map p2s after) ^ "]}\n" in
-    print_to_feat (entry (before, obj, after)))
-
-let _ = ref2 ~name:"ltacrecord-db" dbsingle
 
 (* let () = Vernacentries.requirehook := (fun files ->
  *   let newrequires = List.map (fun (pair) -> CUnix.canonical_path_name (snd pair)) files in
@@ -353,12 +340,12 @@ module IntMap = Stdlib.Map.Make(struct type t = int
 
 let removeDups ranking =
     let ranking_map = List.fold_left
-      (fun map (score, (fl, tac, str)) ->
+      (fun map (score, focus, tac, str) ->
         IntMap.update
           str
           (function
-            | None -> Some (score, fl, tac)
-            | Some (lscore, lfl, ltac) -> if score > lscore then Some (score, fl, tac) else Some (lscore, lfl, ltac)
+            | None -> Some (score, focus, tac)
+            | Some (lscore, lfl, ltac) -> if score > lscore then Some (score, focus, tac) else Some (lscore, lfl, ltac)
           )
           map
       )
@@ -368,12 +355,13 @@ let removeDups ranking =
     let new_ranking = List.map (fun (str, (score, fl, tac)) -> (score, (fl, tac, str))) (IntMap.bindings ranking_map) in
     List.sort (fun (x, _) (y, _) -> Float.compare y x) new_ranking
 
-let predict gl =
-  let feat = proof_state_feats_to_feats (goal_to_proof_state_feats gl) in
-  let r = Knn.knn !db_test feat in
-  let r = List.map (fun (a, b, (c, d)) -> (a, (b, c, d))) r in
+let predict (gls : Proofview.Goal.t list) =
+  let feat = List.map goal_to_proof_state_feats gls in
+  let r = learner_predict feat in
+  (* TODO: Make this lazy for speed!!! *)
+  let r = List.map (fun (score, focus, (tac, h)) -> (score, focus, tac, h)) r in
   let r = removeDups r in
-  List.map (fun (a, (b, c, d)) -> (c, d)) r
+  List.map (fun (a, (b, c, d)) -> (c, b, d)) r
 
 let print_goal_short = Proofview.Goal.enter
     (fun gl ->
@@ -396,7 +384,7 @@ let rec tclFold tac : blaat Proofview.tactic =
 let rec tclSearchBFS () mark : blaat Proofview.tactic =
     let open Proofview in
     tclFold (Goal.enter_one (fun gl ->
-        let predictions = List.map fst (predict gl) in
+        let predictions = List.map (fun (a, b, c) -> a) (predict [gl]) in
         (tclSearchGoalBFS predictions mark)))
 and tclSearchGoalBFS ps mark =
     let open Proofview in
@@ -485,10 +473,10 @@ let rec tclSearchDiagonalDFS (depth, mark, tcs) : (int * string * glob_tactic_ex
     tclENV >>= fun env -> Goal.goals >>= record_map (fun x -> x) >>= function
     | [] -> tclUNIT (depth, mark, tcs)
     | gls ->
-      let predictions = predict (List.hd (List.rev gls)) in
+      let predictions = predict [List.hd (List.rev gls)] in
       (tclFoldPredictions
         (List.mapi
-           (fun i (t, ts) ->
+           (fun i (t, _, ts) ->
               let ndepth = depth - i in
               if ndepth <= 0 then tclZERO DepthEnd else
                 tclFOCUSLIST ~nosuchgoal:(Tacticals.New.tclZEROMSG (Pp.str "Predictor gave wrong focus list"))
@@ -642,7 +630,7 @@ let pre_vernac_solve pstate id =
   (* print_endline ("db_test: " ^ string_of_int (Knn.count !db_test));
    * print_endline ("id: " ^ (Int64.to_string id)); *)
   if not !just_classified then (
-    List.iter (fun (fl, obj, _) -> add_to_db (fl, obj))
+    List.iter add_to_db
       (Hashtbl.find int64_to_knn id);
     Hashtbl.remove int64_to_knn id;
     true
@@ -841,7 +829,7 @@ let recorder (tac : glob_tactic_expr) : unit Proofview.tactic =
         try
           (* TODO: Fix parsing bugs and remove parsing *)
           let _ = raw_tac s in
-          List.iter (fun x -> add_to_db2 (x, (tac, Hashtbl.hash s)) after_gls) before_gls
+          List.iter (fun x -> add_to_db2 ([], [x], (tac, Hashtbl.hash s), after_gls)) before_gls
         with
         | Stream.Error txt -> append "parse_errors.txt" (txt ^ " : " ^ s ^ "\n")
         | CErrors.UserError (_, txt)  -> append "parse_errors.txt" (Pp.string_of_ppcmds txt ^ " : " ^ s ^ "\n") in
