@@ -100,6 +100,7 @@ module MakeNaiveKnn (T : FeatureType): (KnnType with type feature = T.feature an
   end
 
 open Tactic_learner_internal
+open Learner_helper
 
 let proof_state_feats_to_feats {hypotheses = hyps; goal = goal} =
   let s2is = List.map (function
@@ -120,28 +121,24 @@ let proof_states_feats_to_feats ls =
   (*let feats = List.map Hashtbl.hash feats in*)
   List.sort(*_uniq*) Int.compare feats
 
-module ConversionModule = struct
+module ConversionModule: TacticianLearnerType = struct
 
   module Knn = MakeNaiveKnn (struct
       type feature = int
-      type obj = tactic * int
+      type obj = tactic
       let compare = Int.compare
       let equal = Int.equal
       let hash = Hashtbl.hash
     end)
 
-  include Knn
-
-  let add2 db f o = Knn.add db f o
-
   type t  = Knn.t
   let create = Knn.create
-  let add db ~memory:_ ~before:b tac ~after:a =
-    let feats = match b with [x] -> proof_state_feats_to_feats x | _ -> assert false in
+  let add db ~memory:m ~before:b tac ~after:a =
+    let feats = proof_states_feats_to_feats b in
     Knn.add db feats tac
   let predict db f =
-    let feats = match f with [x] -> proof_state_feats_to_feats x | _ -> assert false in
-    List.map (fun (a, b, c) -> (a, [], c)) (Knn.knn db feats)
+    let feats = proof_states_feats_to_feats f in
+    List.map (fun (a, b, c) -> (a, (focus_first f), c)) (Knn.knn db feats)
 
 end
 
