@@ -3,6 +3,7 @@ open Tactic_learner_internal
 open Glob_term
 open Constr
 open Evar_kinds
+open Sexpr
 
 let global_type2s = function
   | GlobRef.ConstRef _     -> s2s "ConstRef"
@@ -88,7 +89,7 @@ let id_to_debruijn id ls =
     | _::ls' -> aux ls' (n + 1) in
   aux ls 0
 
-let glob_constr2s ls (t: glob_constr) : sentence =
+let glob_constr2s ls (t: glob_constr) : sexpr =
   let rec constr2s ls = function
     | GRef (id, levels) ->
       Node [s2s "GRef"; global2s id; global_type2s id

@@ -99,6 +99,7 @@ module MakeNaiveKnn (T : FeatureType): (KnnType with type feature = T.feature an
 
   end
 
+(*
 open Tactic_learner_internal
 open Learner_helper
 
@@ -141,6 +142,7 @@ module ConversionModule: TacticianLearnerType = struct
     List.map (fun (a, b, c) -> (a, (focus_first f), c)) (Knn.knn db feats)
 
 end
+   *)
 
 module StringNaiveKnn = MakeNaiveKnn (struct
                                           type feature = string

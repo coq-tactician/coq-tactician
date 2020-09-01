@@ -1,6 +1,7 @@
 open Tactic_learner
 open Learner_helper
 
+(*
 let proof_state_feats_to_feats {hypotheses = hyps; goal = goal} =
   let s2is = List.map (function
       | Leaf s -> int_of_string s
@@ -14,16 +15,20 @@ let proof_state_feats_to_feats {hypotheses = hyps; goal = goal} =
     | Node gf -> s2is gf
     | _ -> assert false in
   gf @ List.flatten hf
+*)
 
-let proof_state_to_ints ps =
-  let feats = proof_state_to_features 2 ps in
-  (* print_endline (String.concat ", " feats); *)
+module NaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStructures) -> struct
+  module LH = L(TS)
+  open TS
+  open LH
 
-  (* Tail recursive version of map, because these lists can get very large. *)
-  let feats = List.rev (List.rev_map Hashtbl.hash feats) in
-  List.sort_uniq Int.compare feats
+  let proof_state_to_ints ps =
+    let feats = proof_state_to_features 2 ps in
+    (* print_endline (String.concat ", " feats); *)
 
-module NaiveKnn: TacticianLearnerType = struct
+    (* Tail recursive version of map, because these lists can get very large. *)
+    let feats = List.rev (List.rev_map Hashtbl.hash feats) in
+    List.sort_uniq Int.compare feats
 
     type feature = int
     module FeatureOrd = struct
@@ -40,11 +45,11 @@ module NaiveKnn: TacticianLearnerType = struct
         ; length      : int
         ; frequencies : int Frequencies.t}
 
-    type t = database
+    type model = database
 
     let default d opt = match opt with | None -> d | Some x -> x
 
-    let create () = {entries = []; length = 0; frequencies = Frequencies.empty}
+    let empty () = {entries = []; length = 0; frequencies = Frequencies.empty}
 
     let rec deletelast = function
       | [] -> assert false
@@ -70,8 +75,8 @@ module NaiveKnn: TacticianLearnerType = struct
       let l = if db.length >= max then db.length else db.length + 1 in
       {entries = comb::purgedentries; length = l; frequencies = newfreq}
 
-    let add db exes tac =
-      List.fold_left (fun a (_, b, _) -> add db b tac) db exes
+    let learn db outcomes tac =
+      List.fold_left (fun a out -> add db out.before tac) db outcomes
 
     let rec intersect l1 l2 =
         match l1 with [] -> []
@@ -96,14 +101,16 @@ module NaiveKnn: TacticianLearnerType = struct
                 inter)
 
     let predict db f =
-      let feats = proof_state_to_ints (snd (List.hd f)) in
-      let flsort = List.sort_uniq compare feats in
+      let feats = proof_state_to_ints (List.hd f).state in
       let tdidfs = List.map
-          (fun ent -> let x = tfidf db flsort ent.features in (x, ent.features, ent.obj))
+          (fun ent -> let x = tfidf db feats ent.features in (x, ent.features, ent.obj))
           db.entries in
       let out = List.sort (fun (x, _, _) (y, _, _) -> Float.compare y x) tdidfs in
-      List.map (fun (a, b, c) -> (a, (focus_first f), c)) out
+      let out = List.map (fun (a, b, c) -> { confidence = a; focus = 0; tactic = c }) out in
+      Stream.of_list out
+
+    let evaluate db _ = 1., db
 
 end
 
-let () = register_learner "naive-knn" (module NaiveKnn)
+let () = register_online_learner "naive-knn" (module NaiveKnn)

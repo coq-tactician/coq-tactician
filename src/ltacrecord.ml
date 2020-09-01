@@ -5,8 +5,9 @@ open Pp
 open Tacexpr
 open Tacenv
 open Loadpath
-open Tactic_learner_internal
 open Geninterp
+open Tactic_learner_internal
+open TS
 
 let append file str =
   let oc = open_out_gen [Open_creat; Open_text; Open_append] 0o640 file in
@@ -136,7 +137,7 @@ let _ = Random.self_init ()
 let just_classified = ref false
 let current_int64 = ref Int64.minus_one
 
-type data_in = ((glob_tactic_expr * int) list * proof_state * proof_state list) list * (glob_tactic_expr * int)
+type data_in = outcome list * tactic
 
 (* TODO: In interactive mode this is a memory leak, but it seems difficult to properly clean this table *)
 type semilocaldb = data_in list
@@ -146,10 +147,10 @@ let current_name = ref (Names.Id.of_string "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 let in_db : data_in -> Libobject.obj =
   Libobject.(declare_object { (default_object "LTACRECORD") with
-                              cache_function = (fun (_,((execs, tac) : data_in)) ->
-                                  learner_add execs tac)
-                            ; load_function = (fun i (name, (execs, tac)) ->
-                                  learner_add execs tac (*print_endline "load"*) )
+                              cache_function = (fun (_,((outcomes, tac) : data_in)) ->
+                                  learner_learn outcomes tac)
+                            ; load_function = (fun i (name, (outcomes, tac)) ->
+                                  learner_learn outcomes tac (*print_endline "load"*) )
                             ; open_function = (fun i (name, (execs, tac)) ->
                                 () (*;db_test := Predictor.add !db_test feat obj*) (*;print_endline "open"*))
                             ; classify_function = (fun data -> (*print_endline "classify";*) Libobject.Keep data)
@@ -161,21 +162,27 @@ let in_db : data_in -> Libobject.obj =
 let add_to_db (x : data_in) =
   Lib.add_anonymous_leaf (in_db x)
 
-let add_to_db2 ((execs, tac) : ((glob_tactic_expr * int) list * Proofview.Goal.t * Proofview.Goal.t list) list * (glob_tactic_expr * int)) =
-  let execs = List.map (fun (mem, st, sts) -> mem, goal_to_proof_state st, [] (* List.map goal_to_proof_state sts *)) execs in
-  add_to_db (execs, tac);
+let add_to_db2 ((outcomes, tac) : (tactic list * Proofview.Goal.t * Proofview.Goal.t list) list *
+                               tactic) =
+  let outcomes = List.map (fun (mem, st, sts) ->
+      let st : proof_state = goal_to_proof_state st in
+      { parents = List.map (fun tac -> (st (* TODO: Fix *), { executions = []; tactic = tac})) mem
+      ; siblings = End
+      ; before = st
+      ; after = [] (* List.map goal_to_proof_state sts *) }) outcomes in
+  add_to_db (outcomes, tac);
   let semidb = Hashtbl.find int64_to_knn !current_int64 in
-  Hashtbl.replace int64_to_knn !current_int64 ((execs, tac)::semidb);
+  Hashtbl.replace int64_to_knn !current_int64 ((outcomes, tac)::semidb);
   if !featureprinting then (
     (* let h s = string_of_int (Hashtbl.hash s) in
      * (\* let l2s fs = "[" ^ (String.concat ", " (List.map (fun x -> string_of_int x) fs)) ^ "]" in *\)
      * let p2s x = proof_state_to_json x in *)
-    let entry (execs, tac) =
+    let entry (outcomes, tac) =
       "Not implemented curretnly" in
       (* "{\"before\": [" ^ String.concat ", " (List.map p2s before) ^ "]\n" ^
        * ", \"tacid\": " ^ (\*Base64.encode_string*\) h tac ^  "\n" ^
        * ", \"after\": [" ^ String.concat ", " (List.map p2s after) ^ "]}\n" in *)
-    print_to_feat (entry (execs, tac)))
+    print_to_feat (entry (outcomes, tac)))
 
 (* Types and accessors for state in the proof monad *)
 type localdb = ((glob_tactic_expr list * Proofview.Goal.t * Proofview.Goal.t list) list * glob_tactic_expr) list
@@ -331,7 +338,7 @@ let run_ml_tac name = TacML (CAst.make ({mltac_name = {mltac_plugin = "recording
 
 let print_rank env rank =
   let rank = firstn 10 rank in
-  let tac_pp env t = format_oneline (Pptactic.pr_glob_tactic env t) in
+  let tac_pp env t = Sexpr.format_oneline (Pptactic.pr_glob_tactic env t) in
   let strs = List.map (fun (x, t) -> (Pp.str (Printf.sprintf "%.4f" x)) ++ (Pp.str " ") ++ (tac_pp env t) ++ (Pp.str "\n")) rank in
   Pp.seq strs
 
@@ -425,9 +432,14 @@ let removeDups ranking =
     List.sort (fun (x, _) (y, _) -> Float.compare y x) new_ranking
 
 let predict (gls : Proofview.Goal.t list) =
-  let states = List.map (fun gl -> [] (*TODO: Fix*) (* get_tactic_trace gl *), goal_to_proof_state gl) gls in
+  let states = List.map (fun gl ->
+      let ps = goal_to_proof_state gl in
+      { parents = List.map (fun tac -> (ps (* TODO: Fix *), { executions = []; tactic = tac }))
+            ([] (*TODO: Fix*) (* get_tactic_trace gl *))
+      ; siblings = End
+      ; state = ps}) gls in
   let r = learner_predict states in
-  let r = List.map (fun (score, focus, (tac, h)) -> (score, focus, tac, h)) r in
+  let r = List.map (fun {confidence; focus; tactic = (tac, h)} -> (confidence, focus, tac, h)) (Stream.npeek 20 r) in
   let r = removeDups r in
   List.map (fun (a, (b, c, d)) -> (c, b, d)) r
 
@@ -441,13 +453,13 @@ let print_goal_short = Proofview.Goal.enter
 type blaat = | Intermediate | Complete | No_goal
 
 (* TODO: This does not use the focus, and is generally entirely wrong. Probably delete or rewrite *)
-let rec tclFold (foc : bool list) tac : blaat Proofview.tactic =
+let rec tclFold tac : blaat Proofview.tactic =
     let open Proofview in
     let open Notations in
     tclFOCUS ~nosuchgoal:(tclUNIT No_goal) 1 1 tac >>=
     (function
      | No_goal -> tclUNIT Complete
-     | Complete -> tclFold foc tac
+     | Complete -> tclFold tac
      | Intermediate -> tclUNIT Intermediate)
 
 let rec tclSearchBFS () mark : blaat Proofview.tactic =
@@ -463,7 +475,7 @@ and tclSearchGoalBFS ps mark =
       tclUNIT Intermediate <+> tclInterleaveList
         (List.mapi (fun i (tac, foc, _) ->
           let tac2 = parse_tac tac in
-          tclFold foc (
+          tclFold (
            (tclLIFT (NonLogical.print_info (Pp.str "------------------------------"))) <*>
            (tclLIFT (NonLogical.print_info (Pp.str (mark ^ "." ^ string_of_int i)))) <*>
            (tclLIFT (NonLogical.print_info (Pp.app (Pp.str "Exec: ") (Pp.str "")))) <*>
@@ -476,7 +488,7 @@ and tclSearchGoalBFS ps mark =
 exception DepthEnd
 
 let synthesize_tactic (env : Environ.env) tcs =
-  let tac_pp env t = Pp.string_of_ppcmds (format_oneline (Pptactic.pr_glob_tactic env t)) in
+  let tac_pp env t = Pp.string_of_ppcmds (Sexpr.format_oneline (Pptactic.pr_glob_tactic env t)) in
   let tcs = List.map (tac_pp env) tcs in
   let res = Pp.string_of_ppcmds (Pp.h 0 (Pp.str "search" ++ Pp.ws 1 ++ Pp.str "failing" ++ Pp.ws 1 ++
                                          Pp.str "ltac2:(x|--" ++ (Pp.prlist_with_sep
@@ -531,14 +543,14 @@ let rec tclSearchDiagonalDFS (depth, mark, tcs) : (int * string * glob_tactic_ex
     tclENV >>= fun env -> Goal.goals >>= record_map (fun x -> x) >>= function
     | [] -> tclUNIT (depth, mark, tcs)
     | gls ->
-      let predictions = predict [List.hd (List.rev gls)] in
+      let predictions = predict gls in
       (tclFoldPredictions
         (List.mapi
-           (fun i (t, _, ts) ->
+           (fun i (t, foc, ts) ->
               let ndepth = depth - i in
               if ndepth <= 0 then tclZERO DepthEnd else
-                tclFOCUSLIST ~nosuchgoal:(Tacticals.New.tclZEROMSG (Pp.str "Predictor gave wrong focus list"))
-                  (List.map_filter_i (fun i b -> if b then Some (i + 1, i + 1) else None) [true])
+                tclFOCUS ~nosuchgoal:(Tacticals.New.tclZEROMSG (Pp.str "Predictor gave wrong focus"))
+                  (foc+1) (foc+1)
                   (tclDebugTac t i mark env tcs false <*>
                    (tclSearchDiagonalDFS ((ndepth - 1), (mark ^ "." ^ string_of_int i), (t::tcs)))))
            predictions)) >>= tclSearchDiagonalDFS
@@ -599,6 +611,7 @@ let rec tclInfiniteUnit () =
     let open Proofview in
     tclOR (tclUNIT ()) (fun _ -> tclInfiniteUnit ())
 
+(* TODO: Put this in proof storage *)
 let search_recursion_depth = ref 0
 let commonSearch () =
     let open Proofview in
@@ -648,9 +661,14 @@ let userPredict =
     let open Proofview in
     let open Notations in
     tclENV >>= fun env -> Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
-    let feat = List.map (fun gl -> [](*TODO: Fix*)(* get_tactic_trace gl *), goal_to_proof_state gl) gls in
-    let r = learner_predict feat in
-    let r = List.map (fun (score, focus, (tac, h)) -> (score, focus, tac, h)) r in
+    let states = List.map (fun gl ->
+        let ps = goal_to_proof_state gl in
+        { parents = List.map (fun tac -> (ps (* TODO: Fix *), { executions = []; tactic = tac }))
+              ([] (*TODO: Fix*)(* get_tactic_trace gl *))
+        ; siblings = End
+        ; state = ps}) gls in
+    let r = learner_predict states in
+    let r = List.map (fun {confidence; focus; tactic = (tac, h)} -> (confidence, focus, tac, h)) (Stream.npeek 20 r) in
     let r = removeDups r in
     let r = List.map (fun (x, (_, y, _)) -> (x, y)) r in
     (* Print predictions *)
@@ -701,6 +719,7 @@ let pre_vernac_solve pstate id =
 
     (* TODO: For purposes of benchmarking we want to know when a new proof is started
      * Note that this only works in batch mode, when no undo/back commands are issued. *)
+    (* TODO: Do this by setting state in the proof *)
     if (not (!benchmarking == None)) && not (contains (Names.Id.to_string new_name) "_subproof") then
       searched := false
   );
@@ -747,7 +766,7 @@ let record_tac (tac2 : glob_tactic_expr) : unit Proofview.tactic =
   let collect_states before_gls after_gls =
     List.map (fun (tr, i, gl_before) -> (tr, gl_before, List.filter_map (fun (j, gl_after) ->
         if i == j then Some gl_after else None) after_gls)) before_gls in
-  let tac_pp t = format_oneline (Pptactic.pr_glob_tactic Environ.empty_env t) in
+  let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic Environ.empty_env t) in
   let tac = Pp.string_of_ppcmds(tac_pp tac2) in
   pop_goal_stack () >>= fun before_gls ->
   Goal.goals >>= record_map (fun x -> x) >>= (fun after_gls ->
@@ -827,12 +846,12 @@ let recorder (tac : glob_tactic_expr) : unit Proofview.tactic =
     | TacMatchGoal _    ->                 record_tac_complete tcom (*TacMatchGoal (match goal with |- _ => intros end)*)
     | TacFun _          ->                 record_tac_complete tcom (*TacFun (fun x => intros)*)
     | TacArg _          ->                 record_tac_complete tcom (*TacArg (split, fresh, context f [_], eval simpl in 5, type of 5, type_term 5, numgoals)*)
-    | TacSelect _       ->                 assert false (*TacSelect (only 1: intros)*)
+    | TacSelect (i, t)       ->                 annotate t (*TacSelect (only 1: intros)*)
     | TacML _           ->                 record_tac_complete tcom (*TacML ?*)
     | TacAlias _        ->                 record_tac_complete tcom (*TacAlias (guard 1<=1, auto, assert_fails auto, assert_succeeds auto)*)
   in
   let save_db (db : localdb) =
-    let tac_pp t = format_oneline (Pptactic.pr_glob_tactic Environ.empty_env t) in
+    let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic Environ.empty_env t) in
     let string_tac t = Pp.string_of_ppcmds (tac_pp t) in
     let raw_tac t = Pcoq.parse_string Pltac.tactic_eoi t in
     let with_hash t = t, Hashtbl.hash (string_tac t) in

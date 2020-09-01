@@ -45,6 +45,8 @@ Makefile.coq.conf
 
 ### OCaml ###
 *.annot
+*.cmt
+*.cmti
 
 # Merlin configuring file for Vim and Emacs
 .merlin
