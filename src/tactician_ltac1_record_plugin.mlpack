@@ -12,5 +12,6 @@ Tactic_constr_map
 Naiveknn_learner
 Trivial_learners
 Pknnmax
+Tactic_annotate
 Ltacrecord
 G_ltac1_record

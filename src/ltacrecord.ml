@@ -8,6 +8,7 @@ open Loadpath
 open Geninterp
 open Tactic_learner_internal
 open TS
+open Tactic_annotate
 
 let append file str =
   let oc = open_out_gen [Open_creat; Open_text; Open_append] 0o640 file in
@@ -237,7 +238,7 @@ let war x = Feedback.msg_warning (Pp.str ("Tactician has uncovered a bug. Please
 let push_localdb x =
   modify_field localdb_field (fun db -> x::db, ()) (fun () -> [])
 
-let get_localdb () =
+let empty_localdb () =
   modify_field localdb_field (fun db -> [], db) (fun () -> [])
 
 let push_goal_stack gls =
@@ -785,51 +786,12 @@ let run_pushs_state_tac (): glob_tactic_expr =
   TacML (CAst.make ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = "pushstatetac"}; mltac_index = 0},
                 []))
 
-let record_tac_complete tac : glob_tactic_expr =
-  TacThen (run_pushs_state_tac (), TacThen (tac, run_record_tac tac))
+let record_tac_complete orig tac : glob_tactic_expr =
+  TacThen (run_pushs_state_tac (), TacThen (tac, run_record_tac orig))
 
-let recorder (tac : glob_tactic_expr) : unit Proofview.tactic =
+let recorder (tac : glob_tactic_expr) : unit Proofview.tactic = (* TODO: Implement self-learning *)
   let open Proofview in
   let open Notations in
-  let rec annotate (tcom : glob_tactic_expr) : glob_tactic_expr =
-    match tcom with
-    | TacAtom _         ->                 record_tac_complete tcom (*TacAtom (intros, destruct, etc)*)
-    | TacThen (t1, t2)  ->                 TacThen (annotate t1, annotate t2) (*TacThen (a; b)*)
-    | TacDispatch tl    ->                 TacDispatch (List.map annotate tl) (*TacDispatch ([> a | b | c])*)
-    | TacExtendTac (tl1, t, tl2) ->        TacExtendTac (Array.map annotate tl1, annotate t, Array.map annotate tl2)
-                                           (*TacExtendTac ([> a | b .. | c])*)
-    | TacThens (t1, tl) ->                 TacThens (annotate t1, List.map annotate tl) (*TacThens (a; [b | c| d])*)
-    | TacThens3parts (t1, tl1, t2, tl2) -> TacThens3parts (annotate t1, Array.map annotate tl1,
-                                                           annotate t2, Array.map annotate tl2)
-                                           (*TacThens3parts (a; [b | c .. | d])*)
-    | TacFirst _        ->                 record_tac_complete tcom (*TacFirst (first [a | b | c])*)
-    | TacComplete _     ->                 assert false (*TacComplete ?*)
-    | TacSolve _        ->                 record_tac_complete tcom (*TacSolve (solve [auto])*)
-    | TacTry _          ->                 record_tac_complete tcom (*TacTry (try intros)*)
-    | TacOr _           ->                 record_tac_complete tcom (*TacOr (intros + intros)*)
-    | TacOnce _         ->                 record_tac_complete tcom (*TacOnce (once intros)*)
-    | TacExactlyOnce _  ->                 record_tac_complete tcom (*TacExactlyOnce (exactly_once intros)*)
-    | TacIfThenCatch _  ->                 record_tac_complete tcom (*TacIfThenCatch (tryif intros then intros else intros)*)
-    | TacOrelse _       ->                 record_tac_complete tcom (*TacOrelse (intros || intros)*)
-    | TacDo _           ->                 record_tac_complete tcom (*TacDo (do 5 intros)*)
-    | TacTimeout _      ->                 record_tac_complete tcom (*TacTimeout (timeout 5 intros)*)
-    | TacTime _         ->                 record_tac_complete tcom (*TacTime (time intros)*)
-    | TacRepeat _       ->                 record_tac_complete tcom (*TacRepeat (repeat intros)*)
-    | TacProgress _     ->                 record_tac_complete tcom (*TacProgress (progress intros)*)
-    | TacShowHyps _     ->                 assert false (*TacShowHyps ?*)
-    | TacAbstract _     ->                 record_tac_complete tcom (*TacAbstract (abstract auto)*)
-    | TacId _           ->                 record_tac_complete tcom (*TacId (idtac)*)
-    | TacFail _         ->                 record_tac_complete tcom (*TacFail (fail)*)
-    | TacInfo _         ->                 record_tac_complete tcom (*TacInfo (info auto)*)
-    | TacLetIn _        ->                 record_tac_complete tcom (*TacLetIn (let x:= intros in x)*)
-    | TacMatch _        ->                 record_tac_complete tcom (*TacMatch (match False with _ => intros end)*)
-    | TacMatchGoal _    ->                 record_tac_complete tcom (*TacMatchGoal (match goal with |- _ => intros end)*)
-    | TacFun _          ->                 record_tac_complete tcom (*TacFun (fun x => intros)*)
-    | TacArg _          ->                 record_tac_complete tcom (*TacArg (split, fresh, context f [_], eval simpl in 5, type of 5, type_term 5, numgoals)*)
-    | TacSelect (i, t)       ->                 annotate t (*TacSelect (only 1: intros)*)
-    | TacML _           ->                 record_tac_complete tcom (*TacML ?*)
-    | TacAlias _        ->                 record_tac_complete tcom (*TacAlias (guard 1<=1, auto, assert_fails auto, assert_succeeds auto)*)
-  in
   let save_db (db : localdb) =
     let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic Environ.empty_env t) in
     let string_tac t = Pp.string_of_ppcmds (tac_pp t) in
@@ -846,11 +808,10 @@ let recorder (tac : glob_tactic_expr) : unit Proofview.tactic =
       with
       | Stream.Error txt -> append "parse_errors.txt" (txt ^ " : " ^ s ^ "\n")
       | CErrors.UserError (_, txt)  -> append "parse_errors.txt" (Pp.string_of_ppcmds txt ^ " : " ^ s ^ "\n") in
-
     List.iter (fun trp -> tryadd trp) db; tclUNIT () in
-  let rtac = annotate tac in
+  let rtac = decompose_annotate tac record_tac_complete in
   let ptac = Tacinterp.eval_tactic rtac in
-  let ptac = ptac <*> get_localdb () >>= save_db in
+  let ptac = ptac <*> empty_localdb () >>= save_db in
   match !benchmarking with
   | None -> ptac
   | Some _ -> (tclUNIT () >>= fun () -> benchmarkSearch ()) <+> ptac
