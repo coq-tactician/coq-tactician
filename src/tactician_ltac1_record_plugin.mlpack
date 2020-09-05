@@ -5,8 +5,11 @@ Features
 Tactic_learner_internal
 Tactic_learner
 Learner_helper
+Term_sentence
 Pattern_ops
 Tactic_constr_map
+Naiveknn_learner
+Trivial_learners
 Pknnmax
 Ltacrecord
 G_ltac1_record

@@ -13,12 +13,15 @@ src/ltacrecord.ml
 src/features.ml
 src/hh_term.ml
 src/timeouttac.ml
-src/learner_helper.ml
 src/tactic_learner_internal.ml
 src/tactic_learner.ml
 src/tactic_learner.mli
+src/learner_helper.ml
+src/term_sentence.ml
 src/pknnmax.ml
 src/tactic_constr_map.ml
+src/naiveknn_learner.ml
+src/trivial_learners.ml
 src/pattern_ops.ml
 src/tactician_ltac1_record_plugin.mlpack
 src/tactician_ltac1_tactics_plugin.mlpack
