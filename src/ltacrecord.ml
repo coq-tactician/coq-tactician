@@ -578,8 +578,6 @@ and tclSearchGoal ps mark curr =
         | e -> Tacticals.New.tclZEROMSG (Pp.str "haha")
       end
 
-let searched = ref false
-
 let contains s1 s2 =
     let re = Str.regexp_string s2
     in
@@ -612,6 +610,12 @@ let commonSearch () =
              fun m -> decSearch (); setFlags () <*> tclUNIT m)
             (fun (e, i) -> decSearch (); setFlags () <*> tclZERO ~info:i e)))
 
+let benchmarked_field : bool Evd.Store.field = Evd.Store.field ()
+let get_benchmarked () =
+  modify_field benchmarked_field (fun b -> b, b) (fun () -> false)
+let set_benchmarked () =
+  modify_field benchmarked_field (fun _ -> true, ()) (fun () -> true)
+
 let benchmarkSearch () : unit Proofview.tactic =
     let open Proofview in
     let open Notations in
@@ -627,14 +631,14 @@ let benchmarkSearch () : unit Proofview.tactic =
         (print_info (Pp.str ("Proof found for " ^ full_name ^ "!"))) in
     let print_name = NonLogical.make (fun () ->
         print_to_eval ("\n" ^ (full_name) ^ "\t" ^ string_of_int time)) in
-    if !searched then Tacticals.New.tclZEROMSG (Pp.str "Already searched") else
-      (searched := true;
-       tclTIMEOUT2 time (tclENV >>= fun env ->
-                         tclLIFT (NonLogical.print_info (Pp.str ("Start proof search for " ^ full_name))) <*>
-                         tclLIFT print_name <*>
-                         commonSearch () >>=
-                         fun m -> tclLIFT (print_success env m)) <*>
-       Tacticals.New.tclZEROMSG (Pp.str "Proof benchmark search does not actually find proofs"))
+    get_benchmarked () >>= fun benchmarked ->
+    if benchmarked then tclUNIT () else
+      set_benchmarked () <*>
+      tclTIMEOUT2 time (tclENV >>= fun env ->
+                        tclLIFT (NonLogical.print_info (Pp.str ("Start proof search for " ^ full_name))) <*>
+                        tclLIFT print_name <*>
+                        commonSearch () >>=
+                        fun m -> tclLIFT (print_success env m))
 
 let userPredict =
     let open Proofview in
@@ -694,12 +698,6 @@ let pre_vernac_solve pstate id =
   let new_name = Proof_global.get_proof_name pstate in
   if not (Names.Id.equal !current_name new_name) then (
     (* if !featureprinting then print_to_feat ("#lemma " ^ (Names.Id.to_string new_name) ^ "\n"); *)
-
-    (* TODO: For purposes of benchmarking we want to know when a new proof is started
-     * Note that this only works in batch mode, when no undo/back commands are issued. *)
-    (* TODO: Do this by setting state in the proof *)
-    if (not (!benchmarking == None)) && not (contains (Names.Id.to_string new_name) "_subproof") then
-      searched := false
   );
   current_name := new_name;
   (* print_endline ("db_test: " ^ string_of_int (Predictor.count !db_test));
@@ -791,10 +789,10 @@ let recorder (tac : glob_tactic_expr) id : unit Proofview.tactic = (* TODO: Impl
       let s = string_tac tac in
       let tac' = tac, Hashtbl.hash s in
       let execs = List.map (fun (m, b, a) -> (List.map with_hash m, b, a)) execs in
+      add_to_db2 id (execs, tac');
       try
         (* TODO: Fix parsing bugs and remove parsing *)
-        let _ = raw_tac s in
-        add_to_db2 id (execs, tac')
+        let _ = raw_tac s in ()
       with
       | Stream.Error txt -> append "parse_errors.txt" (txt ^ " : " ^ s ^ "\n")
       | CErrors.UserError (_, txt)  -> append "parse_errors.txt" (Pp.string_of_ppcmds txt ^ " : " ^ s ^ "\n") in
@@ -804,7 +802,7 @@ let recorder (tac : glob_tactic_expr) id : unit Proofview.tactic = (* TODO: Impl
   let ptac = ptac <*> empty_localdb () >>= save_db in
   match !benchmarking with
   | None -> ptac
-  | Some _ -> (tclUNIT () >>= fun () -> benchmarkSearch ()) <+> ptac
+  | Some _ -> benchmarkSearch () <*> ptac
 
 let hide_interp_t global t ot id =
   let open Proofview in
