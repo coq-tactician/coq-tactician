@@ -74,14 +74,13 @@ let vernac_solve ~pstate n info tcom b id =
           let global = match n with SelectAll | SelectList _ -> true | _ -> false in
           let info = Option.append info !print_info_trace in
           let (p,status) =
-              Pfedit.solve n info (hide_interp_t global tcom None) ?with_end_tac p
+              Pfedit.solve n info (hide_interp_t global tcom None id) ?with_end_tac p
           in
           (* in case a strict subtree was completed,
              go back to the top of the prooftree *)
           let p = Proof.maximal_unfocus Vernacentries.command_focus p in
           p,status) pstate in
       if not status then Feedback.feedback Feedback.AddedAxiom;
-      just_classified := false;
       pstate
   )
 
@@ -108,8 +107,7 @@ END
 VERNAC { tactician_mode } EXTEND VernacSolveTactician STATE proof
 | [ ltac_selector_opt(g) ltac_info_opt(n) tactic(t) ltac_use_default_hack(def) ] =>
     { (* TODO: Enormously ugly hack *)
-    just_classified := true;
-    VtSideff ([], VtLater)
+    VtSideff ([], VtNow)
     } -> {
     let g = Option.default (Goal_select.get_default_goal_selector ()) g in
     vernac_solve g n t (snd def) (fst def)

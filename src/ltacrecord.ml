@@ -135,9 +135,6 @@ let _ = Goptions.declare_bool_option featureoptions
 
 let _ = Random.self_init ()
 
-let just_classified = ref false
-let current_int64 = ref Int64.minus_one
-
 type data_in = outcome list * tactic
 
 (* TODO: In interactive mode this is a memory leak, but it seems difficult to properly clean this table *)
@@ -163,7 +160,7 @@ let in_db : data_in -> Libobject.obj =
 let add_to_db (x : data_in) =
   Lib.add_anonymous_leaf (in_db x)
 
-let add_to_db2 ((outcomes, tac) : (tactic list * Proofview.Goal.t * Proofview.Goal.t list) list *
+let add_to_db2 id ((outcomes, tac) : (tactic list * Proofview.Goal.t * Proofview.Goal.t list) list *
                                tactic) =
   let outcomes = List.map (fun (mem, st, sts) ->
       let st : proof_state = goal_to_proof_state st in
@@ -172,8 +169,8 @@ let add_to_db2 ((outcomes, tac) : (tactic list * Proofview.Goal.t * Proofview.Go
       ; before = st
       ; after = [] (* List.map goal_to_proof_state sts *) }) outcomes in
   add_to_db (outcomes, tac);
-  let semidb = Hashtbl.find int64_to_knn !current_int64 in
-  Hashtbl.replace int64_to_knn !current_int64 ((outcomes, tac)::semidb);
+  let semidb = Hashtbl.find int64_to_knn id in
+  Hashtbl.replace int64_to_knn id ((outcomes, tac)::semidb);
   if !featureprinting then (
     (* let h s = string_of_int (Hashtbl.hash s) in
      * (\* let l2s fs = "[" ^ (String.concat ", " (List.map (fun x -> string_of_int x) fs)) ^ "]" in *\)
@@ -705,18 +702,11 @@ let pre_vernac_solve pstate id =
       searched := false
   );
   current_name := new_name;
-  current_int64 := id;
   (* print_endline ("db_test: " ^ string_of_int (Predictor.count !db_test));
    * print_endline ("id: " ^ (Int64.to_string id)); *)
-  if not !just_classified then (
-    List.iter add_to_db
-      (Hashtbl.find int64_to_knn id);
-    Hashtbl.remove int64_to_knn id;
-    true
-  ) else (
-    Hashtbl.add int64_to_knn id [];
-    false
-  )
+  match Hashtbl.find_opt int64_to_knn id with
+  | Some db -> List.iter add_to_db db; true
+  | None -> Hashtbl.add int64_to_knn id []; false
 
 (* Tactic recording tactic *)
 
@@ -789,7 +779,7 @@ let run_pushs_state_tac (): glob_tactic_expr =
 let record_tac_complete orig tac : glob_tactic_expr =
   TacThen (run_pushs_state_tac (), TacThen (tac, run_record_tac orig))
 
-let recorder (tac : glob_tactic_expr) : unit Proofview.tactic = (* TODO: Implement self-learning *)
+let recorder (tac : glob_tactic_expr) id : unit Proofview.tactic = (* TODO: Implement self-learning *)
   let open Proofview in
   let open Notations in
   let save_db (db : localdb) =
@@ -804,7 +794,7 @@ let recorder (tac : glob_tactic_expr) : unit Proofview.tactic = (* TODO: Impleme
       try
         (* TODO: Fix parsing bugs and remove parsing *)
         let _ = raw_tac s in
-        add_to_db2 (execs, tac')
+        add_to_db2 id (execs, tac')
       with
       | Stream.Error txt -> append "parse_errors.txt" (txt ^ " : " ^ s ^ "\n")
       | CErrors.UserError (_, txt)  -> append "parse_errors.txt" (Pp.string_of_ppcmds txt ^ " : " ^ s ^ "\n") in
@@ -816,13 +806,13 @@ let recorder (tac : glob_tactic_expr) : unit Proofview.tactic = (* TODO: Impleme
   | None -> ptac
   | Some _ -> (tclUNIT () >>= fun () -> benchmarkSearch ()) <+> ptac
 
-let hide_interp_t global t ot =
+let hide_interp_t global t ot id =
   let open Proofview in
   let open Notations in
   let hide_interp env =
     let ist = Genintern.empty_glob_sign env in
     let te = Tacintern.intern_pure_tactic ist t in
-    let t = recorder te in
+    let t = recorder te id in
     match ot with
     | None -> t
     | Some t' -> Tacticals.New.tclTHEN t t'
