@@ -141,8 +141,6 @@ type data_in = outcome list * tactic
 type semilocaldb = data_in list
 let int64_to_knn : (Int64.t, semilocaldb) Hashtbl.t = Hashtbl.create 10
 
-let current_name = ref (Names.Id.of_string "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
-
 let in_db : data_in -> Libobject.obj =
   Libobject.(declare_object { (default_object "LTACRECORD") with
                               cache_function = (fun (_,((outcomes, tac) : data_in)) ->
@@ -616,14 +614,14 @@ let get_benchmarked () =
 let set_benchmarked () =
   modify_field benchmarked_field (fun _ -> true, ()) (fun () -> true)
 
-let benchmarkSearch () : unit Proofview.tactic =
+let benchmarkSearch name : unit Proofview.tactic =
     let open Proofview in
     let open Notations in
     let modpath = Global.current_modpath () in
     let time = match !benchmarking with
       | None -> assert false
       | Some t -> t in
-    let full_name = Names.ModPath.to_string modpath ^ "." ^ Names.Id.to_string !current_name in
+    let full_name = Names.ModPath.to_string modpath ^ "." ^ Names.Id.to_string name in
     let print_success env (m, tcs) =
         let open NonLogical in
         let tstring = synthesize_tactic env tcs in
@@ -695,11 +693,10 @@ let qualid_of_global env r =
 
 (* Returns true if tactic execution should be skipped *)
 let pre_vernac_solve pstate id =
-  let new_name = Proof_global.get_proof_name pstate in
-  if not (Names.Id.equal !current_name new_name) then (
-    (* if !featureprinting then print_to_feat ("#lemma " ^ (Names.Id.to_string new_name) ^ "\n"); *)
-  );
-  current_name := new_name;
+  (* If this needs to work again, put the current name in the evdmap storage *)
+  (* if not (Names.Id.equal !current_name new_name) then (
+   *   if !featureprinting then print_to_feat ("#lemma " ^ (Names.Id.to_string new_name) ^ "\n");
+   * ); *)
   (* print_endline ("db_test: " ^ string_of_int (Predictor.count !db_test));
    * print_endline ("id: " ^ (Int64.to_string id)); *)
   match Hashtbl.find_opt int64_to_knn id with
@@ -777,7 +774,7 @@ let run_pushs_state_tac (): glob_tactic_expr =
 let record_tac_complete orig tac : glob_tactic_expr =
   TacThen (run_pushs_state_tac (), TacThen (tac, run_record_tac orig))
 
-let recorder (tac : glob_tactic_expr) id : unit Proofview.tactic = (* TODO: Implement self-learning *)
+let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO: Implement self-learning *)
   let open Proofview in
   let open Notations in
   let save_db (db : localdb) =
@@ -802,15 +799,15 @@ let recorder (tac : glob_tactic_expr) id : unit Proofview.tactic = (* TODO: Impl
   let ptac = ptac <*> empty_localdb () >>= save_db in
   match !benchmarking with
   | None -> ptac
-  | Some _ -> benchmarkSearch () <*> ptac
+  | Some _ -> benchmarkSearch name <*> ptac
 
-let hide_interp_t global t ot id =
+let hide_interp_t global t ot id name =
   let open Proofview in
   let open Notations in
   let hide_interp env =
     let ist = Genintern.empty_glob_sign env in
     let te = Tacintern.intern_pure_tactic ist t in
-    let t = recorder te id in
+    let t = recorder te id name in
     match ot with
     | None -> t
     | Some t' -> Tacticals.New.tclTHEN t t'
