@@ -12,7 +12,7 @@ open Geninterp
 open Pknnmax
 module TacticNaiveKnn = MakeNaiveKnn (struct
                                           type feature = int
-                                          type obj = (Tacexpr.raw_tactic_expr * string)
+                                          type obj = (Tacexpr.glob_tactic_expr * string)
                                           let compare = Int.compare
                                           let equal = Int.equal
                                           let hash = Hashtbl.hash
@@ -153,7 +153,7 @@ let int64_to_knn : (Int64.t, Knn.t) Hashtbl.t = Hashtbl.create 10
 
 let current_name = ref (Names.Id.of_string "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 
-type data_in = int list * (Tacexpr.raw_tactic_expr * string)
+type data_in = int list * (glob_tactic_expr * string)
 let rec ref_tag ?(freeze=fun ~marshallable r -> r) ~name x =
   let _ = Summary.(declare_summary_tag name
     { freeze_function = (fun ~marshallable -> freeze ~marshallable !db_test);
@@ -204,7 +204,7 @@ let record_map (f : Proofview.Goal.t -> 'a)
     | gl::gls' -> gl >>= fun gl' -> aux gls' (f gl' :: acc) in
   aux gls []
 
-let add_to_db2 ((before, obj) : Proofview.Goal.t * (Tacexpr.raw_tactic_expr * string))
+let add_to_db2 ((before, obj) : Proofview.Goal.t * (glob_tactic_expr * string))
                 (after : Proofview.Goal.t list) =
   let feat = goal_to_features before in
   add_to_db (feat, obj);
@@ -295,7 +295,7 @@ exception PredictionsEnd
 
 let parse_tac tac =
     try
-      Tacinterp.hide_interp false tac None
+      Tacinterp.eval_tactic tac
     with
     e -> print_endline (Printexc.to_string e); flush_all (); assert false
 
@@ -423,7 +423,7 @@ and tclSearchGoalBFS ps mark =
           (
            (tclLIFT (NonLogical.print_info (Pp.str "------------------------------"))) <*>
            (tclLIFT (NonLogical.print_info (Pp.str (mark ^ "." ^ string_of_int i)))) <*>
-           (tclLIFT (NonLogical.print_info (Pp.app (Pp.str "Exec: ") (Pptactic.pr_raw_tactic Environ.empty_env Evd.empty t)))) <*>
+           (tclLIFT (NonLogical.print_info (Pp.app (Pp.str "Exec: ") (Pptactic.pr_glob_tactic Environ.empty_env t)))) <*>
            print_goal_short <*>
            tclPROGRESS tac2 <*>
            (*print_goal_short <*>*)
@@ -467,7 +467,7 @@ let tclDebugTac t i mark tcs debug =
      (tclLIFT (NonLogical.print_info (Pp.str "------------------------------"))) <*>
      (tclLIFT (NonLogical.print_info (Pp.str (mark ^ "." ^ string_of_int i)))) <*>
      (tclLIFT (NonLogical.print_info (Pp.str (synthesize_tactic tcs)))) <*>
-     (tclLIFT (NonLogical.print_info (Pp.app (Pp.str "Exec: ") (Pptactic.pr_raw_tactic Environ.empty_env Evd.empty t)))) <*>
+     (tclLIFT (NonLogical.print_info (Pp.app (Pp.str "Exec: ") (Pptactic.pr_glob_tactic Environ.empty_env t)))) <*>
      print_goal_short <*>
      tclPROGRESS tac2)
     else tclPROGRESS tac2
@@ -506,6 +506,7 @@ let rec tclSearchDiagonalIterative d : (string * string list) Proofview.tactic =
         | (PredictionsEnd, _) -> Tacticals.New.tclZEROMSG (Pp.str "Tactician failed: there are no more tactics left")
         | _ -> tclSearchDiagonalIterative (d + 1))
 
+(* TODO: Doesn't compile anymore and is probably wrong
 let rec tclSearch () mark curr : blaat Proofview.tactic =
     let open Proofview in
     tclFold (Goal.enter_one (fun gl ->
@@ -528,6 +529,7 @@ and tclSearchGoal ps mark curr =
          tclPROGRESS tac2 <*>
          print_goal_short <*>
          tclSearch () (mark ^ "." ^ string_of_int curr) 0)
+*)
 
   let tclTIMEOUT2 n t =
     Proofview.tclOR
@@ -837,8 +839,8 @@ let recorder (tac : glob_tactic_expr) : unit Proofview.tactic =
         let s = Str.global_replace (Str.regexp "change_no_check") "change" s in
         try
           (* TODO: Fix parsing bugs and remove parsing *)
-          let tmptac = raw_tac s in
-          List.iter (fun x -> add_to_db2 (x, (tmptac, s)) after_gls) before_gls
+          let _ = raw_tac s in
+          List.iter (fun x -> add_to_db2 (x, (tac, s)) after_gls) before_gls
         with
         | Stream.Error txt -> append "parse_errors.txt" (txt ^ " : " ^ s ^ "\n")
         | CErrors.UserError (_, txt)  -> append "parse_errors.txt" (Pp.string_of_ppcmds txt ^ " : " ^ s ^ "\n") in
