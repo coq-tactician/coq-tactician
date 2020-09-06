@@ -138,6 +138,7 @@ let _ = Random.self_init ()
 type data_in = outcome list * tactic
 
 (* TODO: In interactive mode this is a memory leak, but it seems difficult to properly clean this table *)
+(* It might be possible to completely empty the db when a new lemma starts. *)
 type semilocaldb = data_in list
 let int64_to_knn : (Int64.t, semilocaldb) Hashtbl.t = Hashtbl.create 10
 
@@ -700,7 +701,7 @@ let pre_vernac_solve pstate id =
   (* print_endline ("db_test: " ^ string_of_int (Predictor.count !db_test));
    * print_endline ("id: " ^ (Int64.to_string id)); *)
   match Hashtbl.find_opt int64_to_knn id with
-  | Some db -> List.iter add_to_db db; true
+  | Some db -> List.iter add_to_db db; Hashtbl.remove int64_to_knn id; true
   | None -> Hashtbl.add int64_to_knn id []; false
 
 (* Tactic recording tactic *)
