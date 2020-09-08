@@ -1,7 +1,6 @@
 open Ltac_plugin
 
 open Util
-open Pp
 open Tacexpr
 open Tacenv
 open Loadpath
@@ -466,14 +465,12 @@ and tclSearchGoalBFS ps mark =
 exception DepthEnd
 
 let synthesize_tactic (env : Environ.env) tcs =
-  let tac_pp env t = Pp.string_of_ppcmds (Sexpr.format_oneline (Pptactic.pr_glob_tactic env t)) in
-  let tcs = List.map (tac_pp env) tcs in
-  let res = Pp.string_of_ppcmds (Pp.h 0 (Pp.str "search" ++ Pp.ws 1 ++ Pp.str "failing" ++ Pp.ws 1 ++
-                                         Pp.str "ltac2:(x|--" ++ (Pp.prlist_with_sep
-                                                                    (fun () -> Pp.str "-")
-                                                                    (fun t -> Pp.str "ltac1:(" ++ Pp.str t ++ Pp.str ")")
-                                                                    (Stdlib.List.rev tcs)) ++ Pp.str ("--|x)."))) in
-  if String.contains res '\n' then (print_endline res; assert false) else res
+  let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic env t) in
+  Pp.(h 0 (str "search" ++ ws 1 ++ str "failing" ++ ws 1 ++
+          Pp.str "ltac2:(x|--" ++ (prlist_with_sep
+                                     (fun () -> str "-")
+                                     (fun t -> str "ltac1:(" ++ tac_pp t ++ str ")")
+                                     (Stdlib.List.rev tcs)) ++ str ("--|x).")))
 
 let tclDebugTac t i mark env tcs debug =
     let open Proofview in
@@ -488,7 +485,7 @@ let tclDebugTac t i mark env tcs debug =
     (
      (tclLIFT (NonLogical.print_info (Pp.str "------------------------------"))) <*>
      (tclLIFT (NonLogical.print_info (Pp.str (mark ^ "." ^ string_of_int i)))) <*>
-     (tclLIFT (NonLogical.print_info (Pp.str (synthesize_tactic env tcs)))) <*>
+     (tclLIFT (NonLogical.print_info (synthesize_tactic env tcs))) <*>
      (tclLIFT (NonLogical.print_info (Pp.app (Pp.str "Exec: ") (Pptactic.pr_glob_tactic env t)))) <*>
      print_goal_short <*>
      tclPROGRESS tac2)
@@ -630,7 +627,7 @@ let benchmarkSearch name : unit Proofview.tactic =
     let full_name = Names.ModPath.to_string modpath ^ "." ^ Names.Id.to_string name in
     let print_success env (m, tcs) =
         let open NonLogical in
-        let tstring = synthesize_tactic env tcs in
+        let tstring = Pp.string_of_ppcmds (synthesize_tactic env tcs) in
         (make (fun () -> print_to_eval ("\t" ^ m ^ "\t" ^ tstring))) >>
         (print_info (Pp.str ("Proof found for " ^ full_name ^ "!"))) in
     let print_name = NonLogical.make (fun () ->
@@ -660,13 +657,23 @@ let userPredict =
     (* Print predictions *)
     (Proofview.tclLIFT (Proofview.NonLogical.print_info (print_rank env r)))
 
+let nested_search_solutions_field : glob_tactic_expr list list Evd.Store.field = Evd.Store.field ()
+let push_nested_search_solutions tcs =
+  modify_field nested_search_solutions_field (fun acc -> tcs :: acc, ()) (fun () -> [])
+let empty_nested_search_solutions () =
+  modify_field nested_search_solutions_field (fun acc -> [], acc) (fun () -> [])
 let userSearch =
     let open Proofview in
     let open Notations in
     tclUNIT () >>= fun () -> commonSearch () >>= fun (tr, tcs) -> get_search_recursion_depth () >>= fun n ->
-    if n >= 1 then tclUNIT () else
-    tclENV >>= fun env -> tclLIFT (NonLogical.print_info (
-        Pp.str ("Tactician found a proof! The following tactic caches the proof:\n\n" ^ synthesize_tactic env tcs)))
+    if n >= 1 then push_nested_search_solutions tcs else
+      empty_nested_search_solutions () >>= fun acc -> tclENV >>= fun env ->
+      let main_msg = Pp.(str "Tactician found a proof! The following tactic caches the proof:\n\n" ++
+                         synthesize_tactic env tcs) in
+      let acc_msg = if List.is_empty acc then Pp.mt () else
+          Pp.(str ("\n\nThe tactic above uses nested searching. The following tactics cache those nested searches.\n") ++
+              (prlist_with_sep fnl (synthesize_tactic env) acc)) in
+      tclLIFT (NonLogical.print_info (Pp.(main_msg ++ acc_msg)))
 
 (* Name globalization *)
 
