@@ -747,7 +747,8 @@ let record_tac (tac2 : glob_tactic_expr) : unit Proofview.tactic =
   let collect_states before_gls after_gls =
     List.map (fun (tr, i, gl_before) -> (tr, gl_before, List.filter_map (fun (j, gl_after) ->
         if i == j then Some gl_after else None) after_gls)) before_gls in
-  let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic Environ.empty_env t) in
+  tclENV >>= fun env ->
+  let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic env t) in
   let tac = Pp.string_of_ppcmds(tac_pp tac2) in
   pop_goal_stack () >>= fun before_gls ->
   Goal.goals >>= record_map (fun x -> x) >>= (fun after_gls ->
@@ -792,8 +793,8 @@ let record_tac_complete orig tac : glob_tactic_expr =
 let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO: Implement self-learning *)
   let open Proofview in
   let open Notations in
-  let save_db (db : localdb) =
-    let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic Environ.empty_env t) in
+  let save_db env (db : localdb) =
+    let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic env t) in
     let string_tac t = Pp.string_of_ppcmds (tac_pp t) in
     let raw_tac t = Pcoq.parse_string Pltac.tactic_eoi t in
     let with_hash t = t, Hashtbl.hash (string_tac t) in
@@ -811,7 +812,7 @@ let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO:
     List.iter (fun trp -> tryadd trp) db; tclUNIT () in
   let rtac = decompose_annotate tac record_tac_complete in
   let ptac = Tacinterp.eval_tactic rtac in
-  let ptac = ptac <*> empty_localdb () >>= save_db in
+  let ptac = ptac <*> tclENV >>= fun env -> empty_localdb () >>= save_db env in
   match !benchmarking with
   | None -> ptac
   | Some _ -> benchmarkSearch name <*> ptac
