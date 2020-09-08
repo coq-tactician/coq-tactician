@@ -587,27 +587,32 @@ let rec tclInfiniteUnit () =
     let open Proofview in
     tclOR (tclUNIT ()) (fun _ -> tclInfiniteUnit ())
 
-(* TODO: Put this in proof storage *)
-let search_recursion_depth = ref 0
+let search_recursion_depth_field : int Evd.Store.field = Evd.Store.field ()
+let inc_search_recursion_depth () =
+  modify_field search_recursion_depth_field (fun n -> 1+n, n) (fun () -> 0)
+let dec_search_recursion_depth () =
+  modify_field search_recursion_depth_field (fun n -> (if n <= 0 then 0 else n - 1), n) (fun () -> 0)
+let get_search_recursion_depth () =
+  modify_field search_recursion_depth_field (fun n -> n, n) (fun () -> 0)
+let max_recursion_depth = 2
 let commonSearch () =
     let open Proofview in
     let open Notations in
     (* We want to allow at least one nested search, such that users can embed search in more complicated
        expressions. But allowing infinite nesting will just lead to divergence. *)
-    if !search_recursion_depth > 1 then Tacticals.New.tclZEROMSG (Pp.str "too much search nesting") else (
-      (* TODO: Find a way to reset dumbglob to original value. *)
+    inc_search_recursion_depth () >>= fun n ->
+    if n >= max_recursion_depth then Tacticals.New.tclZEROMSG (Pp.str "too much search nesting") else
       tclLIFT (NonLogical.make (fun () -> CWarnings.get_flags ())) >>= (fun oldFlags ->
-          let doFlags = !search_recursion_depth == 0 in
+          (* TODO: Find a way to reset dumbglob to original value. This is a temporary hack. *)
+          let doFlags = n == 0 in
           let setFlags () = if not doFlags then tclUNIT () else tclLIFT (NonLogical.make (fun () ->
               Dumpglob.continue (); CWarnings.set_flags (oldFlags))) in
-          let decSearch () = search_recursion_depth := !search_recursion_depth - 1 in
           (if not doFlags then tclUNIT () else
             tclLIFT (NonLogical.make (fun () -> Dumpglob.pause(); CWarnings.set_flags ("-all"))))
           <*> tclOR
-            (tclUNIT () >>= fun () -> search_recursion_depth := !search_recursion_depth + 1;
-             tclONCE (Tacticals.New.tclCOMPLETE (tclSearchDiagonalIterative 1)) >>=
-             fun m -> decSearch (); setFlags () <*> tclUNIT m)
-            (fun (e, i) -> decSearch (); setFlags () <*> tclZERO ~info:i e)))
+            (tclONCE (Tacticals.New.tclCOMPLETE (tclSearchDiagonalIterative 1)) >>=
+             fun m -> dec_search_recursion_depth () >>= fun _ -> setFlags () <*> tclUNIT m)
+            (fun (e, i) -> setFlags () <*> tclZERO ~info:i e))
 
 let benchmarked_field : bool Evd.Store.field = Evd.Store.field ()
 let get_benchmarked () =
@@ -658,9 +663,10 @@ let userPredict =
 let userSearch =
     let open Proofview in
     let open Notations in
-    tclUNIT () >>= fun () -> commonSearch () >>= (fun (tr, tcs) -> tclENV >>= fun env ->
-        tclLIFT (NonLogical.print_info (
-            Pp.str ("Tactician found a proof! The following tactic caches the proof:\n" ^ synthesize_tactic env tcs))))
+    tclUNIT () >>= fun () -> commonSearch () >>= fun (tr, tcs) -> get_search_recursion_depth () >>= fun n ->
+    if n >= 1 then tclUNIT () else
+    tclENV >>= fun env -> tclLIFT (NonLogical.print_info (
+        Pp.str ("Tactician found a proof! The following tactic caches the proof:\n\n" ^ synthesize_tactic env tcs)))
 
 (* Name globalization *)
 
@@ -739,7 +745,7 @@ let record_tac (tac2 : glob_tactic_expr) : unit Proofview.tactic =
   Goal.goals >>= record_map (fun x -> x) >>= (fun after_gls ->
       let after_gls = List.map (fun gl -> get_state_id_goal_top gl, gl) after_gls in
       (* TODO: There is probably a much better way to do this *)
-      if (String.equal tac "suggest" || String.equal tac "search" || String.is_prefix tac "search failing")
+      if (String.equal tac "suggest" || String.equal tac "search" || String.is_prefix "search failing" tac)
       then Proofview.tclUNIT () else
         push_localdb (collect_states before_gls after_gls, tac2)
     ) >>= (fun () -> pop_state_id_stack () <*> (* TODO: This is a strange way of doing things, see todo above. *)
