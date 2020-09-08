@@ -467,10 +467,10 @@ exception DepthEnd
 let synthesize_tactic (env : Environ.env) tcs =
   let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic env t) in
   Pp.(h 0 (str "search" ++ ws 1 ++ str "failing" ++ ws 1 ++
-          Pp.str "ltac2:(x|--" ++ (prlist_with_sep
-                                     (fun () -> str "-")
-                                     (fun t -> str "ltac1:(" ++ tac_pp t ++ str ")")
-                                     (Stdlib.List.rev tcs)) ++ str ("--|x).")))
+          Pp.str "(" ++ (prlist_with_sep
+                           (fun () -> str "; ")
+                           (fun (t, i) -> str "only" ++ ws 1 ++ int (1+i) ++ str ":" ++ ws 1 ++ tac_pp t)
+                           (Stdlib.List.rev tcs)) ++ str (").")))
 
 let tclDebugTac t i mark env tcs debug =
     let open Proofview in
@@ -512,12 +512,13 @@ let tclFoldPredictions tacs =
                          aux tacs' depth) in
   aux tacs false
 
-let rec tclSearchDiagonalDFS (depth, mark, tcs) : (int * string * glob_tactic_expr list) Proofview.tactic =
+let rec tclSearchDiagonalDFS (depth, mark, tcs) : (int * string * (glob_tactic_expr * int) list) Proofview.tactic =
     let open Proofview in
     let open Notations in
     tclENV >>= fun env -> Goal.goals >>= record_map (fun x -> x) >>= function
     | [] -> tclUNIT (depth, mark, tcs)
     | gls ->
+      (* TODO: Remove rev *)
       let predictions = predict [List.hd (List.rev gls)] in
       (tclFoldPredictions
         (List.mapi
@@ -527,10 +528,10 @@ let rec tclSearchDiagonalDFS (depth, mark, tcs) : (int * string * glob_tactic_ex
                 tclFOCUS ~nosuchgoal:(Tacticals.New.tclZEROMSG (Pp.str "Predictor gave wrong focus"))
                   (foc+1) (foc+1)
                   (tclDebugTac t i mark env tcs false <*>
-                   (tclSearchDiagonalDFS ((ndepth - 1), (mark ^ "." ^ string_of_int i), (t::tcs)))))
+                   (tclSearchDiagonalDFS ((ndepth - 1), (mark ^ "." ^ string_of_int i), ((t, foc)::tcs)))))
            predictions)) >>= tclSearchDiagonalDFS
 
-let rec tclSearchDiagonalIterative d : (string * glob_tactic_expr list) Proofview.tactic =
+let rec tclSearchDiagonalIterative d : (string * (glob_tactic_expr * int) list) Proofview.tactic =
     let open Proofview in
     let open Notations in
     (* (tclLIFT (NonLogical.print_info (Pp.str ("Iterative depth: " ^ string_of_int d)))) <*> *)
@@ -657,7 +658,7 @@ let userPredict =
     (* Print predictions *)
     (Proofview.tclLIFT (Proofview.NonLogical.print_info (print_rank env r)))
 
-let nested_search_solutions_field : glob_tactic_expr list list Evd.Store.field = Evd.Store.field ()
+let nested_search_solutions_field : (glob_tactic_expr * int) list list Evd.Store.field = Evd.Store.field ()
 let push_nested_search_solutions tcs =
   modify_field nested_search_solutions_field (fun acc -> tcs :: acc, ()) (fun () -> [])
 let empty_nested_search_solutions () =
