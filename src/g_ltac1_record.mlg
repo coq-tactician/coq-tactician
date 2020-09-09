@@ -138,7 +138,7 @@ PRINTED BY { pr_tac_ast }
 | [ "LetIn" ] -> { LetIn }
 | [ "Match" ] -> { Match }
 | [ "MatchGoal" ] -> { MatchGoal }
-| [ "Arg" ] -> { Select }
+| [ "Arg" ] -> { Arg }
 | [ "Select" ] -> { Select }
 | [ "ML" ] -> { ML }
 | [ "Alias" ] -> { Alias }

@@ -120,7 +120,7 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
       router Rewrite at
     | TacInversion _ -> router Inversion at
   and annotate_arg x = match x with
-    | TacGeneric _ -> x, r
+    | TacGeneric _ -> x, r (* TODO: Deal with ssreflect stuff *)
     | ConstrMayEval _ -> x, r
     | Reference _ -> x, r
     | TacCall c -> (if inner_record Call then
@@ -168,20 +168,26 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
     | TacFail _         ->                 tac (* No need to record fail *)
     | TacInfo t         ->                 TacInfo (annotate t) (* No need to record info *)
     | TacLetIn (flg, ts, t) ->
-      router LetIn (TacLetIn (flg, List.map (fun (a, b) -> (a, fst (annotate_arg b))) ts, rinner LetIn t))
-    | TacMatch (flg, t, ts)        ->
+      let ts = if inner_record LetIn then List.map (fun (a, b) -> (a, fst (annotate_arg b))) ts else ts in
+      router LetIn (TacLetIn (flg, ts, rinner LetIn t))
+    | TacMatch (flg, t, ts) ->
       router Match (TacMatch (flg, rinner Match t,
                               List.map (function | All t -> All (rinner Match t)
                                                  | Pat (c, p, t) -> Pat (c, p, rinner Match t)) ts))
-    | TacMatchGoal (flg, d, ts) -> router MatchGoal (TacMatchGoal (
-        flg, d, List.map (function | All t -> All (rinner MatchGoal t)
-                                   | Pat (c, p, t) -> Pat (c, p, rinner MatchGoal t)) ts))
-    | TacFun (args, t)          ->         TacFun (args, annotate t) (* Probably not outer-recordable *)
-    | TacArg x          ->
+    | TacMatchGoal (flg, d, ts) ->
+      router MatchGoal (TacMatchGoal (
+          flg, d, List.map (function | All t -> All (rinner MatchGoal t)
+                                     | Pat (c, p, t) -> Pat (c, p, rinner MatchGoal t)) ts))
+    | TacFun (args, t) -> TacFun (args, annotate t) (* Probably not outer-recordable *)
+    | TacArg x ->
       let x', r = if inner_record Arg then annotate_arg x.v else x.v, r in
       let res = TacArg (CAst.make ?loc:x.loc x') in
       if outer_record Arg then r tac res else res
     | TacSelect (i, t)       ->            router Select (TacSelect (i, rinner Select t))
-    | TacML _           ->                 router ML tac (* TODO: Decompose interesting known tactics (such as ssreflect) *)
-    | TacAlias _        ->                 router Alias tac (* TODO: Decompose user-defined tactics *)
+    | TacML CAst.{loc; v=(e, args)} ->
+      let args = if inner_record ML then List.map (fun a -> fst (annotate_arg a)) args else args in
+      router ML (TacML (CAst.make ?loc (e, args))) (* TODO: Decompose interesting known tactics (such as ssreflect) *)
+    | TacAlias CAst.{loc; v=(e, args)} ->
+      let args = if inner_record Alias then List.map (fun a -> fst (annotate_arg a)) args else args in
+      router Alias (TacAlias (CAst.make ?loc (e, args))) (* TODO: Decompose user-defined tactics *)
   in annotate tac
