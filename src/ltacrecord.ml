@@ -139,7 +139,7 @@ type data_in = outcome list * tactic
 (* TODO: In interactive mode this is a memory leak, but it seems difficult to properly clean this table *)
 (* It might be possible to completely empty the db when a new lemma starts. *)
 type semilocaldb = data_in list
-let int64_to_knn : (Int64.t, semilocaldb) Hashtbl.t = Hashtbl.create 10
+let int64_to_knn : (Int64.t, semilocaldb * exn option) Hashtbl.t = Hashtbl.create 10
 
 let in_db : data_in -> Libobject.obj =
   Libobject.(declare_object { (default_object "LTACRECORD") with
@@ -167,8 +167,8 @@ let add_to_db2 id ((outcomes, tac) : (tactic list * Proofview.Goal.t * Proofview
       ; before = st
       ; after = [] (* List.map goal_to_proof_state sts *) }) outcomes in
   add_to_db (outcomes, tac);
-  let semidb = Hashtbl.find int64_to_knn id in
-  Hashtbl.replace int64_to_knn id ((outcomes, tac)::semidb);
+  let semidb, exn = Hashtbl.find int64_to_knn id in
+  Hashtbl.replace int64_to_knn id ((outcomes, tac)::semidb, exn);
   if !featureprinting then (
     (* let h s = string_of_int (Hashtbl.hash s) in
      * (\* let l2s fs = "[" ^ (String.concat ", " (List.map (fun x -> string_of_int x) fs)) ^ "]" in *\)
@@ -715,8 +715,16 @@ let pre_vernac_solve pstate id =
   (* print_endline ("db_test: " ^ string_of_int (Predictor.count !db_test));
    * print_endline ("id: " ^ (Int64.to_string id)); *)
   match Hashtbl.find_opt int64_to_knn id with
-  | Some db -> List.iter add_to_db db; Hashtbl.remove int64_to_knn id; true
-  | None -> Hashtbl.add int64_to_knn id []; false
+  | Some (db, exn) -> (List.iter add_to_db db; Hashtbl.remove int64_to_knn id;
+      match exn with
+      | None -> true
+      | Some exn -> raise exn)
+  | None -> Hashtbl.add int64_to_knn id ([], None); false
+
+let save_exn id exn =
+  match Hashtbl.find_opt int64_to_knn id with
+  | Some (v, None) -> Hashtbl.replace int64_to_knn id (v, Some exn)
+  | _ -> assert false (* Should not happen *)
 
 (* Tactic recording tactic *)
 

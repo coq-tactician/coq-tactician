@@ -68,7 +68,8 @@ let pr_decomposition = function
 let vernac_solve ~pstate n info tcom b id =
   let open Goal_select in
   let skip = pre_vernac_solve pstate id in
-  if skip then pstate else (
+  if skip then pstate else
+    try
       let pstate, status = Proof_global.map_fold_proof_endline (fun etac p ->
           let with_end_tac = if b then Some etac else None in
           let global = match n with SelectAll | SelectList _ -> true | _ -> false in
@@ -83,7 +84,9 @@ let vernac_solve ~pstate n info tcom b id =
           p,status) pstate in
       if not status then Feedback.feedback Feedback.AddedAxiom;
       pstate
-  )
+    with
+    | e when CErrors.noncritical e || e = CErrors.Timeout ->
+      save_exn id e; raise e
 
 let pr_ltac_use_default b =
   if (snd b) then (* Bug: a space is inserted before "..." *) Pp.str ".." else Pp.mt ()
