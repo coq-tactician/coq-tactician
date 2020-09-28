@@ -101,7 +101,9 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
     | TacCase _ -> router Case at
     | TacMutualFix _ -> router MutualFix at
     | TacMutualCofix _ -> router MutualCofix at
-    | TacAssert _ -> router Assert at
+    | TacAssert (flg, b, by, pat, term) ->
+      let by = if inner_record Assert then Option.map (Option.map annotate) by else by in
+      router Assert (TacAtom (CAst.make ?loc:a.loc (TacAssert (flg, b, by, pat, term))))
     | TacGeneralize gs ->
       let at = if inner_record Generalize then decompose_generalize a.loc (List.rev gs) else at in
       router Generalize at
