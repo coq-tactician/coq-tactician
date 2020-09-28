@@ -13,5 +13,7 @@ Naiveknn_learner
 Trivial_learners
 Pknnmax
 Tactic_annotate
+Witness_whitelist
+Cook_tacexpr
 Ltacrecord
 G_ltac1_record

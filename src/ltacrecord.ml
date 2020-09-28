@@ -8,6 +8,7 @@ open Geninterp
 open Tactic_learner_internal
 open TS
 open Tactic_annotate
+open Cook_tacexpr
 
 let append file str =
   let oc = open_out_gen [Open_creat; Open_text; Open_append] 0o640 file in
@@ -141,19 +142,135 @@ type data_in = outcome list * tactic
 type semilocaldb = data_in list
 let int64_to_knn : (Int64.t, semilocaldb * exn option) Hashtbl.t = Hashtbl.create 10
 
+let subst_outcomes (s, (outcomes, tac)) =
+  let subst_tac (tac, h) = Tacsubst.subst_tactic s tac, h in (* TODO: Recalculate (or remove) hash *)
+  let subst_pf (hyps, g) = Mod_subst.(List.map (
+      fun (id, te, ty) -> (id, Option.map (subst_mps s) te, subst_mps s ty)) hyps, subst_mps s g) in
+  let rec subst_pd = function
+    | End -> End
+    | Step ps -> Step (subst_ps ps)
+  and subst_ps {executions; tactic} =
+    { executions = List.map (fun (ps, pd) -> subst_pf ps, subst_pd pd) executions
+    ; tactic = subst_tac tactic } in 
+  let outcomes = List.map (fun {parents; siblings; before; after} ->
+      { parents = List.map (fun (psa, pse) -> (subst_pf psa, subst_ps pse)) parents
+      ; siblings = subst_pd siblings
+      ; before = subst_pf before
+      ; after = List.map subst_pf after }) outcomes in
+  (outcomes, subst_tac tac)
+
+let tmp_ltac_defs = Summary.ref ~name:"TACTICIANTMPSECTION" []
+let in_section_ltac_defs : (Names.KerName.t * glob_tactic_expr) list -> Libobject.obj =
+  Libobject.(declare_object (local_object "LTACRECORDSECTIONLTACS"
+                               ~cache:(fun (obj, p) -> tmp_ltac_defs := p::!tmp_ltac_defs)
+                               ~discharge:(fun (obj, p) -> Some p)))
+
+let with_let_prefix tac =
+  let tac, all, ids = rebuild tac in
+  let kername_tolname id = CAst.make (Names.(Name.mk_name (Label.to_id (KerName.label id)))) in
+  let ltac_to_let ltacset int =
+    TacLetIn (true,
+              List.map (fun (id, tac) -> (kername_tolname id, Tacexp tac)) ltacset,
+              int) in
+  let rec prefix acc = function
+    | [] -> acc
+    | ltacset::rem ->
+      let set_occurs = all || List.fold_right (fun (id, _) b ->
+          b || List.exists (Names.KerName.equal id) ids) ltacset false in
+      if set_occurs then
+        prefix (ltac_to_let ltacset acc) rem else
+        prefix acc rem in
+  prefix tac !tmp_ltac_defs
+
+let rebuild_outcomes (outcomes, tac) =
+  let rebuild_tac (tac, h) = with_let_prefix tac, h in
+  let rec rebuild_pd = function
+    | End -> End
+    | Step ps -> Step (rebuild_ps ps)
+  and rebuild_ps {executions; tactic} =
+    { executions = List.map (fun (ps, pd) -> ps, rebuild_pd pd) executions
+    ; tactic = rebuild_tac tactic } in 
+  let outcomes = List.map (fun {parents; siblings; before; after} ->
+      { parents = List.map (fun (psa, pse) -> (psa, rebuild_ps pse)) parents
+      ; siblings = rebuild_pd siblings
+      ; before; after }) outcomes in
+  (outcomes, rebuild_tac tac)
+
+let discharge_outcomes env (outcomes, tac) =
+  if !tmp_ltac_defs = [] then (outcomes, tac) else
+    let genarg_print_tac (tac, h) = discharge env tac, h in
+    let rec genarg_print_pd = function
+      | End -> End
+      | Step ps -> Step (genarg_print_ps ps)
+    and genarg_print_ps {executions; tactic} =
+      { executions = List.map (fun (ps, pd) -> ps, genarg_print_pd pd) executions
+      ; tactic = genarg_print_tac tactic } in 
+    let outcomes = List.map (fun {parents; siblings; before; after} ->
+        { parents = List.map (fun (psa, pse) -> (psa, genarg_print_ps pse)) parents
+        ; siblings = genarg_print_pd siblings
+        ; before; after }) outcomes in
+    (outcomes, genarg_print_tac tac)
+
+let section_ltac_helper bodies =
+  tmp_ltac_defs := []; (* Safe to discard tmp state from old section discharge *)
+  let ist = Tacintern.make_empty_glob_sign () in
+  let intern t = Tacintern.intern_tactic_or_tacarg ist t in
+  let def_trans = function
+    | TacticDefinition (id, tac) ->
+      Lib.make_kn CAst.(id.v), intern tac
+    | TacticRedefinition (id, tac) ->
+      Tacenv.locate_tactic id, intern tac in
+  if not (Global.sections_are_opened ()) then () else
+    Lib.add_anonymous_leaf (in_section_ltac_defs (List.map def_trans bodies))
+
+(* TODO: Ugly hack. It seems impossible to obtain the Kername that a notation
+   was assigned from outside Tacentries or Tacenv. Therefore we simulate the
+   Kernname generation function in Tacenv. However, we don't know how many
+   times it was called before, so we have to do a search to find the correct id. *)
+let find_last_key : (string * string option) Tacentries.grammar_tactic_prod_item_expr list -> Names.KerName.t =
+  let open Tacentries in
+  let open Names in
+  let id = Summary.ref ~name:"TACTICIAN-NOTATION-COUNTER" 0 in
+  fun prods ->
+    let map = function
+      | TacTerm s -> s
+      | TacNonTerm _ -> "#"
+    in
+    let prods = String.concat "_" (List.map map prods) in
+    let rec next () =
+      let cur = incr id; !id in
+      (* We embed the hash of the kernel name in the label so that the identifier
+         should be mostly unique. This ensures that including two modules
+         together won't confuse the corresponding labels. *)
+      let hash = (cur lxor (ModPath.hash (Lib.current_mp ()))) land 0x7FFFFFFF in
+      let lbl = Id.of_string_soft (Printf.sprintf "%s_%08X" prods hash) in
+      let name = Lib.make_kn lbl in
+      if Tacenv.check_alias name then name else next () in
+    next ()
+
+let section_notation_helper prods e =
+  tmp_ltac_defs := []; (* Safe to discard tmp state from old section discharge *)
+  if Global.sections_are_opened () then
+    let id = find_last_key prods in
+    let alias = Tacenv.interp_alias id in
+    let func = TacFun (List.map Names.Name.mk_name alias.alias_args, alias.alias_body) in
+    Lib.add_anonymous_leaf (in_section_ltac_defs [id, func])
+
 let in_db : data_in -> Libobject.obj =
   Libobject.(declare_object { (default_object "LTACRECORD") with
                               cache_function = (fun (_,((outcomes, tac) : data_in)) ->
                                   learner_learn outcomes tac)
-                            ; load_function = (fun i (name, (outcomes, tac)) ->
-                                  learner_learn outcomes tac (*print_endline "load"*) )
-                            ; open_function = (fun i (name, (execs, tac)) ->
-                                () (*;db_test := Predictor.add !db_test feat obj*) (*;print_endline "open"*))
-                            ; classify_function = (fun data -> (*print_endline "classify";*) Libobject.Keep data)
-                            ; subst_function = (fun (s, data) -> (*print_endline "subst";*) data)
-                            ; discharge_function = (fun (obj, data) -> (*print_endline "discharge";*) Some data)
-                            ; rebuild_function = (fun a -> (*print_endline "rebuild";*) a)
-                            }) (* TODO: Do something useful with sections here *)
+                            ; load_function = (fun i (_, (outcomes, tac)) ->
+                                  learner_learn outcomes tac)
+                            ; open_function = (fun i (_, (execs, tac)) -> ())
+                            ; classify_function = (fun data -> Libobject.Substitute data)
+                            ; subst_function = subst_outcomes
+                            ; discharge_function = (fun (obj, data) ->
+                                let env = Global.env () in
+                                Some (discharge_outcomes env data))
+                            ; rebuild_function = (fun data ->
+                                rebuild_outcomes data)
+                            })
 
 let add_to_db (x : data_in) =
   Lib.add_anonymous_leaf (in_db x)
@@ -602,7 +719,7 @@ let commonSearch () =
     if n >= max_recursion_depth then Tacticals.New.tclZEROMSG (Pp.str "too much search nesting") else
       tclLIFT (NonLogical.make (fun () -> CWarnings.get_flags ())) >>= (fun oldFlags ->
           (* TODO: Find a way to reset dumbglob to original value. This is a temporary hack. *)
-          let doFlags = n == 0 in
+          let doFlags = n = 0 in
           let setFlags () = if not doFlags then tclUNIT () else tclLIFT (NonLogical.make (fun () ->
               Dumpglob.continue (); CWarnings.set_flags (oldFlags))) in
           (if not doFlags then tclUNIT () else
@@ -736,12 +853,11 @@ let register_interp0 wit f =
   in
   Geninterp.register_interp0 wit interp
 
-let (wit_glbtactic : (Empty.t, glob_tactic_expr, glob_tactic_expr) Genarg.genarg_type) =
+let wit_glbtactic : (Empty.t, glob_tactic_expr, glob_tactic_expr) Genarg.genarg_type =
   let wit = Genarg.create_arg "glbtactic" in
   let () = register_val0 wit None in
+  register_interp0 wit (fun ist v -> Ftactic.return v);
   wit
-
-let () = register_interp0 wit_glbtactic (fun ist v -> Ftactic.return v)
 
 let push_state_tac () =
   let open Proofview in
@@ -754,7 +870,7 @@ let record_tac (tac2 : glob_tactic_expr) : unit Proofview.tactic =
   let open Notations in
   let collect_states before_gls after_gls =
     List.map (fun (tr, i, gl_before) -> (tr, gl_before, List.filter_map (fun (j, gl_after) ->
-        if i == j then Some gl_after else None) after_gls)) before_gls in
+        if i = j then Some gl_after else None) after_gls)) before_gls in
   tclENV >>= fun env ->
   let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic env t) in
   let tac = Pp.string_of_ppcmds(tac_pp tac2) in
