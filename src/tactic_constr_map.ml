@@ -8,6 +8,73 @@ open Tactics
 open Context
 open Genredexpr
 open Pattern_ops
+open Util
+open Names
+open Nameops
+open Glob_ops
+open CAst
+
+(* Begin taken and modified from Glob_ops.v *)
+let collide_id l id = List.exists (fun (id',id'') -> Id.equal id id' || Id.equal id id'') l
+let test_id l id = if collide_id l id then raise UnsoundRenaming
+let test_na l na = Name.iter (test_id l) na
+let update_subst na l =
+  let in_range id l = List.exists (fun (_,id') -> Id.equal id id') l in
+  let l' = Name.fold_right Id.List.remove_assoc na l in
+  Name.fold_right
+    (fun id _ ->
+       if in_range id l' then
+         let id' = Namegen.next_ident_away_from id (fun id' -> in_range id' l') in
+         Name id', (id,id')::l
+       else na,l)
+    na (na,l)
+let rename_var l id =
+  try
+    Id.List.assoc id l
+  with Not_found ->
+    id
+let force c = DAst.make ?loc:c.CAst.loc (DAst.get c)
+let rec rename_glob_vars l c = force @@ DAst.map_with_loc (fun ?loc -> function
+  | GVar id as r ->
+      let id' = rename_var l id in
+      if id == id' then r else GVar id'
+  | GRef (GlobRef.VarRef id,_) as r -> r
+  | GProd (na,bk,t,c) ->
+      let na',l' = update_subst na l in
+      GProd (na',bk,rename_glob_vars l t,rename_glob_vars l' c)
+  | GLambda (na,bk,t,c) ->
+      let na',l' = update_subst na l in
+      GLambda (na',bk,rename_glob_vars l t,rename_glob_vars l' c)
+  | GLetIn (na,b,t,c) ->
+      let na',l' = update_subst na l in
+      GLetIn (na',rename_glob_vars l b,Option.map (rename_glob_vars l) t,rename_glob_vars l' c)
+  (* Lazy strategy: we fail if a collision with renaming occurs, rather than renaming further *)
+  | GCases (ci,po,tomatchl,cls) ->
+      let test_pred_pat (na,ino) =
+        test_na l na; Option.iter (fun {v=(_,nal)} -> List.iter (test_na l) nal) ino in
+      let test_clause idl = List.iter (test_id l) idl in
+      let po = Option.map (rename_glob_vars l) po in
+      let tomatchl = Util.List.map_left (fun (tm,x) -> test_pred_pat x; (rename_glob_vars l tm,x)) tomatchl in
+      let cls = Util.List.map_left (CAst.map (fun (idl,p,c) -> test_clause idl; (idl,p,rename_glob_vars l c))) cls in
+      GCases (ci,po,tomatchl,cls)
+  | GLetTuple (nal,(na,po),c,b) ->
+     List.iter (test_na l) (na::nal);
+     GLetTuple (nal,(na,Option.map (rename_glob_vars l) po),
+                rename_glob_vars l c,rename_glob_vars l b)
+  | GIf (c,(na,po),b1,b2) ->
+     test_na l na;
+     GIf (rename_glob_vars l c,(na,Option.map (rename_glob_vars l) po),
+          rename_glob_vars l b1,rename_glob_vars l b2)
+  | GRec (k,idl,decls,bs,ts) ->
+     Array.iter (test_id l) idl;
+     GRec (k,idl,
+           Array.map (List.map (fun (na,k,bbd,bty) ->
+             test_na l na; (na,k,Option.map (rename_glob_vars l) bbd,rename_glob_vars l bty))) decls,
+           Array.map (rename_glob_vars l) bs,
+           Array.map (rename_glob_vars l) ts)
+  | _ -> DAst.get (map_glob_constr (rename_glob_vars l) c)
+  ) c
+(* End taken and modified from Glob_ops.v *)
 
 let context_to_vars lc = List.map (function
     | Named.Declaration.LocalAssum (id, _) -> id.binder_name
@@ -27,7 +94,7 @@ let replace_free_variables (lc : EConstr.named_context) t =
     List.iter (fun id -> print_endline (Names.Id.to_string id)) free;*)
   let lc_vars = context_to_vars lc in
   let map = List.map (fun x -> (x, find_in_lc x lc_vars)) free in
-  Glob_ops.rename_glob_vars map t
+  rename_glob_vars map t
 
 let replace_pattern_free_variables (lc : EConstr.named_context) p =
   let free = Names.Id.Set.elements (pattern_free_vars p) in
