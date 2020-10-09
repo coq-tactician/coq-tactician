@@ -878,7 +878,7 @@ let record_tac (tac2 : glob_tactic_expr) : unit Proofview.tactic =
   Goal.goals >>= record_map (fun x -> x) >>= (fun after_gls ->
       let after_gls = List.map (fun gl -> get_state_id_goal_top gl, gl) after_gls in
       (* TODO: There is probably a much better way to do this *)
-      if (String.equal tac "suggest" || String.equal tac "search" || String.is_prefix "search failing" tac)
+      if (String.equal tac "admit" || String.equal tac "suggest" || String.equal tac "search" || String.is_prefix "search failing" tac)
       then Proofview.tclUNIT () else
         push_localdb (collect_states before_gls after_gls, tac2)
     ) >>= (fun () -> pop_state_id_stack () <*> (* TODO: This is a strange way of doing things, see todo above. *)
