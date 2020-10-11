@@ -126,6 +126,7 @@ module NaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStructures
                 inter)
 
     let predict db f =
+      if f = [] then Stream.of_list [] else
       let feats = proof_state_to_ints (List.hd f).state in
       let tdidfs = List.map
           (fun ent -> let x = tfidf db feats ent.features in (x, ent.obj))
