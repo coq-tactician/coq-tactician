@@ -630,9 +630,12 @@ let tclFoldPredictions tacs =
                          aux tacs' depth) in
   aux tacs false
 
-let rec tclSearchDiagonalDFS ((depth, mark, tcs) : int * int list * (glob_tactic_expr * int) list) : (int * int list * (glob_tactic_expr * int) list) Proofview.tactic =
+let tclSearchDiagonalDFS (depth, mark, tcs) =
     let open Proofview in
     let open Notations in
+    let count = ref 0 in (* TODO: This does not thread through the DiagonalIterative function *)
+    let rec aux ((depth, mark, tcs) : int * int list * (glob_tactic_expr * int) list)
+      : (int * int list * (glob_tactic_expr * int) list) Proofview.tactic =
     tclENV >>= fun env -> Goal.goals >>= record_map (fun x -> x) >>= function
     | [] -> tclUNIT (depth, mark, tcs)
     | gls ->
@@ -643,19 +646,20 @@ let rec tclSearchDiagonalDFS ((depth, mark, tcs) : int * int list * (glob_tactic
            (fun i (_, foc, (t, _)) ->
               let ndepth = depth - i in
               if ndepth <= 0 then tclZERO DepthEnd else
-                tclFOCUS ~nosuchgoal:(Tacticals.New.tclZEROMSG (Pp.str "Predictor gave wrong focus"))
-                  (foc+1) (foc+1)
-                  (tclDebugTac t i mark env tcs false <*>
-                   (tclSearchDiagonalDFS ((ndepth - 1), (i::mark), ((t, foc)::tcs)))))
-           predictions)) >>= tclSearchDiagonalDFS
+                (count := !count + 1;
+                 tclFOCUS ~nosuchgoal:(Tacticals.New.tclZEROMSG (Pp.str "Predictor gave wrong focus"))
+                   (foc+1) (foc+1)
+                   (tclDebugTac t i mark env tcs false <*>
+                    (aux ((ndepth - 1), (i::mark), ((t, foc)::tcs))))))
+           predictions)) >>= aux in
+    aux (depth, mark, tcs) >>= fun (_, mark, tcs) -> tclUNIT (mark, tcs, !count)
 
-let rec tclSearchDiagonalIterative d : (int list * (glob_tactic_expr * int) list) Proofview.tactic =
+let rec tclSearchDiagonalIterative d : (int list * (glob_tactic_expr * int) list * int) Proofview.tactic =
     let open Proofview in
-    let open Notations in
     (* (tclLIFT (NonLogical.print_info (Pp.str ("Iterative depth: " ^ string_of_int d)))) <*> *)
     tclOR
-      (tclSearchDiagonalDFS (d, [], []) >>= (fun (d, m, tcs) -> tclUNIT (m, tcs)))
-        (function
+      (tclSearchDiagonalDFS (d, [], []))
+      (function
         | (PredictionsEnd, _) -> Tacticals.New.tclZEROMSG (Pp.str "Tactician failed: there are no more tactics left")
         | _ -> tclSearchDiagonalIterative (d + 1))
 
@@ -744,11 +748,11 @@ let benchmarkSearch name : unit Proofview.tactic =
       | None -> assert false
       | Some t -> t in
     let full_name = Names.ModPath.to_string modpath ^ "." ^ Names.Id.to_string name in
-    let print_success env (m, tcs) =
+    let print_success env (m, tcs, count) =
       let m = String.concat "." (List.map string_of_int m) in
       let open NonLogical in
       let tstring = Pp.string_of_ppcmds (synthesize_tactic env tcs) in
-      (make (fun () -> print_to_eval ("\t" ^ m ^ "\t" ^ tstring))) >>
+      (make (fun () -> print_to_eval ("\t" ^ m ^ "\t" ^ tstring ^ "\t" ^ string_of_int count))) >>
       (print_info (Pp.str ("Proof found for " ^ full_name ^ "!"))) in
     let print_name = NonLogical.make (fun () ->
         print_to_eval ("\n" ^ (full_name) ^ "\t" ^ string_of_int time)) in
@@ -785,7 +789,7 @@ let empty_nested_search_solutions () =
 let userSearch =
     let open Proofview in
     let open Notations in
-    tclUNIT () >>= fun () -> commonSearch () >>= fun (tr, tcs) -> get_search_recursion_depth () >>= fun n ->
+    tclUNIT () >>= fun () -> commonSearch () >>= fun (tr, tcs, count) -> get_search_recursion_depth () >>= fun n ->
     if n >= 1 then push_nested_search_solutions tcs else
       empty_nested_search_solutions () >>= fun acc -> tclENV >>= fun env ->
       let main_msg = Pp.(str "Tactician found a proof! The following tactic caches the proof:\n\n" ++
