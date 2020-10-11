@@ -748,22 +748,24 @@ let benchmarkSearch name : unit Proofview.tactic =
       | None -> assert false
       | Some t -> t in
     let full_name = Names.ModPath.to_string modpath ^ "." ^ Names.Id.to_string name in
-    let print_success env (m, tcs, count) =
+    let print_success env (m, tcs, count) start_time =
       let m = String.concat "." (List.map string_of_int m) in
+      let tdiff = string_of_float (Unix.gettimeofday () -. start_time) in
       let open NonLogical in
       let tstring = Pp.string_of_ppcmds (synthesize_tactic env tcs) in
-      (make (fun () -> print_to_eval ("\t" ^ m ^ "\t" ^ tstring ^ "\t" ^ string_of_int count))) >>
+      (make (fun () -> print_to_eval ("\t" ^ m ^ "\t" ^ tstring ^ "\t" ^ tdiff ^ "\t" ^ string_of_int count))) >>
       (print_info (Pp.str ("Proof found for " ^ full_name ^ "!"))) in
     let print_name = NonLogical.make (fun () ->
         print_to_eval ("\n" ^ (full_name) ^ "\t" ^ string_of_int time)) in
     get_benchmarked () >>= fun benchmarked ->
     if benchmarked then tclUNIT () else
       set_benchmarked () <*>
+      let start_time = Unix.gettimeofday () in
       tclTIMEOUT2 time (tclENV >>= fun env ->
                         tclLIFT (NonLogical.print_info (Pp.str ("Start proof search for " ^ full_name))) <*>
                         tclLIFT print_name <*>
                         commonSearch () >>=
-                        fun m -> tclLIFT (print_success env m))
+                        fun m -> tclLIFT (print_success env m start_time))
 
 let userPredict =
     let open Proofview in
