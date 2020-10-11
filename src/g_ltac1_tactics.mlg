@@ -6,10 +6,12 @@ open Ltac_plugin
 
 }
 
-TACTIC EXTEND predict
-| [ "ml_suggest" ] -> { Tactician_ltac1_record_plugin.Ltacrecord.userPredict }
-END
-
 TACTIC EXTEND search
 | [ "ml_search" ] ->   { Tactician_ltac1_record_plugin.Ltacrecord.userSearch }
+END
+
+VERNAC COMMAND EXTEND TacticianSuggest CLASSIFIED AS QUERY STATE proof_query
+| [ "Suggest" ]
+  -> { fun ~pstate -> let _ = Proof.run_tactic (Global.env ())
+         Tactician_ltac1_record_plugin.Ltacrecord.userPredict (Proof_global.get_proof pstate) in () }
 END

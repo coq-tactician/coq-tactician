@@ -10,4 +10,3 @@ Ltac searcher := idtac
     ml_search.
 Tactic Notation (at level 2) "search" "failing" tactic(t) := solve [t] || searcher.
 Tactic Notation (at level 2) "search" := ml_search.
-Tactic Notation (at level 2) "suggest" := ml_suggest.
