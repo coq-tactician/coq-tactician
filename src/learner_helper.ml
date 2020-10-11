@@ -113,4 +113,16 @@ module L (TS: TacticianStructures) = struct
               Option.default [] (Option.map (fun t -> [term_sexpr t]) term))) hyps in
     Node [s2s "State"; Node [s2s "Goal"; term_sexpr goal]; Node [s2s "Hypotheses"; Node hyps]]
 
+  let proof_state_to_string ps env evar_map =
+    let constr_str t = Pp.string_of_ppcmds (Sexpr.format_oneline (
+        Printer.pr_constr_env env evar_map (term_repr t))) in
+    let goal = constr_str (proof_state_goal ps) in
+    let hyps = proof_state_hypotheses ps in
+    let hyps = List.map (fun (id, term, typ) ->
+        let id_str = Tactic_learner.Id.to_string id in
+        let term_str = Option.default "" (Option.map (fun t -> " := " ^ constr_str t) term) in
+        let typ_str = constr_str typ in
+        id_str ^ " " ^ term_str ^ " : " ^ typ_str
+      ) hyps in
+    String.concat ", " hyps ^ " |- " ^ goal
 end
