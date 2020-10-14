@@ -166,7 +166,9 @@ let in_section_ltac_defs : (Names.KerName.t * glob_tactic_expr) list -> Libobjec
                                ~discharge:(fun (obj, p) -> Some p)))
 
 let with_let_prefix tac =
-  let tac, all, ids = rebuild tac in
+  let names = List.fold_right Names.KNset.add
+      (List.concat (List.map (List.map fst) !tmp_ltac_defs)) Names.KNset.empty in
+  let tac, all, ids = rebuild names tac in
   let kername_tolname id = CAst.make (Names.(Name.mk_name (Label.to_id (KerName.label id)))) in
   let ltac_to_let ltacset int =
     TacLetIn (true,
@@ -176,7 +178,7 @@ let with_let_prefix tac =
     | [] -> acc
     | ltacset::rem ->
       let set_occurs = all || List.fold_right (fun (id, _) b ->
-          b || List.exists (Names.KerName.equal id) ids) ltacset false in
+          b || Names.KNset.mem id ids) ltacset false in
       if set_occurs then
         prefix (ltac_to_let ltacset acc) rem else
         prefix acc rem in

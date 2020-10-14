@@ -10,8 +10,9 @@ theories/Ltac1.v
 src/g_ltac1_record.mlg
 src/g_ltac1_tactics.mlg
 src/tactic_annotate.ml
-src/witness_whitelist.ml
+src/gendischarge.ml
 src/cook_tacexpr.ml
+src/known_witnesses.ml
 src/ltacrecord.ml
 src/pknnmax.ml
 src/features.ml

@@ -1,5 +1,4 @@
 open Printf
-open Unix
 
 let usage () = print_endline "\
 This is a utility for Tactician that will help you configure it correctly.
