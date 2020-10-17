@@ -930,19 +930,18 @@ let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO:
   let save_db env (db : localdb) =
     let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic env t) in
     let string_tac t = Pp.string_of_ppcmds (tac_pp t) in
-    let raw_tac t = Pcoq.parse_string Pltac.tactic_eoi t in
     let with_hash t = t, Hashtbl.hash (string_tac t) in
     let tryadd (execs, tac) =
       let s = string_tac tac in
       let tac' = tac, Hashtbl.hash s in
       let execs = List.map (fun (m, b, a) -> (List.map with_hash m, b, a)) execs in
       add_to_db2 id (execs, tac');
-      try
-        (* TODO: Fix parsing bugs and remove parsing *)
-        let _ = raw_tac s in ()
-      with
-      | Stream.Error txt -> append "parse_errors.txt" (txt ^ " : " ^ s ^ "\n")
-      | CErrors.UserError (_, txt)  -> append "parse_errors.txt" (Pp.string_of_ppcmds txt ^ " : " ^ s ^ "\n") in
+      try (* This is purely for parsing bug detection and could be removed for performance reasons *)
+        let _ = Pcoq.parse_string Pltac.tactic_eoi s in ()
+      with e ->
+        Feedback.msg_warning (Pp.str (
+            "Tactician detected a printing/parsing problem " ^
+            "for the following tactic. Please report. " ^ s)) in
     List.iter (fun trp -> tryadd trp) db; tclUNIT () in
   let rtac = decompose_annotate tac record_tac_complete in
   let ptac = Tacinterp.eval_tactic rtac in
