@@ -16,5 +16,6 @@ Tactic_annotate
 Gendischarge
 Cook_tacexpr
 Known_witnesses
+Logger
 Ltacrecord
 G_ltac1_record

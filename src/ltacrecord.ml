@@ -139,6 +139,7 @@ type data_in = outcome list * tactic
 (* It might be possible to completely empty the db when a new lemma starts. *)
 type semilocaldb = data_in list
 let int64_to_knn : (Int64.t, semilocaldb * exn option) Hashtbl.t = Hashtbl.create 10
+let db_size = Summary.ref ~name:"TACTICIAN-DB-SIZE" 0
 
 let subst_outcomes (s, (outcomes, tac)) =
   let subst_tac (tac, h) = Tacsubst.subst_tactic s tac, h in (* TODO: Recalculate (or remove) hash *)
@@ -259,9 +260,11 @@ let section_notation_helper prods e =
 let in_db : data_in -> Libobject.obj =
   Libobject.(declare_object { (default_object "LTACRECORD") with
                               cache_function = (fun (_,((outcomes, tac) : data_in)) ->
-                                  learner_learn outcomes tac)
+                                  (learner_learn outcomes tac);
+                                  db_size := !db_size + 1)
                             ; load_function = (fun i (_, (outcomes, tac)) ->
-                                  learner_learn outcomes tac)
+                                  (learner_learn outcomes tac);
+                                  db_size := !db_size + 1)
                             ; open_function = (fun _ _ (_, (execs, tac)) -> ())
                             ; classify_function = (fun data -> Libobject.Substitute data)
                             ; subst_function = subst_outcomes
@@ -770,6 +773,7 @@ let benchmarkSearch name : unit Proofview.tactic =
 let userPredict =
     let open Proofview in
     let open Notations in
+    Logger.suggest_logger get_tactic_trace !db_size <*>
     tclENV >>= fun env -> Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
     let states = List.map (fun gl ->
         let ps = goal_to_proof_state gl in
@@ -791,15 +795,20 @@ let empty_nested_search_solutions () =
 let userSearch =
     let open Proofview in
     let open Notations in
-    tclUNIT () >>= fun () -> commonSearch () >>= fun (tr, tcs, count) -> get_search_recursion_depth () >>= fun n ->
-    if n >= 1 then push_nested_search_solutions tcs else
-      empty_nested_search_solutions () >>= fun acc -> tclENV >>= fun env ->
-      let main_msg = Pp.(str "Tactician found a proof! The following tactic caches the proof:\n\n" ++
-                         synthesize_tactic env tcs) in
-      let acc_msg = if List.is_empty acc then Pp.mt () else
-          Pp.(str ("\n\nThe tactic above uses nested searching. The following tactics cache those nested searches.\n") ++
-              (prlist_with_sep fnl (synthesize_tactic env) acc)) in
-      tclLIFT (NonLogical.print_info (Pp.(main_msg ++ acc_msg)))
+    get_search_recursion_depth () >>= fun nlogger ->
+    if nlogger >= 1 then tclUNIT () else Logger.pre_logger get_tactic_trace !db_size >>=
+      fun () -> tclORELSE
+        (commonSearch () >>= fun (tr, tcs, count) -> get_search_recursion_depth () >>= fun n ->
+         if n >= 1 then push_nested_search_solutions tcs else
+           empty_nested_search_solutions () >>= fun acc -> tclENV >>= fun env ->
+           Logger.solved_logger env tr count tcs <*>
+           let main_msg = Pp.(str "Tactician found a proof! The following tactic caches the proof:\n\n" ++
+                              synthesize_tactic env tcs) in
+           let acc_msg = if List.is_empty acc then Pp.mt () else
+               Pp.(str ("\n\nThe tactic above uses nested searching. The following tactics cache those nested searches.\n") ++
+                   (prlist_with_sep fnl (synthesize_tactic env) acc)) in
+           tclLIFT (NonLogical.print_info (Pp.(main_msg ++ acc_msg))))
+        (fun (e, i) -> Logger.failed_logger () <*> tclZERO ~info:i e)
 
 (* Name globalization *)
 

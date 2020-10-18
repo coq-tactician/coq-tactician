@@ -13,6 +13,7 @@ src/tactic_annotate.ml
 src/gendischarge.ml
 src/cook_tacexpr.ml
 src/known_witnesses.ml
+src/logger.ml
 src/ltacrecord.ml
 src/pknnmax.ml
 src/features.ml

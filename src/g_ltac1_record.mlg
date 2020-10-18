@@ -85,8 +85,13 @@ let vernac_solve ~pstate n info tcom b id =
       if not status then Feedback.feedback Feedback.AddedAxiom;
       pstate
     with
-    | e when CErrors.noncritical e || e = CErrors.Timeout ->
-      save_exn id e; raise e
+    | e ->
+      (if (CErrors.noncritical e || e = CErrors.Timeout) then
+        save_exn id e);
+      (match e with
+       | Sys.Break | CErrors.Timeout | Logic_monad.TacticFailure _ -> Logger.aborted_logger ()
+       | _ -> ());
+      raise e
 
 let pr_ltac_use_default b =
   if (snd b) then (* Bug: a space is inserted before "..." *) Pp.str ".." else Pp.mt ()
