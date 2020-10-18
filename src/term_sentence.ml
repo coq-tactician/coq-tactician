@@ -28,8 +28,9 @@ let glob_sort2s = glob_sort_expr2s (fun ls ->
     Node (List.map (fun (na, n) -> Node [glob_sort_name2s na; s2s (string_of_int n)]) ls))
 
 let binding_kind2s = function
-  | Implicit -> s2s "Implicit"
   | Explicit -> s2s "Explicit"
+  | MaxImplicit -> s2s "MaxImplicit"
+  | NonMaxImplicit -> s2s "NonMaxImplicit"
 
 let case_style2s = function
   | LetStyle        -> s2s "LetStyle"

@@ -70,11 +70,11 @@ let vernac_solve ~pstate n info tcom b id =
   let skip = pre_vernac_solve pstate id in
   if skip then pstate else
     try
-      let pstate, status = Proof_global.map_fold_proof_endline (fun etac p ->
+      let pstate, status = Declare.Proof.map_fold_proof_endline (fun etac p ->
           let with_end_tac = if b then Some etac else None in
           let global = match n with SelectAll | SelectList _ -> true | _ -> false in
-          let info = Option.append info !print_info_trace in
-          let name = Proof_global.get_proof_name pstate in
+          let info = Option.append info (print_info_trace ()) in
+          let name = Declare.Proof.get_proof_name pstate in
           let (p,status) =
               Pfedit.solve n info (hide_interp_t global tcom None id name) ?with_end_tac p
           in
@@ -155,7 +155,7 @@ PRINTED BY { pr_tac_ast }
 | [ "Complete" ] -> { Complete }
 | [ "Solve" ] -> { Or }
 | [ "Or" ] -> { Or }
-| [ "Once" ] -> { Once }
+| [ "Once" ] -> { Tactic_annotate.Once }
 | [ "ExactlyOnce" ] -> { ExactlyOnce }
 | [ "IfThenCatch" ] -> { IfThenCatch }
 | [ "Orelse" ] -> { Orelse }
@@ -168,7 +168,7 @@ PRINTED BY { pr_tac_ast }
 | [ "Match" ] -> { Match }
 | [ "MatchGoal" ] -> { MatchGoal }
 | [ "Arg" ] -> { Arg }
-| [ "Select" ] -> { Select }
+| [ "Select" ] -> { Tactic_annotate.Select }
 | [ "ML" ] -> { ML }
 | [ "Alias" ] -> { Alias }
 | [ "Call" ] -> { Call }

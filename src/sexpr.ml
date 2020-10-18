@@ -75,7 +75,7 @@ let constr2s t =
     | Meta n -> Node [s2s "Meta"; s2s (string_of_int n)]
     | Evar (evar, constrs) ->
       (* I would think that `constrs` is always empty *)
-      let sentences = Array.to_list (Array.map (aux ls) constrs) in
+      let sentences = List.map (aux ls) constrs in
       Node (s2s "Evar" :: s2s (string_of_int (Evar.repr evar)) :: sentences)
     | Sort s -> Node (s2s "Sort" :: sorts2s s)
     | Cast (t', kind, typ) -> Node [s2s "Cast"; aux ls t'; cast_kind2s kind; aux ls typ]
