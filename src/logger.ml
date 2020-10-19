@@ -17,22 +17,25 @@ let append file str =
 let homedir () =
   try
     Sys.getenv "HOME" ^ Filename.dir_sep
-  with Not_found -> print_endline "Error: Home directory not found"; exit 1
+  with Not_found -> (* Most likely a windows machine. *)
+    let dir = "C:\\coq-config" in
+    if Sys.file_exists dir then dir ^ Filename.dir_sep else
+      (Unix.mkdir dir 0o700; dir ^ Filename.dir_sep)
 
 let configdir () =
   try
     Sys.getenv "XDG_CONFIG_HOME"
   with Not_found ->
-    let dir = homedir () ^ ".config" ^ Filename.dir_sep in
-    if Sys.file_exists dir then dir else
-      (Unix.mkdir dir 0o700; dir)
+    let dir = homedir () ^ ".config" in
+    if Sys.file_exists dir then dir ^ Filename.dir_sep else
+      (Unix.mkdir dir 0o700; dir ^ Filename.dir_sep)
 
 let feedbackdir () =
-  let dir = configdir () ^ "coq" ^ Filename.dir_sep in
+  let dir = configdir () ^ "coq" in
   if not (Sys.file_exists dir) then Unix.mkdir dir 0o700;
-  let dir = dir ^ "tactician" ^ Filename.dir_sep in
+  let dir = dir ^ Filename.dir_sep ^ "tactician" in
   if not (Sys.file_exists dir) then Unix.mkdir dir 0o700;
-  dir
+  dir ^ Filename.dir_sep
 
 let unprocessed_file () =
   feedbackdir () ^ "unprocessed"
@@ -48,7 +51,7 @@ let uid =
       gen_uid () else uid
   else gen_uid ()
 
-(* Ugly code to make the PUT request for logging. This avoids needing a complicated
+(* Ugly code to make the PUT request for logging. This avoids needing a complicated 
    external dependency on some HTTP library. Modified from
    https://stackoverflow.com/questions/36070455/how-do-i-make-a-simple-get-request-in-ocaml
 *)
