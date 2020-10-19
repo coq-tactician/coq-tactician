@@ -27,7 +27,17 @@ let rec format_oneline t =
   | _ -> d in
   h 0 (unrepr d')
 
-let global2s g = s2s (Libnames.string_of_path (Nametab.path_of_global (Globnames.canonical_gr g)))
+let global2s g =
+  let a = Globnames.canonical_gr g in
+  let b = try
+      (* TODO: While moving from 8.11 to 8.12, this became problematic when using the
+         `abstract` tactic (possibly in combination with `unshelve`). It seems that subproofs
+         created by `abstract` are not available when replaying at Qed-time. This happens in the
+         stdlib in Reals/Realanalysis5.v on line 1141. *)
+      Nametab.path_of_global (a)
+  with e ->
+    Libnames.make_path DirPath.empty (Id.of_string "a") in
+  s2s (Libnames.string_of_path b)
 
 let sorts2s = function
   | SProp  -> [s2s "SProp"]
