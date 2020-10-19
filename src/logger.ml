@@ -16,21 +16,21 @@ let append file str =
 
 let homedir () =
   try
-    Sys.getenv "HOME" ^ "/"
+    Sys.getenv "HOME" ^ Filename.dir_sep
   with Not_found -> print_endline "Error: Home directory not found"; exit 1
 
 let configdir () =
   try
     Sys.getenv "XDG_CONFIG_HOME"
   with Not_found ->
-    let dir = homedir () ^ ".config/" in
+    let dir = homedir () ^ ".config" ^ Filename.dir_sep in
     if Sys.file_exists dir then dir else
       (Unix.mkdir dir 0o700; dir)
 
 let feedbackdir () =
-  let dir = configdir () ^ "coq/" in
+  let dir = configdir () ^ "coq" ^ Filename.dir_sep in
   if not (Sys.file_exists dir) then Unix.mkdir dir 0o700;
-  let dir = dir ^ "tactician/" in
+  let dir = dir ^ "tactician" ^ Filename.dir_sep in
   if not (Sys.file_exists dir) then Unix.mkdir dir 0o700;
   dir
 
