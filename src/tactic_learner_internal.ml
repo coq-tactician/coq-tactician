@@ -110,7 +110,7 @@ end
 
 let goal_to_proof_state ps =
   let map = Goal.sigma ps in
-  let to_term t = EConstr.to_constr map t in
+  let to_term t = EConstr.to_constr ~abort_on_undefined_evars:false map t in
   let goal = to_term (Goal.concl ps) in
   let hyps = List.map (function
       | Context.Named.Declaration.LocalAssum (id, typ) ->
