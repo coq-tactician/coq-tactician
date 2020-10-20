@@ -74,7 +74,7 @@ let find_coqrc_files () =
     let tmp = syscall (coqbin ^ "coqc -print-version") in
     List.hd (String.split_on_char ' ' tmp) in
   printf "Your coq version is %s\n" coqversion;
-  let files = [configdir ^ "coq/coqrc." ^ coqversion
+  let files = [configdir ^ "coq" ^ Filename.dir_sep ^ "coqrc." ^ coqversion
               ; homedir ^ ".coqrc." ^ coqversion
               ; homedir ^ ".coqrc" ] in
   find_exists files
