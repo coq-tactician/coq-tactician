@@ -41,6 +41,7 @@ let unprocessed_file () =
   feedbackdir () ^ "unprocessed"
 
 let uid =
+  Random.self_init ();
   let uid_file_name = feedbackdir () ^ "uid" in
   let gen_uid () =
     let uid_str = Int64.to_string (Random.int64 (Int64.max_int)) in
