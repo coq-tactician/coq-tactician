@@ -37,17 +37,23 @@ let rec question str =
   match answer with
   | "y" -> true
   | "n" -> false
-  | _ -> print_endline "No valid anser"; question str
+  | _ -> print_endline "No valid answer"; question str
 
+(* Taken from coq envars.ml *)
+let getenv_else s dft = try Sys.getenv s with Not_found -> dft ()
+let home ~warn =
+  getenv_else "HOME" (fun () ->
+      try (Sys.getenv "HOMEDRIVE") ^ (Sys.getenv "HOMEPATH") with Not_found ->
+        getenv_else "USERPROFILE" (fun () ->
+            warn ("Cannot determine user home directory, using '.' .");
+            Filename.current_dir_name))
 let homedir () =
-  try
-    Sys.getenv "HOME" ^ "/"
-  with Not_found -> print_endline "Error: Home directory not found"; exit 1
+  home ~warn:print_endline ^ Filename.dir_sep
 
 let configdir () =
   try
     Sys.getenv "XDG_CONFIG_HOME"
-  with Not_found -> homedir () ^ ".config/"
+  with Not_found -> homedir () ^ ".config" ^ Filename.dir_sep
 
 let find_exists files =
   let exists = List.map Sys.file_exists files in
@@ -62,7 +68,7 @@ let find_coqrc_files () =
   let configdir = configdir () in
   let coqbin =
     try
-      Sys.getenv "COQBIN" ^ "/"
+      Sys.getenv "COQBIN" ^ Filename.dir_sep
     with Not_found -> "" in
   let coqversion =
     let tmp = syscall (coqbin ^ "coqc -print-version") in
@@ -93,7 +99,7 @@ let append file str =
 
 let install_rcfile () =
   let string1 = "\
-In order to load Tactician, the following snippet needs to be in your ~/coqrc file:
+In order to load Tactician, the following snippet needs to be in your coqrc file:
 
 From Tactician Require Import Ltac1.
 
