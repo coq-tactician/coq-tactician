@@ -1,4 +1,4 @@
-name: CI
+name: Bench
 
 on: [push, pull_request]
 
@@ -8,6 +8,13 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
+        with:
+          path: 'coq-tactician'
+      - uses: actions/checkout@v2
+        with:
+          repository: 'coq-tactician/coq-tactician-stdlib'
+          ref: 'coq8.11'
+          path: 'coq-tactician-stdlib'
       - uses: coq-community/docker-coq-action@v1.1.0
         with:
           opam_file: 'coq-tactician.opam'
@@ -19,14 +26,14 @@ jobs:
             endGroup
             startGroup Build dependencies
               opam repo add tactician git+https://github.com/coq-tactician/tmp-archive.git#dev
-              opam pin add -n -y -k path $PACKAGE $WORKDIR
+              opam pin add -n -y -k path coq-tactician coq-tactician/
               opam update -y
-              opam install -y -j 2 $PACKAGE --deps-only
+              opam install -y -j 2 coq-tactician
             endGroup
             startGroup Build
-              opam install -y -v -j 2 $PACKAGE
-              opam list
+              sudo chmod -R 777 .
+              opam exec -- make -C coq-tactician-stdlib -j2 BENCHMARK=2
             endGroup
             startGroup Uninstallation test
-              opam remove $PACKAGE
+              opam remove coq-tactician-stdlib
             endGroup
