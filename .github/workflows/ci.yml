@@ -1,0 +1,32 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - uses: coq-community/docker-coq-action@v1.1.0
+        with:
+          opam_file: 'coq-tactician.opam'
+          coq_version: '8.12'
+          ocaml_version: '4.09-flambda'
+          custom_script: |
+            startGroup Print opam config
+              opam config list; opam repo list; opam list
+            endGroup
+            startGroup Build dependencies
+              opam repo add tactician git+https://github.com/coq-tactician/tmp-archive.git#dev
+              opam pin add -n -y -k path $PACKAGE $WORKDIR
+              opam update -y
+              opam install -y -j 2 $PACKAGE --deps-only
+            endGroup
+            startGroup Build
+              opam install -y -v -j 2 $PACKAGE
+              opam list
+            endGroup
+            startGroup Uninstallation test
+              opam remove $PACKAGE
+            endGroup
