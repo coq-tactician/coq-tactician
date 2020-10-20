@@ -73,7 +73,7 @@ let find_coqrc_files () =
   let coqversion =
     let tmp = syscall (coqbin ^ "coqc -print-version") in
     List.hd (String.split_on_char ' ' tmp) in
-  printf "\nYour coq version is %s\n" coqversion;
+  printf "Your coq version is %s\n" coqversion;
   let files = [configdir ^ "coq/coqrc." ^ coqversion
               ; homedir ^ ".coqrc." ^ coqversion
               ; homedir ^ ".coqrc" ] in
@@ -99,18 +99,9 @@ let append file str =
 
 let install_rcfile () =
   let string1 = "\
-In order to load Tactician, the following snippet needs to be in your coqrc file:
+In order to activate Tactician, the following snippet needs to be in your coqrc file:
 
 From Tactician Require Import Ltac1.
-
-We strongly recommend that you do not include this snippet directly in your developments,
-as this would create issues with the build reproducibility of your project. If you are
-creating a package of your development, it should instead depend on the dummy version of
-Tactician, coq-tactician-dummy. You can load the dummy tactics through
-
-From Tactician Require Import Ltac1Dummy.
-
-During development, you can still use Tactician as normal.
 " in
   print_endline string1;
   match find_coqrc_files () with
