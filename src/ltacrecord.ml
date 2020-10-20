@@ -305,6 +305,8 @@ type goal_stack = (glob_tactic_expr list * int * Proofview.Goal.t) list list
 type tactic_trace = glob_tactic_expr list
 type state_id_stack = int list
 
+let global_record = Summary.ref ~name:"TACTICIAN-RECORD" true
+let record_field : bool Evd.Store.field = Evd.Store.field ()
 let localdb_field : localdb Evd.Store.field = Evd.Store.field ()
 let goal_stack_field : goal_stack Evd.Store.field = Evd.Store.field ()
 let tactic_trace_field : tactic_trace Proofview_monad.StateStore.field = Proofview_monad.StateStore.field ()
@@ -348,6 +350,12 @@ let get_field_goal2 fi gl d =
   | Some x -> x
 
 let war x = Feedback.msg_warning (Pp.str ("Tactician has uncovered a bug. Please report. " ^ x))
+
+let set_record b =
+  modify_field record_field (fun _ -> b, ()) (fun i -> true)
+
+let get_record () =
+  modify_field record_field (fun b -> b, b) (fun i -> true)
 
 let push_localdb x =
   modify_field localdb_field (fun db -> x::db, ()) (fun () -> [])
@@ -869,11 +877,15 @@ let wit_glbtactic : (Empty.t, glob_tactic_expr, glob_tactic_expr) Genarg.genarg_
   register_interp0 wit (fun ist v -> Ftactic.return v);
   wit
 
+let should_record b =
+  b && !global_record
+
 let push_state_tac () =
   let open Proofview in
   let open Notations in
-  push_state_id_stack () <*> Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
-  push_goal_stack (List.map (fun gl -> get_tactic_trace gl, get_state_id_goal_top gl, gl) gls)
+  get_record () >>= fun b -> if not (should_record b) then tclUNIT () else
+    push_state_id_stack () <*> Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
+    push_goal_stack (List.map (fun gl -> get_tactic_trace gl, get_state_id_goal_top gl, gl) gls)
 
 let record_tac (tac2 : glob_tactic_expr) : unit Proofview.tactic =
   let open Proofview in
@@ -881,18 +893,20 @@ let record_tac (tac2 : glob_tactic_expr) : unit Proofview.tactic =
   let collect_states before_gls after_gls =
     List.map (fun (tr, i, gl_before) -> (tr, gl_before, List.filter_map (fun (j, gl_after) ->
         if i = j then Some gl_after else None) after_gls)) before_gls in
-  tclENV >>= fun env ->
-  let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic env t) in
-  let tac = Pp.string_of_ppcmds(tac_pp tac2) in
-  pop_goal_stack () >>= fun before_gls ->
-  Goal.goals >>= record_map (fun x -> x) >>= (fun after_gls ->
-      let after_gls = List.map (fun gl -> get_state_id_goal_top gl, gl) after_gls in
-      (* TODO: There is probably a much better way to do this *)
-      if (String.equal tac "admit" || String.equal tac "suggest" || String.equal tac "search" || String.is_prefix "search failing" tac)
-      then Proofview.tclUNIT () else
-        push_localdb (collect_states before_gls after_gls, tac2)
-    ) >>= (fun () -> pop_state_id_stack () <*> (* TODO: This is a strange way of doing things, see todo above. *)
-                     push_tactic_trace tac2)
+  get_record () >>= fun b -> if not (should_record b) then tclUNIT () else
+    tclENV >>= fun env ->
+    let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic env t) in
+    let tac = Pp.string_of_ppcmds(tac_pp tac2) in
+    pop_goal_stack () >>= fun before_gls ->
+    Goal.goals >>= record_map (fun x -> x) >>= (fun after_gls ->
+        let after_gls = List.map (fun gl -> get_state_id_goal_top gl, gl) after_gls in
+        (* TODO: There is probably a much better way to do this *)
+        if (String.equal tac "admit" || String.equal tac "search" || String.is_prefix "search failing" tac
+            || String.is_prefix "tactician ignore" tac)
+        then Proofview.tclUNIT () else
+          push_localdb (collect_states before_gls after_gls, tac2)
+      ) >>= (fun () -> pop_state_id_stack () <*> (* TODO: This is a strange way of doing things, see todo above. *)
+                       push_tactic_trace tac2)
 
         (* Make predictions *)
         (*let r = Predictor.knn db feat in
@@ -968,3 +982,9 @@ let hide_interp_t global t ot id name =
     Proofview.Goal.enter begin fun gl ->
       hide_interp (Proofview.Goal.env gl)
     end
+
+let tactician_ignore t =
+  let open Proofview in
+  let open Notations in
+  get_record () >>= fun b ->
+  set_record false <*> t <*> set_record b
