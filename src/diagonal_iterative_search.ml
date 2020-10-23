@@ -42,4 +42,4 @@ let rec tclSearchDiagonalIterative d predict : unit tactic =
         Tacticals.New.tclZEROMSG (Pp.str "Tactician failed: there are no more tactics left")
       | _ -> tclSearchDiagonalIterative (d + 1) predict)
 
-let () = register_search_strategy "diagonal iterative search" (tclSearchDiagonalIterative 1)
+let () = register_search_strategy "diagonal iterative search" (tclSearchDiagonalIterative 10)
