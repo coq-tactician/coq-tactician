@@ -135,7 +135,7 @@ module NaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStructures
       let out = List.map (fun (a, c) -> { confidence = a; focus = 0; tactic = c }) out in
       Stream.of_list out
 
-    let evaluate db _ = 1., db
+    let evaluate db _ _ = 1., db
 
 end
 

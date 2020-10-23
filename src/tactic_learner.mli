@@ -67,7 +67,7 @@ module type TacticianOnlineLearnerType =
     val empty    : unit -> model
     val learn    : model -> outcome list -> tactic -> model (* TODO: Add lemma dependencies *)
     val predict  : model -> situation list -> prediction Stream.t (* TODO: Add global environment *)
-    val evaluate : model -> outcome -> float * model
+    val evaluate : model -> outcome -> tactic -> float * model
   end
 
 module type TacticianOfflineLearnerType =
@@ -77,7 +77,7 @@ module type TacticianOfflineLearnerType =
     val add      : outcome list -> tactic -> unit (* TODO: Add lemma dependencies *)
     val train    : unit -> model
     val predict  : model -> situation list -> prediction Stream.t (* TODO: Add global environment *)
-    val evaluate : model -> outcome -> float
+    val evaluate : model -> outcome -> tactic -> float
   end
 
 val register_online_learner  : string -> (module TacticianOnlineLearnerType)  -> unit

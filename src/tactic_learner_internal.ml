@@ -127,7 +127,7 @@ module type TacticianOnlineLearnerType =
     val empty    : unit -> model
     val learn    : model -> outcome list -> tactic -> model (* TODO: Add lemma dependencies *)
     val predict  : model -> situation list -> prediction Stream.t (* TODO: Add global environment *)
-    val evaluate : model -> outcome -> float * model
+    val evaluate : model -> outcome -> tactic -> float * model
   end
 
 module type TacticianOfflineLearnerType =
@@ -137,27 +137,30 @@ module type TacticianOfflineLearnerType =
     val add      : outcome list -> tactic -> unit (* TODO: Add lemma dependencies *)
     val train    : unit -> model
     val predict  : model -> situation list -> prediction Stream.t (* TODO: Add global environment *)
-    val evaluate : model -> outcome -> float
+    val evaluate : model -> outcome -> tactic -> float
   end
 
 let new_database name (module Learner : TacticianOnlineLearnerType) =
   let module Learner = Learner(TS) in
   let db = Summary.ref ~name:("tactician-db-" ^ name) (Learner.empty ()) in
   ( (fun exes tac -> db := Learner.learn !db exes tac)
-  , (fun t -> Learner.predict !db t) )
+  , (fun t -> Learner.predict !db t)
+  , (fun outcome tac -> let f, db' = Learner.evaluate !db outcome tac in
+    db := db'; f))
 
 module NullLearner : TacticianOnlineLearnerType = functor (_ : TacticianStructures) -> struct
   type model = unit
   let empty () = ()
   let learn  () _ _ = ()
   let predict () _ = Stream.sempty
-  let evaluate () _ = 0., ()
+  let evaluate () _ _ = 0., ()
 end
 
 let current_learner = ref (new_database "null" (module NullLearner : TacticianOnlineLearnerType))
 
-let learner_learn exes tac = fst !current_learner exes tac
-let learner_predict ps  = snd !current_learner ps
+let learner_learn p    = let x, _, _ = !current_learner in x p
+let learner_predict p  = let _, x, _ = !current_learner in x p
+let learner_evaluate p = let _, _, x = !current_learner in x p
 
 let register_online_learner name learner : unit =
   current_learner := new_database name learner
