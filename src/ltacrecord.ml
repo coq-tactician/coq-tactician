@@ -277,31 +277,9 @@ let in_db : data_in -> Libobject.obj =
 let add_to_db (x : data_in) =
   Lib.add_anonymous_leaf (in_db x)
 
-let add_to_db2 id ((outcomes, tac) : (tactic list * Proofview.Goal.t * Proofview.Goal.t list) list *
-                               tactic) =
-  let outcomes = List.map (fun (mem, st, sts) ->
-      let st : proof_state = goal_to_proof_state st in
-      { parents = List.map (fun tac -> (st (* TODO: Fix *), { executions = []; tactic = tac})) mem
-      ; siblings = End
-      ; before = st
-      ; after = [] (* List.map goal_to_proof_state sts *) }) outcomes in
-  add_to_db (outcomes, tac);
-  let semidb, exn = Hashtbl.find int64_to_knn id in
-  Hashtbl.replace int64_to_knn id ((outcomes, tac)::semidb, exn);
-  if !featureprinting then (
-    (* let h s = string_of_int (Hashtbl.hash s) in
-     * (\* let l2s fs = "[" ^ (String.concat ", " (List.map (fun x -> string_of_int x) fs)) ^ "]" in *\)
-     * let p2s x = proof_state_to_json x in *)
-    let entry (outcomes, tac) =
-      "Not implemented curretnly" in
-      (* "{\"before\": [" ^ String.concat ", " (List.map p2s before) ^ "]\n" ^
-       * ", \"tacid\": " ^ (\*Base64.encode_string*\) h tac ^  "\n" ^
-       * ", \"after\": [" ^ String.concat ", " (List.map p2s after) ^ "]}\n" in *)
-    print_to_feat (entry (outcomes, tac)))
-
 (* Types and accessors for state in the proof monad *)
-type localdb = ((glob_tactic_expr list * Proofview.Goal.t * Proofview.Goal.t list) list * glob_tactic_expr) list
-type goal_stack = (glob_tactic_expr list * int * Proofview.Goal.t) list list
+type localdb = ((Proofview.Goal.t * Proofview.Goal.t list) list * glob_tactic_expr) list
+type goal_stack = Proofview.Goal.t list list
 type tactic_trace = glob_tactic_expr list
 type state_id_stack = int list
 
@@ -404,6 +382,35 @@ let push_tactic_trace tac =
 
 let get_tactic_trace gl =
   get_field_goal2 tactic_trace_field gl (fun _ -> [])
+
+let mk_outcome (st, sts) =
+  let env = Proofview.Goal.env st in
+  let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic env t) in
+  let string_tac t = Pp.string_of_ppcmds (tac_pp t) in
+  let with_hash t = t, Hashtbl.hash (string_tac t) in
+  let mem = (List.map with_hash (get_tactic_trace st)) in
+  let st : proof_state = goal_to_proof_state st in
+  { parents = List.map (fun tac -> (st (* TODO: Fix *), { executions = []; tactic = tac })) mem
+  ; siblings = End
+  ; before = st
+  ; after = [] (* List.map goal_to_proof_state sts *) }
+
+let add_to_db2 id ((outcomes, tac) : (Proofview.Goal.t * Proofview.Goal.t list) list *
+                               tactic) =
+  let outcomes = List.map mk_outcome outcomes in
+  add_to_db (outcomes, tac);
+  let semidb, exn = Hashtbl.find int64_to_knn id in
+  Hashtbl.replace int64_to_knn id ((outcomes, tac)::semidb, exn);
+  if !featureprinting then (
+    (* let h s = string_of_int (Hashtbl.hash s) in
+     * (\* let l2s fs = "[" ^ (String.concat ", " (List.map (fun x -> string_of_int x) fs)) ^ "]" in *\)
+     * let p2s x = proof_state_to_json x in *)
+    let entry (outcomes, tac) =
+      "Not implemented curretnly" in
+      (* "{\"before\": [" ^ String.concat ", " (List.map p2s before) ^ "]\n" ^
+       * ", \"tacid\": " ^ (\*Base64.encode_string*\) h tac ^  "\n" ^
+       * ", \"after\": [" ^ String.concat ", " (List.map p2s after) ^ "]}\n" in *)
+    print_to_feat (entry (outcomes, tac)))
 
 let features term = List.map Hashtbl.hash (Features.extract_features (Hh_term.hhterm_of (Hh_term.econstr_to_constr term)))
 
@@ -911,14 +918,16 @@ let push_state_tac () =
   let open Notations in
   get_record () >>= fun b -> if not (should_record b) then tclUNIT () else
     push_state_id_stack () <*> Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
-    push_goal_stack (List.map (fun gl -> get_tactic_trace gl, get_state_id_goal_top gl, gl) gls)
+    push_goal_stack gls
 
 let record_tac (tac2 : glob_tactic_expr) : unit Proofview.tactic =
   let open Proofview in
   let open Notations in
   let collect_states before_gls after_gls =
-    List.map (fun (tr, i, gl_before) -> (tr, gl_before, List.filter_map (fun (j, gl_after) ->
-        if i = j then Some gl_after else None) after_gls)) before_gls in
+    List.map (fun gl_before ->
+        let i = get_state_id_goal_top gl_before in
+        (gl_before, List.filter_map (fun (j, gl_after) ->
+             if i = j then Some gl_after else None) after_gls)) before_gls in
   get_record () >>= fun b -> if not (should_record b) then tclUNIT () else
     tclENV >>= fun env ->
     let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic env t) in
@@ -970,11 +979,9 @@ let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO:
   let save_db env (db : localdb) =
     let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic env t) in
     let string_tac t = Pp.string_of_ppcmds (tac_pp t) in
-    let with_hash t = t, Hashtbl.hash (string_tac t) in
     let tryadd (execs, tac) =
       let s = string_tac tac in
       let tac' = tac, Hashtbl.hash s in
-      let execs = List.map (fun (m, b, a) -> (List.map with_hash m, b, a)) execs in
       add_to_db2 id (execs, tac');
       try (* This is purely for parsing bug detection and could be removed for performance reasons *)
         let _ = Pcoq.parse_string Pltac.tactic_eoi s in ()
