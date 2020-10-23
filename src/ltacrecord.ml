@@ -549,7 +549,10 @@ let predict (gls : Proofview.Goal.t list) =
             ([] (*TODO: Fix*) (* get_tactic_trace gl *))
       ; siblings = End
       ; state = ps}) gls in
-  learner_predict states
+  (* Coq stores goals in reverse order, so we present them in an intuitive order.
+     Note that the tclFocus function also internally reverses the list, so focussing
+     on goal zero will focus in the first goal of the reversed `state` *)
+  learner_predict (List.rev states)
 
 let print_goal_short = Proofview.Goal.enter
     (fun gl ->
@@ -675,8 +678,7 @@ let tclSearchDiagonalDFS depth =
     tclENV >>= fun env -> Goal.goals >>= record_map (fun x -> x) >>= function
     | [] -> tclUNIT depth
     | gls ->
-      (* TODO: Remove rev *)
-      let predictions = predict [List.hd (List.rev gls)] in
+      let predictions = predict gls in
       (tclFoldPredictions
         (stream_mapi
            (fun i {focus; tactic=(t, _)} ->
