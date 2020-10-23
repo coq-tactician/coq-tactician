@@ -132,7 +132,7 @@ module NaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStructures
           (fun ent -> let x = tfidf db feats ent.features in (x, ent.obj))
           db.entries in
       let out = remove_dups_and_sort tdidfs in
-      let out = List.map (fun (a, c) -> { confidence = a; focus = 0; tactic = c }) out in
+      let out = List.map (fun (a, c) -> { confidence = a; focus = (List.length f - 1); tactic = c }) out in
       Stream.of_list out
 
     let evaluate db _ _ = 1., db
