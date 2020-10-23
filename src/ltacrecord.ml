@@ -669,28 +669,48 @@ let stream_mapi f stream =
     with Stream.Failure -> None in
   Stream.from next
 
+type prediction =
+  { confidence : float
+  ; focus      : int
+  ; tactic     : float Proofview.tactic }
+
+let tacpredict =
+  let open Proofview in
+  let open Notations in
+  Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
+  let predictions = predict gls in
+  let taceval i focus (t, h) =
+    tclFOCUS ~nosuchgoal:(Tacticals.New.tclZEROMSG (Pp.str "Predictor gave wrong focus"))
+      (focus+1) (focus+1)
+    (Goal.enter_one (fun gl ->
+      let env = Goal.env gl in
+      push_witness { tac = t; focus; prediction_index = i } <*>
+      tclDebugTac t env false >>= fun () ->
+      Goal.goals >>= fun gls ->
+      let outcome = mk_outcome (gl, gls) in
+      tclUNIT (learner_evaluate outcome (t, h)))) in
+  let transform i (r : Tactic_learner_internal.TS.prediction) =
+    { confidence = r.confidence; focus = r.focus; tactic = taceval i r.focus r.tactic } in
+  tclUNIT (stream_mapi (fun i p -> transform i p) predictions)
+
 let tclSearchDiagonalDFS depth =
     let open Proofview in
     let open Notations in
     let count = ref 0 in (* TODO: This does not thread through the DiagonalIterative function *)
     let rec aux (depth : int)
       : int Proofview.tactic =
-    tclENV >>= fun env -> Goal.goals >>= record_map (fun x -> x) >>= function
+    tclENV >>= fun env -> Goal.goals >>= function
     | [] -> tclUNIT depth
-    | gls ->
-      let predictions = predict gls in
-      (tclFoldPredictions
+    | _ ->
+      tacpredict >>= fun predictions ->
+      tclFoldPredictions
         (stream_mapi
-           (fun i {focus; tactic=(t, _)} ->
+           (fun i {focus; tactic} ->
               let ndepth = depth - i in
               if ndepth <= 0 then tclZERO DepthEnd else
                 (count := !count + 1;
-                 tclFOCUS ~nosuchgoal:(Tacticals.New.tclZEROMSG (Pp.str "Predictor gave wrong focus"))
-                   (focus+1) (focus+1)
-                   (push_witness { tac = t; focus = focus; prediction_index = i } <*>
-                    tclDebugTac t env false <*>
-                    (aux ((ndepth - 1))))))
-           predictions)) >>= aux in
+                   (tactic >>= fun _ -> aux (ndepth - 1))))
+           predictions) >>= aux in
     aux depth >>= fun _ -> tclUNIT !count
 
 let rec tclSearchDiagonalIterative d : int Proofview.tactic =
@@ -821,7 +841,8 @@ let userPredict =
         ; siblings = End
         ; state = ps}) gls in
     let r = learner_predict states in
-    let r = List.map (fun {confidence; focus; tactic} -> (confidence, focus, tactic)) (Stream.npeek 10 r) in
+    let r = List.map (fun ({confidence; focus; tactic} : Tactic_learner_internal.TS.prediction) ->
+        (confidence, focus, tactic)) (Stream.npeek 10 r) in
     let r = List.map (fun (x, _, (y, _)) -> (x, y)) r in
     (* Print predictions *)
     (Proofview.tclLIFT (Proofview.NonLogical.print_info (print_rank env r)))
