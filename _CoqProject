@@ -7,6 +7,7 @@ theories/Ltac1/Record.v
 theories/Ltac1/Tactics.v
 theories/Ltac1.v
 
+src/tactician_util.ml
 src/g_ltac1_record.mlg
 src/g_ltac1_tactics.mlg
 src/tactic_annotate.ml
@@ -22,6 +23,10 @@ src/sexpr.ml
 src/tactic_learner_internal.ml
 src/tactic_learner.ml
 src/tactic_learner.mli
+src/search_strategy_internal.ml
+src/search_strategy.ml
+src/search_strategy.mli
+src/diagonal_iterative_search.ml
 src/learner_helper.ml
 src/term_sentence.ml
 src/tactic_constr_map.ml

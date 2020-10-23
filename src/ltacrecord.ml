@@ -1,6 +1,7 @@
 open Ltac_plugin
 
 open Util
+open Tactician_util
 open Tacexpr
 open Tacenv
 open Loadpath
@@ -9,6 +10,7 @@ open Tactic_learner_internal
 open TS
 open Tactic_annotate
 open Cook_tacexpr
+open Search_strategy_internal
 
 let append file str =
   let oc = open_out_gen [Open_creat; Open_text; Open_append] 0o640 file in
@@ -475,72 +477,11 @@ let print_rank env rank =
 
 (* Running predicted tactics *)
 
-exception PredictionsEnd
-
 let parse_tac tac =
     try
       Tacinterp.eval_tactic tac
     with
     e -> print_endline (Printexc.to_string e); flush_all (); assert false
-
-let rec tclFairJoin (tacs : 'a Proofview.tactic Proofview.tactic) : 'a Proofview.tactic =
-    let open Proofview in
-    let open Notations in
-    tclCASE tacs >>= function
-    | Fail (iexn, info) -> tclZERO ~info:info iexn
-    | Next (tac1, resttacs) ->
-      tclCASE tac1 >>= function
-      | Fail e -> (tclFairJoin (resttacs e))
-      | Next (a, tac1') ->
-        tclOR (tclUNIT a)
-              (fun e -> (tclFairJoin (tclOR (resttacs e)
-                                            (fun e -> tclUNIT (tac1' e)))))
-
-let tclInterleave tac1 tac2 =
-    let open Proofview in
-    let open Notations in
-    tclFairJoin ((tclUNIT tac1) <+> (tclUNIT tac2))
-
-let tclInterleaveList (tacs : 'a Proofview.tactic list) : 'a Proofview.tactic =
-    let open Proofview in
-    let open Notations in
-    tclFairJoin
-      (List.fold_right (fun tac acc -> (tclUNIT tac) <+> acc) tacs (tclZERO PredictionsEnd))
-
-let rec tclInterleaveCaseTacsSpecial start (tacs : bool Proofview.case Proofview.tactic) =
-    let open Proofview in
-    let open Notations in
-    tclCASE tacs >>= function
-    | Fail (iexn, info) -> tclZERO ~info:info iexn
-    | Next (tac1case, resttacs) ->
-      match tac1case with
-      | Fail e -> (tclInterleaveCaseTacsSpecial start (resttacs e))
-      | Next (b, tac1') ->
-        if (start && b) then Tacticals.New.tclZEROMSG (Pp.str "Ran out of tactics") else
-        tclOR (if b then tclUNIT () else Tacticals.New.tclCOMPLETE (tclUNIT ()))
-              (fun e -> (tclInterleaveCaseTacsSpecial b (tclOR (resttacs e)
-                                                               (fun e -> (tclCASE (tac1' e))))))
-
-let rec tclInfiniteTrue () =
-    let open Proofview in
-    tclOR (tclUNIT true) (fun _ -> tclInfiniteTrue ())
-
-let tclInterleaveListSpecial (tacs : unit Proofview.tactic list) : unit Proofview.tactic =
-    let open Proofview in
-    let open Notations in
-    let tacs = List.map (fun t -> t <*> tclUNIT false) tacs in
-    tclInterleaveCaseTacsSpecial true
-      (List.fold_right (fun tac acc -> (tclCASE tac) <+> acc) tacs (tclCASE (tclInfiniteTrue ())))
-
-let tclInterleaveSpecial tac1 tac2 =
-    tclInterleaveListSpecial [tac1; tac2]
-
-let rec tclInterleaveWrong tac1 tac2 =
-    let open Proofview in
-    let open Notations in
-    tclCASE tac1 >>= function
-    | Fail iexn -> tac2
-    | Next ((), tac1') -> tclOR (tclUNIT ()) (fun e -> (tclInterleaveWrong tac2 (tac1' e)))
 
 let predict (gls : Proofview.Goal.t list) =
   let states = List.map (fun gl ->
@@ -560,43 +501,6 @@ let print_goal_short = Proofview.Goal.enter
        let sigma = Proofview.Goal.sigma gl in
        let goal = Proofview.Goal.concl gl in
        (Proofview.tclLIFT (Proofview.NonLogical.print_info (Printer.pr_econstr_env env sigma (goal)))))
-
-type blaat = | Intermediate | Complete | No_goal
-
-(* TODO: This does not use the focus, and is generally entirely wrong. Probably delete or rewrite *)
-let rec tclFold tac : blaat Proofview.tactic =
-    let open Proofview in
-    let open Notations in
-    tclFOCUS ~nosuchgoal:(tclUNIT No_goal) 1 1 tac >>=
-    (function
-     | No_goal -> tclUNIT Complete
-     | Complete -> tclFold tac
-     | Intermediate -> tclUNIT Intermediate)
-
-let rec tclSearchBFS () mark : blaat Proofview.tactic =
-  let open Proofview in
-  let open Notations in
-  tclENV >>= fun env -> Goal.goals >>= record_map (fun x -> x) >>= function
-  | [] -> tclUNIT No_goal
-  | gls -> let predictions = predict gls in
-    (tclSearchGoalBFS predictions mark)
-and tclSearchGoalBFS ps mark =
-    let open Proofview in
-    let open Notations in
-      tclUNIT Intermediate <+> tclInterleaveList
-        (List.mapi (fun i {focus; tactic=(tac, _)} ->
-          let tac2 = parse_tac tac in
-          tclFold (
-           (tclLIFT (NonLogical.print_info (Pp.str "------------------------------"))) <*>
-           (tclLIFT (NonLogical.print_info (Pp.str (mark ^ "." ^ string_of_int i)))) <*>
-           (tclLIFT (NonLogical.print_info (Pp.app (Pp.str "Exec: ") (Pp.str "")))) <*>
-           print_goal_short <*>
-           tclPROGRESS tac2 <*>
-           (*print_goal_short <*>*)
-           tclSearchBFS () (mark ^ "." ^ string_of_int i))
-       ) (Stream.npeek 100 ps))
-
-exception DepthEnd
 
 let synthesize_tactic (env : Environ.env) tcs =
   let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic env t) in
@@ -649,31 +553,6 @@ let rec tclFold2 (d : 'a) (tac : 'a -> 'a Proofview.tactic) : 'a Proofview.tacti
     | None -> tclUNIT d
     | Some x -> tclFold2 x tac
 
-let tclFoldPredictions tacs =
-  let rec aux depth =
-    let open Proofview in
-    match Stream.peek tacs with
-    | None -> tclZERO (if depth then DepthEnd else PredictionsEnd)
-    | Some tac -> Stream.junk tacs;
-      tclOR tac
-        (fun e ->
-           let depth = depth || (match e with
-               | (DepthEnd, _) -> true
-               | _ -> false) in
-           aux depth) in
-  aux false
-
-let stream_mapi f stream =
-  let next i =
-    try Some (f i (Stream.next stream))
-    with Stream.Failure -> None in
-  Stream.from next
-
-type prediction =
-  { confidence : float
-  ; focus      : int
-  ; tactic     : float Proofview.tactic }
-
 let tac_exec_count = ref 0
 let tacpredict =
   let open Proofview in
@@ -695,59 +574,6 @@ let tacpredict =
     { confidence = r.confidence; focus = r.focus; tactic = taceval i r.focus r.tactic } in
   tclUNIT (stream_mapi (fun i p -> transform i p) predictions)
 
-let tclSearchDiagonalDFS depth =
-    let open Proofview in
-    let open Notations in
-    let rec aux (depth : int)
-      : int Proofview.tactic =
-    tclENV >>= fun env -> Goal.goals >>= function
-    | [] -> tclUNIT depth
-    | _ ->
-      tacpredict >>= fun predictions ->
-      tclFoldPredictions
-        (stream_mapi
-           (fun i {focus; tactic} ->
-              let ndepth = depth - i in
-              if ndepth <= 0 then tclZERO DepthEnd else
-                (tactic >>= fun _ -> aux (ndepth - 1)))
-           predictions) >>= aux in
-    aux depth >>= fun _ -> tclUNIT ()
-
-let rec tclSearchDiagonalIterative d : unit Proofview.tactic =
-    let open Proofview in
-    (* (tclLIFT (NonLogical.print_info (Pp.str ("Iterative depth: " ^ string_of_int d)))) <*> *)
-    tclOR
-      (tclSearchDiagonalDFS d)
-      (function
-        | (PredictionsEnd, _) -> Tacticals.New.tclZEROMSG (Pp.str "Tactician failed: there are no more tactics left")
-        | _ -> tclSearchDiagonalIterative (d + 1))
-
-
-(* TODO: Doesn't compile anymore and is probably wrong
-let rec tclSearch () mark curr : blaat Proofview.tactic =
-    let open Proofview in
-    tclFold (Goal.enter_one (fun gl ->
-        let predictions = List.map fst (predict gl) in
-        (tclSearchGoal predictions mark curr)))
-and tclSearchGoal ps mark curr =
-    let open Proofview in
-    let open Notations in
-    match ps with
-    | [] -> Tacticals.New.tclZEROMSG (Pp.str "No more predicted tactics")
-    | tac::ps' ->
-      let tac2 = parse_tac tac in
-      tclUNIT Intermediate <+> tclInterleave
-        (tclSearchGoal ps' mark (curr + 1))
-        (
-         (tclLIFT (NonLogical.print_info (Pp.str "------------------------------"))) <*>
-         (tclLIFT (NonLogical.print_info (Pp.str (mark ^ "." ^ string_of_int curr)))) <*>
-         (tclLIFT (NonLogical.print_info (Pp.app (Pp.str "Exec: ") (Pptactic.pr_raw_tactic Environ.empty_env Evd.empty tac)))) <*>
-         print_goal_short <*>
-         tclPROGRESS tac2 <*>
-         print_goal_short <*>
-         tclSearch () (mark ^ "." ^ string_of_int curr) 0)
-*)
-
   let tclTIMEOUT2 n t =
     Proofview.tclOR
       (Timeouttac.ptimeout n t)
@@ -761,10 +587,6 @@ let contains s1 s2 =
     in
         try ignore (Str.search_forward re s1 0); true
         with Not_found -> false
-
-let rec tclInfiniteUnit () =
-    let open Proofview in
-    tclOR (tclUNIT ()) (fun _ -> tclInfiniteUnit ())
 
 let search_recursion_depth_field : int Evd.Store.field = Evd.Store.field ()
 let max_recursion_depth = 2
@@ -791,7 +613,7 @@ let commonSearch () =
              tclLIFT (NonLogical.make (fun () ->
                  tac_exec_count := 0; Dumpglob.pause(); CWarnings.set_flags ("-all"))))
           <*> tclOR
-            (tclONCE (Tacticals.New.tclCOMPLETE (tclSearchDiagonalIterative 1)) <*>
+            (tclONCE (Tacticals.New.tclCOMPLETE (search_with_strategy tacpredict)) <*>
              get_witness () >>= fun wit -> empty_witness () <*>
              dec_search_recursion_depth () >>= fun () -> setFlags () <*> tclUNIT (wit, !tac_exec_count))
             (fun (e, i) -> setFlags () <*> tclZERO ~info:i e))

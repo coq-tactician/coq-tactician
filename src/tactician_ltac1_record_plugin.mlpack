@@ -1,8 +1,12 @@
+Tactician_util
 Timeouttac
 Hhlib
 Hh_term
 Features
 Sexpr
+Search_strategy_internal
+Search_strategy
+Diagonal_iterative_search
 Tactic_learner_internal
 Tactic_learner
 Learner_helper
