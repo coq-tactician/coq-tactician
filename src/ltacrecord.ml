@@ -674,6 +674,7 @@ type prediction =
   ; focus      : int
   ; tactic     : float Proofview.tactic }
 
+let tac_exec_count = ref 0
 let tacpredict =
   let open Proofview in
   let open Notations in
@@ -685,7 +686,8 @@ let tacpredict =
     (Goal.enter_one (fun gl ->
       let env = Goal.env gl in
       push_witness { tac = t; focus; prediction_index = i } <*>
-      tclDebugTac t env false >>= fun () ->
+      (tac_exec_count := 1 + !tac_exec_count;
+      tclDebugTac t env false) >>= fun () ->
       Goal.goals >>= fun gls ->
       let outcome = mk_outcome (gl, gls) in
       tclUNIT (learner_evaluate outcome (t, h)))) in
@@ -696,7 +698,6 @@ let tacpredict =
 let tclSearchDiagonalDFS depth =
     let open Proofview in
     let open Notations in
-    let count = ref 0 in (* TODO: This does not thread through the DiagonalIterative function *)
     let rec aux (depth : int)
       : int Proofview.tactic =
     tclENV >>= fun env -> Goal.goals >>= function
@@ -708,12 +709,11 @@ let tclSearchDiagonalDFS depth =
            (fun i {focus; tactic} ->
               let ndepth = depth - i in
               if ndepth <= 0 then tclZERO DepthEnd else
-                (count := !count + 1;
-                   (tactic >>= fun _ -> aux (ndepth - 1))))
+                (tactic >>= fun _ -> aux (ndepth - 1)))
            predictions) >>= aux in
-    aux depth >>= fun _ -> tclUNIT !count
+    aux depth >>= fun _ -> tclUNIT ()
 
-let rec tclSearchDiagonalIterative d : int Proofview.tactic =
+let rec tclSearchDiagonalIterative d : unit Proofview.tactic =
     let open Proofview in
     (* (tclLIFT (NonLogical.print_info (Pp.str ("Iterative depth: " ^ string_of_int d)))) <*> *)
     tclOR
@@ -788,11 +788,12 @@ let commonSearch () =
           let setFlags () = if not doFlags then tclUNIT () else tclLIFT (NonLogical.make (fun () ->
               Dumpglob.continue (); CWarnings.set_flags (oldFlags))) in
           (if not doFlags then tclUNIT () else
-            tclLIFT (NonLogical.make (fun () -> Dumpglob.pause(); CWarnings.set_flags ("-all"))))
+             tclLIFT (NonLogical.make (fun () ->
+                 tac_exec_count := 0; Dumpglob.pause(); CWarnings.set_flags ("-all"))))
           <*> tclOR
-            (tclONCE (Tacticals.New.tclCOMPLETE (tclSearchDiagonalIterative 1)) >>= fun c ->
+            (tclONCE (Tacticals.New.tclCOMPLETE (tclSearchDiagonalIterative 1)) <*>
              get_witness () >>= fun wit -> empty_witness () <*>
-             dec_search_recursion_depth () >>= fun () -> setFlags () <*> tclUNIT (wit, c))
+             dec_search_recursion_depth () >>= fun () -> setFlags () <*> tclUNIT (wit, !tac_exec_count))
             (fun (e, i) -> setFlags () <*> tclZERO ~info:i e))
 
 let benchmarked_field : bool Evd.Store.field = Evd.Store.field ()
