@@ -16,7 +16,7 @@ module PrintLearner : TacticianOnlineLearnerType = functor (TS : TacticianStruct
   let empty () = ()
   let learn () outcomes tac =
     let tactic_to_string t = sexpr_to_string (tactic_sexpr t) in
-    let proof_state_to_string pf = sexpr_to_string (proof_state_to_sexpr pf) in
+    print_endline "------------------------------";
     print_endline "Tactic:";
     print_endline (tactic_to_string tac);
     List.iteri (fun i outcome ->
@@ -25,15 +25,20 @@ module PrintLearner : TacticianOnlineLearnerType = functor (TS : TacticianStruct
         print_endline "Tactic trace:";
         print_endline (String.concat " - " (List.map (fun (_, (ps : proof_step)) ->
             tactic_to_string ps.tactic) outcome.parents));
-        print_endline "Proof state:";
-        print_endline (proof_state_to_string outcome.before);
+        print_endline "\nProof state:";
+        print_endline (proof_state_to_string outcome.before (Global.env ()) Evd.empty);
         print_endline ("Generated " ^ string_of_int (List.length outcome.after) ^ " states:");
         List.iteri (fun j pf ->
-            print_endline (string_of_int j ^ ": " ^ proof_state_to_string pf)
+            print_endline (string_of_int j ^ ": " ^ proof_state_to_string pf (Global.env ()) Evd.empty)
           ) outcome.after;
       ) outcomes;
     print_endline "\n"; ()
-  let predict () _ = Stream.sempty
+  let predict () situations =
+    List.iteri (fun i {parents; siblings; state} ->
+        print_endline ("Situation " ^ string_of_int i);
+        print_endline (proof_state_to_string state (Global.env ()) Evd.empty)
+      ) situations;
+    Stream.sempty
   let evaluate () _ _ = 0., ()
 end
 
