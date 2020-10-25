@@ -541,29 +541,25 @@ let rec tclFold2 (d : 'a) (tac : 'a -> 'a Proofview.tactic) : 'a Proofview.tacti
     | None -> tclUNIT d
     | Some x -> tclFold2 x tac
 
-let predict (gls : Proofview.Goal.t list) =
-  let states = List.map (fun gl ->
+let predict =
+  let open Proofview in
+  let open Notations in
+  Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
+  let situation = List.map (fun gl ->
       let ps = goal_to_proof_state gl in
-      { parents = List.map (fun tac -> (ps (* TODO: Fix *), { executions = []; tactic = tac }))
-            ([] (*TODO: Fix*) (* get_tactic_trace gl *))
+      { parents = List.map (fun tac -> (ps (* TODO: Fix *), { executions = [](*TODO: Fix*); tactic = tac }))
+            ([] (* TODO: Fix*)(*get_tactic_trace gl*))
       ; siblings = End
       ; state = ps}) gls in
   (* Coq stores goals in reverse order, so we present them in an intuitive order.
      Note that the tclFocus function also internally reverses the list, so focussing
-     on goal zero will focus in the first goal of the reversed `state` *)
-  learner_predict (List.rev states)
+     on goal zero will focus in the first goal of the reversed `situation` *)
+  tclUNIT (learner_predict (List.rev situation))
 
 let userPredict =
   let open Proofview in
   let open Notations in
-  tclENV >>= fun env -> Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
-  let states = List.map (fun gl ->
-      let ps = goal_to_proof_state gl in
-      { parents = List.map (fun tac -> (ps (* TODO: Fix *), { executions = []; tactic = tac }))
-            ([] (*TODO: Fix*)(* get_tactic_trace gl *))
-      ; siblings = End
-      ; state = ps}) gls in
-  let r = learner_predict states in
+  tclENV >>= fun env -> predict >>= fun r ->
   let r = List.map (fun ({confidence; focus; tactic} : Tactic_learner_internal.TS.prediction) ->
       (confidence, focus, tactic)) (Stream.npeek 10 r) in
   let r = List.map (fun (x, _, (y, _)) -> (x, y)) r in
@@ -574,8 +570,7 @@ let tac_exec_count = ref 0
 let tacpredict =
   let open Proofview in
   let open Notations in
-  Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
-  let predictions = predict gls in
+  predict >>= fun predictions ->
   let taceval i focus (t, h) =
     tclFOCUS ~nosuchgoal:(Tacticals.New.tclZEROMSG (Pp.str "Predictor gave wrong focus"))
       (focus+1) (focus+1)
