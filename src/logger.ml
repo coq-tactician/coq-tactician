@@ -41,16 +41,18 @@ let unprocessed_file () =
   feedbackdir () ^ "unprocessed"
 
 let uid =
-  Random.self_init ();
-  let uid_file_name = feedbackdir () ^ "uid" in
-  let gen_uid () =
-    let uid_str = Int64.to_string (Random.int64 (Int64.max_int)) in
-    append uid_file_name uid_str; uid_str in
-  if Sys.file_exists uid_file_name then
-    let uid = read_whole_file uid_file_name in
-    if String.length uid = 0 then
-      gen_uid () else uid
-  else gen_uid ()
+  let uid = lazy (
+    Random.self_init ();
+    let uid_file_name = feedbackdir () ^ "uid" in
+    let gen_uid () =
+      let uid_str = Int64.to_string (Random.int64 (Int64.max_int)) in
+      append uid_file_name uid_str; uid_str in
+    if Sys.file_exists uid_file_name then
+      let uid = read_whole_file uid_file_name in
+      if String.length uid = 0 then
+        gen_uid () else uid
+    else gen_uid ()) in
+  fun () -> Lazy.force uid
 
 (* Ugly code to make the PUT request for logging. This avoids needing a complicated 
    external dependency on some HTTP library. Modified from
@@ -182,7 +184,7 @@ let common_info trace_getter db_size =
       gls in
   let time = Unix.gettimeofday () in
   let full_info = Node [
-      Node [s2s "uid"; s2s uid];
+      Node [s2s "uid"; s2s (uid ())];
       Node [s2s "before_time"; s2s (string_of_float time)];
       Node [s2s "dbsize"; s2s (string_of_int db_size)];
       Node [s2s "states_sexpr"; Node gls_sexpr];
