@@ -4,6 +4,10 @@ Hhlib
 Hh_term
 Features
 Sexpr
+Map_all_the_things
+Map_all_the_witnesses
+Mapping_helpers
+Tactic_normalize
 Search_strategy_internal
 Search_strategy
 Diagonal_iterative_search
@@ -17,6 +21,9 @@ Naiveknn_learner
 Trivial_learners
 Pknnmax
 Tactic_annotate
+Map_all_the_things
+Map_all_the_witnesses
+Tactic_normalize
 Gendischarge
 Cook_tacexpr
 Known_witnesses

@@ -11,6 +11,11 @@ src/tactician_util.ml
 src/g_ltac1_record.mlg
 src/g_ltac1_tactics.mlg
 src/tactic_annotate.ml
+src/mapping_helpers.ml
+src/map_all_the_things.ml
+src/map_all_the_things.mli
+src/map_all_the_witnesses.ml
+src/tactic_normalize.ml
 src/gendischarge.ml
 src/cook_tacexpr.ml
 src/known_witnesses.ml
