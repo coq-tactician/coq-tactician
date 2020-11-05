@@ -772,16 +772,10 @@ let record_tac (tac2 : glob_tactic_expr) : unit Proofview.tactic =
              if i = j then Some gl_after else None) after_gls)) before_gls in
   get_record () >>= fun b -> if not (should_record b) then tclUNIT () else
     tclENV >>= fun env ->
-    let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic env t) in
-    let tac = Pp.string_of_ppcmds(tac_pp tac2) in
     pop_goal_stack () >>= fun before_gls ->
     Goal.goals >>= record_map (fun x -> x) >>= (fun after_gls ->
         let after_gls = List.map (fun gl -> get_state_id_goal_top gl, gl) after_gls in
-        (* TODO: There is probably a much better way to do this *)
-        if (String.equal tac "admit" || String.equal tac "search" || String.is_prefix "search failing" tac
-            || String.is_prefix "tactician ignore" tac)
-        then Proofview.tclUNIT () else
-          push_localdb (collect_states before_gls after_gls, tac2)
+        push_localdb (collect_states before_gls after_gls, tac2)
       ) >>= (fun () -> pop_state_id_stack () <*> (* TODO: This is a strange way of doing things, see todo above. *)
                        push_tactic_trace tac2)
 
@@ -822,8 +816,11 @@ let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO:
     let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic env t) in
     let string_tac t = Pp.string_of_ppcmds (tac_pp t) in
     let tryadd (execs, tac) =
-      add_to_db2 id (execs, tac);
       let s = string_tac tac in
+      (* TODO: There is probably a much better way to do this *)
+      if (String.equal s "admit" || String.equal s "search" || String.is_prefix "search failing" s
+          || String.is_prefix "tactician ignore" s)
+      then () else add_to_db2 id (execs, tac);
       try (* This is purely for parsing bug detection and could be removed for performance reasons *)
         let _ = Pcoq.parse_string Pltac.tactic_eoi s in ()
       with e ->
