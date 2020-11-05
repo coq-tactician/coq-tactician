@@ -35,8 +35,9 @@ let global2s g =
          created by `abstract` are not available when replaying at Qed-time. This happens in the
          stdlib in Reals/Realanalysis5.v on line 1141. *)
       Nametab.path_of_global (a)
-  with e ->
-    Libnames.make_path DirPath.empty (Id.of_string "a") in
+    with e ->
+      Feedback.msg_warning (Pp.str "A recoverable error was raised in Tactician. Please report.");
+      Libnames.make_path DirPath.empty (Id.of_string "a") in
   s2s (Libnames.string_of_path b)
 
 let sorts2s = function
