@@ -5,6 +5,8 @@ DECLARE PLUGIN "tactician_ltac1_tactics_plugin"
 open Ltac_plugin
 open Tacarg
 
+let () = Tactician_ltac1_record_plugin.Tactic_learner_internal.disable_queue ()
+
 }
 
 TACTIC EXTEND tacticianignore

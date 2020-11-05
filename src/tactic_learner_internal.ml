@@ -161,9 +161,28 @@ end
 
 let current_learner = ref (new_database "null" (module NullLearner : TacticianOnlineLearnerType))
 
+let queue_enabled = Summary.ref ~name: "tactician-queue-enabled" true
+let queue = Summary.ref ~name:"tactician-queue" []
+
 let learner_learn p    = let x, _, _ = !current_learner in x p
 let learner_predict p  = let _, x, _ = !current_learner in x p
 let learner_evaluate p = let _, _, x = !current_learner in x p
+
+let process_queue () =
+  List.iter (fun (o, t) -> learner_learn o t) !queue; queue := []
+
+let learner_predict s =
+  process_queue ();
+  learner_predict s
+
+let learner_learn o t =
+  if !queue_enabled then
+    queue := (o, t)::!queue
+  else
+    learner_learn o t
+
+let disable_queue () =
+  process_queue (); queue_enabled := false
 
 let register_online_learner name learner : unit =
   current_learner := new_database name learner

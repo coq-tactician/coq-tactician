@@ -119,7 +119,8 @@ let benchoptions = Goptions.{optdepr = false;
                                               | None -> Feedback.msg_notice (
                                                   Pp.str "No source file could be found. Disabling benchmarking.");
                                                 benchmarking := None
-                                              | Some f -> ignore (eval_file ()))
+                                              | Some f ->
+                                                disable_queue (); ignore (eval_file ()))
                                           | _ -> ())}
 let featureoptions = Goptions.{optdepr = false;
                                optname = "Tactician feature outputting";
