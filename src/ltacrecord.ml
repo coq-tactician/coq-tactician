@@ -391,9 +391,9 @@ let get_tactic_trace gl =
   get_field_goal2 tactic_trace_field gl (fun _ -> [])
 
 let mk_outcome (st, sts) =
-  let mem = (List.map TS.tactic_make (get_tactic_trace st)) in
+  (* let mem = (List.map TS.tactic_make (get_tactic_trace st)) in *)
   let st : proof_state = goal_to_proof_state st in
-  { parents = List.map (fun tac -> (st (* TODO: Fix *), { executions = []; tactic = tac })) mem
+  { parents = [] (* List.map (fun tac -> (st (\* TODO: Fix *\), { executions = []; tactic = tac })) mem *)
   ; siblings = End
   ; before = st
   ; after = [] (* List.map goal_to_proof_state sts *) }
@@ -550,7 +550,7 @@ let predict =
   let situation = List.map (fun gl ->
       let ps = goal_to_proof_state gl in
       { parents = List.map (fun tac -> (ps (* TODO: Fix *), { executions = [](*TODO: Fix*); tactic = tac }))
-            ([] (* TODO: Fix*)(*get_tactic_trace gl*))
+            ([] (* List.map TS.tactic_make (get_tactic_trace gl) *))
       ; siblings = End
       ; state = ps}) gls in
   (* Coq stores goals in reverse order, so we present them in an intuitive order.
