@@ -1,0 +1,13 @@
+name: Remote Bench
+
+on: push
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "${{ secrets.BENCH_KEY }}" > bench-key
+          chmod 600 bench-key
+          ssh -i bench-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} $GITHUB_SHA BENCHMARK=40
