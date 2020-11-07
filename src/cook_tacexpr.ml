@@ -64,9 +64,9 @@ let cook s (tac : glob_tactic_expr) : glob_tactic_expr discharged =
   and cook_args args = List.map cook_arg args
   and cook_arg x =
     match x with
-    | TacGeneric g ->
+    | TacGeneric (str, g) ->
       let+ g = discharge_genarg_tactic s g in
-      TacGeneric g
+      TacGeneric (str, g)
     | Reference (ArgArg (_, id)) ->
       let* id = correct_kername id in
       return (Reference id)
@@ -166,9 +166,6 @@ let cook s (tac : glob_tactic_expr) : glob_tactic_expr discharged =
       TacAbstract (t, id), ids
     | TacId _ -> return tac
     | TacFail _ -> return tac
-    | TacInfo t ->
-      let+ t = cook t in
-      TacInfo t
     | TacLetIn (flg, ts, t) ->
       let lns, args = OList.split ts in
       let+ t = cook t
@@ -222,11 +219,11 @@ let discharge env tac =
   if tactic_traversable tac then tac else
     let tacstr = Pptactic.pr_glob_tactic env tac in
     warnProblem tacstr;
-    TacArg (CAst.make (TacGeneric (in_gen (glbwit wit_pr_arg) (PrString (Pp.string_of_ppcmds tacstr)))))
+    TacArg (CAst.make (TacGeneric (None, in_gen (glbwit wit_pr_arg) (PrString (Pp.string_of_ppcmds tacstr)))))
 
 let rebuild s tac =
   match tac with
-  | TacArg (CAst.{v = TacGeneric (GenArg _ as g); _}) when has_type g (Glbwit wit_pr_arg) ->
+  | TacArg (CAst.{v = TacGeneric (None, (GenArg _ as g)); _}) when has_type g (Glbwit wit_pr_arg) ->
     let PrString str = out_gen (glbwit wit_pr_arg) g in
     (try
       let raw = Pcoq.parse_string Pltac.tactic str in

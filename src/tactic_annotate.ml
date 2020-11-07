@@ -168,7 +168,6 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
     | TacAbstract (t, id) ->               router Abstract (TacAbstract (rinner Abstract t, id))
     | TacId _           ->                 tac (* No need to record id *)
     | TacFail _         ->                 tac (* No need to record fail *)
-    | TacInfo t         ->                 TacInfo (annotate t) (* No need to record info *)
     | TacLetIn (flg, ts, t) ->
       let ts = if inner_record LetIn then List.map (fun (a, b) -> (a, fst (annotate_arg b))) ts else ts in
       router LetIn (TacLetIn (flg, ts, rinner LetIn t))

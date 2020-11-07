@@ -134,7 +134,7 @@ let rec hhterm_of (t : Constr.constr) : hhterm =
   | Evar (evk,cl)     -> mk_id "Existentialvar"
   | Ind (ind,u)       -> hhterm_of_inductive ind
   | Construct (ctr,u) -> hhterm_of_construct ctr
-  | Case (ci,p,c,bl)  ->
+  | Case (ci,p,_,c,bl)  ->
       tuple ([mk_id "$Case"; hhterm_of_caseinfo ci ; hhterm_of p;
         hhterm_of c; hhterm_of_constrarray bl])
   | Fix (nvn,recdef) -> tuple [mk_id "$Fix";
@@ -146,6 +146,7 @@ let rec hhterm_of (t : Constr.constr) : hhterm =
                                hhterm_of_precdeclaration recdef]
   | Int n            -> mk_id ("$Uint63." ^ (Uint63.to_string n))
   | Float f          -> mk_id ("$Float." ^ (Float64.to_string f))
+  | Array _          -> mk_id "$Array"
 and hhterm_of_constrarray a =
   tuple ((mk_id "$ConstrArray") :: List.map hhterm_of (Array.to_list a))
 and hhterm_of_precdeclaration (a,b,c) =

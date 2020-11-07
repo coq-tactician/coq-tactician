@@ -518,8 +518,10 @@ module MakeMapper (M: MapDef) = struct
        GRef (r, l)
      | GVar _ -> return c
      | GEvar (e, xs) ->
-       let+ xs = List.map (fun (l, c) ->
-           let+ c = glob_constr_map c in
+       let+ e = m.cast e
+       and+ xs = List.map (fun (l, c) ->
+           let+ l = m.cast l
+           and+ c = glob_constr_map c in
            (l, c)) xs in
        GEvar (e, xs)
      | GPatVar _ -> return c
@@ -580,6 +582,11 @@ module MakeMapper (M: MapDef) = struct
        GCast (c1, c2)
      | GInt _ -> return c
      | GFloat _ -> return c
+     | GArray (gl, cs, c1, c2) ->
+       let+ cs = array_map glob_constr_map cs
+       and+ c1 = glob_constr_map c1
+       and+ c2 = glob_constr_map c2 in
+       GArray (gl, cs, c1, c2)
     ) >>= m.glob_constr
   and glob_constr_map m r c = mdast m (glob_constr_r_map m r) c
 
@@ -696,8 +703,10 @@ module MakeMapper (M: MapDef) = struct
       CHole (k, intr, gen)
     | CPatVar _ -> return c
     | CEvar (e, xs) ->
-      let+ xs = List.map (fun (l, c) ->
-          let+ c = constr_expr_map c in
+      let+ e = m.cast e
+      and+ xs = List.map (fun (l, c) ->
+          let+ l = m.cast l
+          and+ c = constr_expr_map c in
           (l, c)) xs in
       CEvar (e, xs)
     | CSort _ -> return c
@@ -717,7 +726,12 @@ module MakeMapper (M: MapDef) = struct
     | CPrim _ -> return c
     | CDelimiters (str, c) ->
      let+ c = constr_expr_map c in
-     CDelimiters (str, c)) >>= m.constr_expr
+     CDelimiters (str, c)
+    | CArray (ie, cs, c1, c2) ->
+      let+ cs = array_map constr_expr_map cs
+      and+ c1 = constr_expr_map c1
+      and+ c2 = constr_expr_map c2 in
+      CArray (ie, cs, c1, c2)) >>= m.constr_expr
   and fix_expr_map m r (li, ord, bi, c1, c2) =
     let+ li = m.cast li
     and+ ord = option_map (recursion_order_expr m r) ord
@@ -821,7 +835,12 @@ module MakeMapper (M: MapDef) = struct
        and+ p2s = array_map constr_pattern_map p2s in
        PCoFix (i, (ids, p1s, p2s))
      | PInt _ -> return pat
-     | PFloat _ -> return pat) >>= m.constr_pattern
+     | PFloat _ -> return pat
+     | PArray (ps, p1, p2) ->
+       let+ ps = array_map constr_pattern_map ps
+       and+ p1 = constr_pattern_map p1
+       and+ p2 = constr_pattern_map p2 in
+       PArray (ps, p1, p2)) >>= m.constr_pattern
 
   and glob_constr_and_expr_map m r ((gc, ce) : g_trm) =
     let+ gc = glob_constr_map m r gc
@@ -834,9 +853,9 @@ module MakeMapper (M: MapDef) = struct
 
   and tactic_arg_map (m : 'a tactic_mapper) tac =
     (match tac with
-     | TacGeneric genarg ->
+     | TacGeneric (str, genarg) ->
        let+ genarg = m.generic_map genarg in
-       TacGeneric genarg
+       TacGeneric (str, genarg)
      | ConstrMayEval x ->
        let+ x = may_eval_map m.u m.trm_map m.cst_map m.pat_map x in
        ConstrMayEval x
@@ -938,9 +957,6 @@ module MakeMapper (M: MapDef) = struct
   and tactic_map
       (m : 'a tactic_mapper) (tac : 'a gen_tactic_expr) : 'a gen_tactic_expr t =
     (match tac with
-     | TacInfo t ->
-       let+ t = m.tactic_map t in
-       TacInfo t
      | TacAtom a ->
        let+ a = mcast m.u (fun a ->
            let* a = atomic_tactic_map m a in

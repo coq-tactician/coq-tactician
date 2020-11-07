@@ -199,7 +199,7 @@ let may_eval_map f (x: (Ltac_plugin.Tacexpr.g_trm, Ltac_plugin.Tacexpr.g_cst,
   | ConstrTypeOf c -> ConstrTypeOf (constr_and_expr_map f c)
 
 let rec tacarg_map f re (a : Ltac_plugin.Tacexpr.g_dispatch Ltac_plugin.Tacexpr.gen_tactic_arg) : Ltac_plugin.Tacexpr.g_dispatch Ltac_plugin.Tacexpr.gen_tactic_arg = match a with
-  | TacGeneric a -> TacGeneric a (* TODO: Can we do something here? *)
+  | TacGeneric (a, b) -> TacGeneric (a, b) (* TODO: Can we do something here? *)
   | ConstrMayEval c -> ConstrMayEval (may_eval_map f c)
   | Reference x -> Reference x
   | TacCall x -> TacCall (CAst.map (fun (x, y) -> (x, List.map (tacarg_map f re) y)) x)
@@ -257,7 +257,6 @@ and tactic_constr_map (f : EConstr.named_context) (tac : glob_tactic_expr) : glo
   | TacTimeout (n, tac) -> TacTimeout (n, tactic_constr_map f tac)
   | TacTime (s, tac) -> TacTime (s, tactic_constr_map f tac)
   | TacTry tac -> TacTry (tactic_constr_map f tac)
-  | TacInfo tac -> TacInfo (tactic_constr_map f tac)
   | TacRepeat tac -> TacRepeat (tactic_constr_map f tac)
   | TacOr (t1, t2) -> TacOr (tactic_constr_map f t1, tactic_constr_map f t2)
   | TacOnce tac -> TacOnce (tactic_constr_map f tac)

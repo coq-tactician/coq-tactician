@@ -16,6 +16,7 @@ let fold_pattern_with_binders g f v acc = function
   | Pattern.PCoFix (_, (ids, ar1, ar2)) -> CErrors.anomaly (Pp.str "Tactician: Fixpoint patterns are buggy")
   | Pattern.PRef _ | Pattern.PVar _ | Pattern.PRel _
   | Pattern.PSort _ | Pattern.PMeta _ | Pattern.PInt _ | Pattern.PFloat _ -> acc
+  | Pattern.PArray (ar, t1, t2) -> Array.fold_right (f v) ar (f v t1 (f v t2 acc))
 
 (* Copied from glob_ops.ml *)
 let collide_id l id = List.exists (fun (id',id'') -> Id.equal id id' || Id.equal id id'') l
@@ -66,4 +67,6 @@ let rec pattern_rename_vars l = function
   | Pattern.PProj (n, t) -> Pattern.PProj (n, pattern_rename_vars l t)
   | Pattern.PRef _ | Pattern.PRel _ | Pattern.PSort _ | Pattern.PMeta _ | Pattern.PInt _
   | Pattern.PEvar _ | Pattern.PFloat _ as p -> p
+  | Pattern.PArray (ar, t1, t2) ->
+    Pattern.PArray (Array.map (pattern_rename_vars l) ar, pattern_rename_vars l t1, pattern_rename_vars l t2)
 

@@ -25,7 +25,7 @@ let rec format_oneline t =
   (* can happen but is problematic *)
   | Ppcmd_string s -> if String.contains s '\n' then (print_endline s; assert false) else d
   | _ -> d in
-  h 0 (unrepr d')
+  h (unrepr d')
 
 let global2s g =
   let a = Globnames.canonical_gr g in
@@ -103,7 +103,7 @@ let constr2s t =
     | Const (c, u) -> Node (s2s "Const" :: constant2s c :: instance2s u)
     | Ind (i, u) -> Node (s2s "Ind" :: inductive2s i :: instance2s u)
     | Construct (c, u) -> Node (s2s "Construct" :: constructor2s c @ instance2s u)
-    | Case (info, t1, t2, bodies) ->
+    | Case (info, t1, inv, t2, bodies) -> (* TODO: Use inv *)
       Node (s2s "Case" :: case_info2s info :: aux ls t1 :: aux ls t2
            :: Array.to_list (Array.map (aux ls) bodies))
     | Fix (_, pd) -> Node (s2s "Fix" :: prec_declaration2s ls pd)
@@ -111,6 +111,8 @@ let constr2s t =
     | Proj (proj, trm) -> Node [s2s "Proj"; constant2s (Projection.constant proj); aux ls trm] (* TODO: Improve *)
     | Int n -> Node [s2s "Int"; s2s (Uint63.to_string n)]
     | Float n -> Node [s2s "Float"; s2s (Float64.to_string n)]
+    | Array (u, cs, c, ty) ->
+      Node [s2s "Array"; aux ls c; Node (Array.to_list (Array.map (aux ls) cs)); aux ls ty; Node (instance2s u)]
   and prec_declaration2s ls (ns, typs, trms) =
     let ids = Array.to_list (Array.map (fun n -> n.binder_name) ns) in
     [ Node (List.map name2s ids)

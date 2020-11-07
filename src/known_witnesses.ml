@@ -26,7 +26,7 @@ let at wit = register_discharge0 wit (fun _ arg -> return arg)
 let _ = [
   (* Stdarg *)
   at wit_unit; at wit_bool; at wit_int; at wit_string; at wit_pre_ident; at wit_int_or_var; at wit_ident;
-  at wit_var; at wit_ref; at wit_sort_family; at wit_constr; at wit_uconstr; at wit_open_constr;
+  at wit_hyp; at wit_ref; at wit_sort_family; at wit_constr; at wit_uconstr; at wit_open_constr;
   at wit_clause_dft_concl;
 
   (* Extraargs *)

@@ -100,7 +100,8 @@ let glob_constr2s ls (t: glob_constr) : sexpr =
       match id_to_debruijn id ls with
       | None   -> [s2s "Free";  s2s ids]
       | Some n -> [s2s "Bound"; s2s ids; s2s (string_of_int n)])
-    | GEvar (id, map) -> Node ([s2s "GEvar"; id2s id] @ List.map (fun (id, t') -> Node [id2s id; dast2s ls t]) map)
+    | GEvar (id, map) -> Node ([s2s "GEvar"; id2s CAst.(id.v)] @
+                               List.map (fun (id, t') -> Node [id2s CAst.(id.v); dast2s ls t]) map)
     | GPatVar mv  -> Node (s2s "GPatVar" :: matching_var_kind2s mv)
     | GApp (t1, tarr) -> Node ([s2s "GApp"; dast2s ls t1] @ List.map (dast2s ls) tarr)
     | GLambda (id, bk, ty, te) ->
@@ -138,6 +139,9 @@ let glob_constr2s ls (t: glob_constr) : sexpr =
     | GCast (t, ct) -> Node [s2s "GCast"; dast2s ls t; cast_type2s (dast2s ls) ct]
     | GInt i -> Node [s2s "GInt"; s2s (Uint63.to_string i)]
     | GFloat f -> Node [s2s "GFloat"; s2s (Float64.to_string f)]
+    | GArray (u, cs, c, ty) ->
+      Node [s2s "Array"; dast2s ls c; Node (Array.to_list (Array.map (dast2s ls) cs));
+            dast2s ls ty; Node (Option.default [] (Option.map (List.map glob_level2s) u))]
   and glob_decl2s ls (id, bk, def, ty) =
     Node (name2s id :: binding_kind2s bk :: dast2s ls ty ::
           Option.default [] (Option.map (fun t -> [dast2s ls t]) def))
