@@ -496,7 +496,7 @@ let synthesize_tactic (env : Environ.env) tcs =
   let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic env t) in
   Pp.(h 0 (str "search" ++ ws 1 ++ str "with" ++ ws 1 ++ str "cache" ++ ws 1 ++
            Pp.str "(" ++ (prlist_with_sep
-                            (fun () -> str "); (")
+                            (fun () -> str "; ")
                             (fun (t, i) -> str "only" ++ ws 1 ++ int (1+i) ++ str ":" ++ ws 1 ++ tac_pp t)
                             (Stdlib.List.rev tcs)) ++ str (").")))
 
