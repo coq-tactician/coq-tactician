@@ -3,7 +3,7 @@ open Nameops
 open Glob_ops
 
 let fold_pattern_with_binders g f v acc = function
-  | Pattern.PEvar (_, ar) -> Array.fold_right (f v) ar acc
+  | Pattern.PEvar (_, ar) -> List.fold_right (f v) ar acc
   | Pattern.PApp (t, ar) -> Array.fold_right (f v) ar (f v t acc)
   | Pattern.PSoApp (i, ar) -> List.fold_right (f v) ar acc
   | Pattern.PProj (p, t) -> f v t acc

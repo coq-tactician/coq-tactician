@@ -601,11 +601,11 @@ module MakeMapper (M: MapDef) = struct
     | CPatOr pas ->
       let+ pas = List.map cases_pattern_expr_map pas in
       CPatOr pas
-    | CPatNotation (ns, (cas1, cas2), cas3) ->
+    | CPatNotation (ns, n, (cas1, cas2), cas3) ->
       let+ cas1 = List.map cases_pattern_expr_map cas1
       and+ cas2 = List.map (List.map cases_pattern_expr_map) cas2
       and+ cas3 = List.map cases_pattern_expr_map cas3 in
-      CPatNotation (ns, (cas1, cas2), cas3)
+      CPatNotation (ns, n, (cas1, cas2), cas3)
     | CPatPrim _ -> return case
     | CPatRecord xs ->
       let+ xs = List.map (fun (qu, ca) ->
@@ -705,12 +705,12 @@ module MakeMapper (M: MapDef) = struct
       let+ c = constr_expr_map c
       and+ ct = cast_type_map constr_expr_map ct in
       CCast (c, ct)
-    | CNotation (ns, (cs1, cs2, ps, bs)) ->
+    | CNotation (ns, n, (cs1, cs2, ps, bs)) ->
       let+ cs1 = List.map constr_expr_map cs1
       and+ cs2 = List.map (List.map constr_expr_map) cs2
       and+ ps = List.map (cases_pattern_expr_map m r) ps
       and+ bs = List.map (List.map (local_binder_expr_map m r)) bs in
-      CNotation (ns, (cs1, cs2, ps, bs))
+      CNotation (ns, n, (cs1, cs2, ps, bs))
     | CGeneralization (bk, ak, c) ->
       let+ c = constr_expr_map c in
       CGeneralization (bk, ak, c)
@@ -772,7 +772,7 @@ module MakeMapper (M: MapDef) = struct
        PRef r
      | PVar _ -> return pat
      | PEvar (e, ps) ->
-       let+ ps = array_map constr_pattern_map ps in
+       let+ ps = List.map constr_pattern_map ps in
        PEvar (e, ps)
      | PRel _ -> return pat
      | PApp (p, ps) ->

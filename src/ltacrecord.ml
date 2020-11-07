@@ -110,7 +110,6 @@ let print_to_eval str =
   flush (eval_file ())
 
 let benchoptions = Goptions.{optdepr = false;
-                             optname = "Tactician benchmark time";
                              optkey = ["Tactician"; "Benchmark"];
                              optread = (fun () -> !benchmarking);
                              optwrite = (fun b -> benchmarking := b;
@@ -123,7 +122,6 @@ let benchoptions = Goptions.{optdepr = false;
                                                 disable_queue (); ignore (eval_file ()))
                                           | _ -> ())}
 let featureoptions = Goptions.{optdepr = false;
-                               optname = "Tactician feature outputting";
                                optkey = ["Tactician"; "Output"; "Features"];
                                optread = (fun () -> !featureprinting);
                                optwrite = (fun b -> featureprinting := b; if b then
@@ -271,7 +269,7 @@ let in_db : data_in -> Libobject.obj =
                                   learner_learn outcomes tac)
                             ; load_function = (fun i (_, (outcomes, tac)) ->
                                   learner_learn outcomes tac)
-                            ; open_function = (fun i (_, (execs, tac)) -> ())
+                            ; open_function = (fun _ _ (_, (execs, tac)) -> ())
                             ; classify_function = (fun data -> Libobject.Substitute data)
                             ; subst_function = subst_outcomes
                             ; discharge_function = (fun (obj, data) ->

@@ -13,12 +13,12 @@ jobs:
       - uses: actions/checkout@v2
         with:
           repository: 'coq-tactician/coq-tactician-stdlib'
-          ref: 'coq8.11'
+          ref: 'coq8.12'
           path: 'coq-tactician-stdlib'
       - uses: coq-community/docker-coq-action@v1.1.0
         with:
           opam_file: 'coq-tactician.opam'
-          coq_version: '8.11'
+          coq_version: '8.12'
           ocaml_version: '4.09-flambda'
           custom_script: |
             startGroup Print opam config
