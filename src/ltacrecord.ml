@@ -416,22 +416,22 @@ let add_to_db2 id ((outcomes, tac) : (Proofview.Goal.t * Proofview.Goal.t list) 
        * ", \"after\": [" ^ String.concat ", " (List.map p2s after) ^ "]}\n" in *)
     print_to_feat (entry (outcomes, tac)))
 
-let features term = List.map Hashtbl.hash (Features.extract_features (Hh_term.hhterm_of (Hh_term.econstr_to_constr term)))
-
-let goal_to_features gl =
-       let goal = Proofview.Goal.concl gl in
-       let hyps = Proofview.Goal.hyps gl in
-       let hyps_features =
-          List.map
-            (fun pt -> match pt with
-                 | Context.Named.Declaration.LocalAssum (id, typ) ->
-                   features typ
-                 | Context.Named.Declaration.LocalDef (id, term, typ) ->
-                   List.append (features term) (features typ))
-            hyps in
-       let feats = (List.append (features goal) (List.concat hyps_features)) in
-       (*let feats = List.map Hashtbl.hash feats in*)
-       List.sort(*_uniq*) Int.compare feats
+(* let features term = List.map Hashtbl.hash (Features.extract_features (Hh_term.hhterm_of (Hh_term.econstr_to_constr term)))
+ * 
+ * let goal_to_features gl =
+ *        let goal = Proofview.Goal.concl gl in
+ *        let hyps = Proofview.Goal.hyps gl in
+ *        let hyps_features =
+ *           List.map
+ *             (fun pt -> match pt with
+ *                  | Context.Named.Declaration.LocalAssum (id, typ) ->
+ *                    features typ
+ *                  | Context.Named.Declaration.LocalDef (id, term, typ) ->
+ *                    List.append (features term) (features typ))
+ *             hyps in
+ *        let feats = (List.append (features goal) (List.concat hyps_features)) in
+ *        (\*let feats = List.map Hashtbl.hash feats in*\)
+ *        List.sort(\*_uniq*\) Int.compare feats *)
 
 let record_map (f : Proofview.Goal.t -> 'a)
     (gls : Proofview.Goal.t Proofview.tactic list) : 'a list Proofview.tactic =

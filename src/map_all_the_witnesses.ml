@@ -332,7 +332,7 @@ module SSRMap (M : MapDef) = struct
   let ssrterm_map m (k, c) =
     let+ c = m.glob_constr_and_expr_map c in (k, c)
 
-  let ast_closure_term_map m ({body} as at) =
+  let ast_closure_term_map m ({body; _} as at) =
     let+ body = m.constr_expr_map body
     in {at with body}
 

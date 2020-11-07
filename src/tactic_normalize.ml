@@ -34,14 +34,14 @@ let t : KerNameHash.t = KerNameHash.create 99
 let lookup id = KerNameHash.repr (KerName.hash id) id t
 
 let mapper = { NormalizeDef.default_mapper with
-               cast = (fun (CAst.{v}) -> CAst.make ?loc:None v)
+               cast = (fun (CAst.{v; _}) -> CAst.make ?loc:None v)
              ; located = (fun _ -> None)
              ; constant = (fun x -> ignore(Constant.hash x); return x)
              ; mutind = (fun x -> ignore(MutInd.hash x); return x)
              ; glob_tactic_arg = (fun x -> match x with
                  | Reference (ArgArg (_, n)) ->
                    Reference (ArgArg (None, lookup n))
-                 | TacCall CAst.{v=(ArgArg (_, n), ls)} ->
+                 | TacCall CAst.{v=(ArgArg (_, n), ls); _} ->
                    TacCall (CAst.make (ArgArg (None, lookup n), ls))
                  | x -> x)
              ; glob_tactic = kername_map lookup

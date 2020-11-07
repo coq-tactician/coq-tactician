@@ -26,7 +26,7 @@ let tclSearchDiagonalDFS predict depth =
       predict >>= fun predictions ->
       tclFoldPredictions
         (stream_mapi
-           (fun i {focus; tactic} ->
+           (fun i {focus; tactic; _} ->
               let ndepth = depth - i in
               if ndepth <= 0 then tclZERO DepthEnd else
                 (tactic >>= fun _ -> aux (ndepth - 1)))

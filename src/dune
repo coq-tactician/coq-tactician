@@ -1,0 +1,34 @@
+(coq.pp (modules g_ltac1_record g_ltac1_tactics))
+(library
+ (name tactician_ltac1_record_plugin)
+ (public_name coq-tactician.record-plugin)
+ (flags :standard -rectypes -w -27 -warn-error -A)
+ (modules (:standard \
+   diagonal_search normalize_debug term_sentence hh_term features
+   tactician naiveknn_subst_learner g_ltac1_tactics))
+ (libraries
+   coq.plugins.ltac
+   coq.plugins.ssrmatching
+   coq.plugins.ssreflect
+   coq.plugins.firstorder
+   coq.plugins.funind
+ )
+)
+(library
+ (name tactician_ltac1_tactics_plugin)
+ (public_name coq-tactician.tactics-plugin)
+ (flags :standard -rectypes -w -27 -warn-error -A)
+ (modules ("g_ltac1_tactics"))
+ (libraries
+   coq-tactician.record-plugin
+ )
+)
+(executable
+ (name tactician)
+ (public_name tactician)
+ (flags :standard -warn-error -A)
+ (modules ("tactician"))
+ (libraries
+   unix
+ )
+)

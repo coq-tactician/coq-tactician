@@ -3,7 +3,7 @@ all: Makefile.coq .merlin
 
 clean: Makefile.coq
 	+make -f Makefile.coq clean
-	rm -f Makefile.coq Makefile.coq.conf .merlin src/tactician.o src/tactician.cmx src/tactician.cmi
+	rm -f Makefile.coq Makefile.coq.conf .merlin src/tactician.o src/tactician.cmx src/tactician.cmi tactician
 
 make install-utility:
 	@echo "Installing Tactician utility"

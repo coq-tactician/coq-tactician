@@ -1,0 +1,7 @@
+(coq.theory
+ (name Tactician)
+ (package coq-tactician)
+ (flags -q)
+ (libraries coq-tactician.record-plugin coq-tactician.tactics-plugin)
+)
+(include_subdirs qualified)

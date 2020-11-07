@@ -1,12 +1,5 @@
-From Tactician Require Export Ltac1Dummy.
+From Tactician Require Export Ltac1Dummy Ltac1.Record.
 
-Declare ML Module "ltac_plugin".
-Declare ML Module "ground_plugin".
-Declare ML Module "extraction_plugin".
-Declare ML Module "recdef_plugin".
-Declare ML Module "ssrmatching_plugin".
-Declare ML Module "ssreflect_plugin".
-Declare ML Module "tactician_ltac1_record_plugin".
 Declare ML Module "tactician_ltac1_tactics_plugin".
 
 Ltac searcher ::= idtac
