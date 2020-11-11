@@ -23,10 +23,7 @@ depends: [
   "coq-tactician-dummy"
 ]
 build: [
-  [make "-j%{jobs}%"]
-]
-install: [
-  [make "install"]
+  ["dune" "build" "--release" "-j" jobs]
 ]
 post-messages: ["
 --- Tactician was successfully installed ---

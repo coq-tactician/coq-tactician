@@ -3,9 +3,24 @@
  (name tactician_ltac1_record_plugin)
  (public_name coq-tactician.record-plugin)
  (flags :standard -rectypes -w -27 -warn-error -A)
- (modules (:standard \
-   diagonal_search normalize_debug term_sentence hh_term features
-   tactician naiveknn_subst_learner g_ltac1_tactics))
+ (modules (
+   "g_ltac1_record"
+   ltacrecord
+   search_strategy
+   search_strategy_internal
+   tactic_learner
+   tactic_learner_internal
+   tactic_normalize
+   tactic_annotate
+   cook_tacexpr
+   gendischarge
+   mapping_helpers
+   map_all_the_witnesses
+   map_all_the_things
+   sexpr
+   timeouttac
+   tactician_util
+ ))
  (libraries
    coq.plugins.ltac
    coq.plugins.ssrmatching
