@@ -5,7 +5,8 @@
  (flags :standard -rectypes -w -27 -warn-error -A)
  (modules (
    "g_ltac1_record"
-    ltacrecord
+   ltacrecord
+   diagonal_iterative_search
    naiveknn_learner
    search_strategy
    search_strategy_internal
