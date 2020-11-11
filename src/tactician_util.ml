@@ -33,12 +33,3 @@ module IdentityMonad = struct
   let (>>) () x = x
   let map f x = f x
 end
-
-(* There does not appear to be a decent method to decide if two tactics are equal.
-   Taking the hash of the syntax tree appears to either under or over-approximate
-   depending on the depth of the hash calculation. The most decent method I can
-   think of is to *)
-(* let tac_pp t = Pptactic.pr_glob_tactic (Global.env ()) t *)
-let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic Environ.empty_env t)
-let string_tac t = Pp.string_of_ppcmds (tac_pp t)
-let with_hash t = t, lazy (Hashtbl.hash (tac_pp t))

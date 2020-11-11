@@ -145,7 +145,9 @@ type semilocaldb = data_in list
 let int64_to_knn : (Int64.t, semilocaldb * exn option) Hashtbl.t = Hashtbl.create 10
 
 let subst_outcomes (s, (outcomes, tac)) =
-  let subst_tac (tac, h) = Tacsubst.subst_tactic s tac, h in (* TODO: Recalculate (or remove) hash *)
+  let subst_tac tac =
+    let tac = tactic_repr tac in
+    TS.tactic_make (Tacsubst.subst_tactic s tac) in
   let subst_pf (hyps, g) = Mod_subst.(List.map (
       fun (id, te, ty) -> (id, Option.map (subst_mps s) te, subst_mps s ty)) hyps, subst_mps s g) in
   let rec subst_pd = function
@@ -202,7 +204,9 @@ let rebuild_outcomes (outcomes, tac) =
 
 let discharge_outcomes env (outcomes, tac) =
   if !tmp_ltac_defs = [] then (outcomes, tac) else
-    let genarg_print_tac (tac, h) = discharge env tac, h in
+    let genarg_print_tac tac =
+    let tac = tactic_repr tac in
+    TS.tactic_make (discharge env tac) in
     let rec genarg_print_pd = function
       | End -> End
       | Step ps -> Step (genarg_print_ps ps)
@@ -386,11 +390,7 @@ let get_tactic_trace gl =
   get_field_goal2 tactic_trace_field gl (fun _ -> [])
 
 let mk_outcome (st, sts) =
-  let env = Proofview.Goal.env st in
-  let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic env t) in
-  let string_tac t = Pp.string_of_ppcmds (tac_pp t) in
-  let with_hash t = t, Hashtbl.hash (string_tac t) in
-  let mem = (List.map with_hash (get_tactic_trace st)) in
+  let mem = (List.map TS.tactic_make (get_tactic_trace st)) in
   let st : proof_state = goal_to_proof_state st in
   { parents = List.map (fun tac -> (st (* TODO: Fix *), { executions = []; tactic = tac })) mem
   ; siblings = End
@@ -398,7 +398,8 @@ let mk_outcome (st, sts) =
   ; after = [] (* List.map goal_to_proof_state sts *) }
 
 let add_to_db2 id ((outcomes, tac) : (Proofview.Goal.t * Proofview.Goal.t list) list *
-                               tactic) =
+                                     glob_tactic_expr) =
+  let tac = TS.tactic_make tac in
   let outcomes = List.map mk_outcome outcomes in
   add_to_db (outcomes, tac);
   let semidb, exn = Hashtbl.find int64_to_knn id in
@@ -665,7 +666,7 @@ let benchmarkSearch name : unit Proofview.tactic =
                         commonSearch () >>=
                         fun m -> tclLIFT (print_success env m start_time))
 
-let nested_search_solutions_field : tactic list list Evd.Store.field = Evd.Store.field ()
+let nested_search_solutions_field : (glob_tactic_expr * int) list list Evd.Store.field = Evd.Store.field ()
 let push_nested_search_solutions tcs =
   modify_field nested_search_solutions_field (fun acc -> tcs :: acc, ()) (fun () -> [])
 let empty_nested_search_solutions () =
@@ -821,9 +822,8 @@ let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO:
     let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic env t) in
     let string_tac t = Pp.string_of_ppcmds (tac_pp t) in
     let tryadd (execs, tac) =
+      add_to_db2 id (execs, tac);
       let s = string_tac tac in
-      let tac' = tac, Hashtbl.hash s in
-      add_to_db2 id (execs, tac');
       try (* This is purely for parsing bug detection and could be removed for performance reasons *)
         let _ = Pcoq.parse_string Pltac.tactic_eoi s in ()
       with e ->

@@ -21,9 +21,6 @@ Naiveknn_learner
 Trivial_learners
 Pknnmax
 Tactic_annotate
-Map_all_the_things
-Map_all_the_witnesses
-Tactic_normalize
 Gendischarge
 Cook_tacexpr
 Known_witnesses

@@ -20,7 +20,6 @@ module type TacticianStructures = sig
   val term_sexpr : term -> sexpr
   val term_repr  : term -> constr
 
-  (* TODO: Add repr *)
   type proof_state
   val proof_state_hypotheses  : proof_state -> (id * term option * term) list
   val proof_state_goal        : proof_state -> term

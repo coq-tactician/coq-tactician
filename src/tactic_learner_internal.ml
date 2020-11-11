@@ -4,6 +4,7 @@ open Constr
 open Context
 open Sexpr
 open Proofview
+open Tactic_normalize
 
 module Id = Names.Id
 
@@ -14,6 +15,8 @@ module IdMap = Map.Make(struct
     let compare = Names.Id.compare
   end)
 type id_map = Id.t IdMap.t
+
+let tactic_make tac = tac, Lazy.from_val (Hashtbl.hash_param 255 255 (tactic_normalize tac))
 
 module type TacticianStructures = sig
   type term
@@ -74,12 +77,12 @@ module TS = struct
   let proof_state_equal ps1 ps2 = false
   let proof_state_independent ps = false
 
-  type tactic = glob_tactic_expr * int
+  type tactic = glob_tactic_expr * int Lazy.t
   let tactic_sexpr (tac, _) = s2s (Pp.string_of_ppcmds (Sexpr.format_oneline (
       Pptactic.pr_glob_tactic Environ.empty_env tac)))
   let tactic_repr (tac, _) = tac
-  let tactic_make tac = tac, Hashtbl.hash tac
-  let tactic_hash (_, hash) = hash
+  let tactic_make tac = tactic_make tac
+  let tactic_hash (_, hash) = Lazy.force hash
   let tactic_local_variables (tac, _) = []
   let tactic_substitute tac ls = tac
   let tactic_globally_equal tac1 tac2 = false
