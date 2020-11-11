@@ -19,6 +19,7 @@ maintainer: "Lasse Blaauwbroek <lasse@blaauwbroek.eu>"
 authors: "Lasse Blaauwbroek <lasse@blaauwbroek.eu"
 depends: [
   "ocaml" {>= "4.08"}
+  "dune" {>= "2.5"}
   "coq" {>= "8.12" & < "8.13~"}
   "coq-tactician-dummy"
 ]
