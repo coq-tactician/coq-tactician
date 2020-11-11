@@ -149,8 +149,16 @@ let subst_outcomes (s, (outcomes, tac)) =
   let subst_tac tac =
     let tac = tactic_repr tac in
     TS.tactic_make (Tacsubst.subst_tactic s tac) in
-  let subst_pf (hyps, g) = Mod_subst.(List.map (
-      fun (id, te, ty) -> (id, Option.map (subst_mps s) te, subst_mps s ty)) hyps, subst_mps s g) in
+  let subst_named_context =
+    let open Mod_subst in
+    let open Context in
+    List.map (function
+        | Named.Declaration.LocalAssum (id, typ) ->
+          Named.Declaration.LocalAssum (id, subst_mps s typ)
+        | Named.Declaration.LocalDef (id, term, typ) ->
+          Named.Declaration.LocalDef (id, subst_mps s term, subst_mps s typ)
+      ) in
+  let subst_pf (hyps, g) = Mod_subst.(subst_named_context hyps, subst_mps s g) in
   let rec subst_pd = function
     | End -> End
     | Step ps -> Step (subst_ps ps)

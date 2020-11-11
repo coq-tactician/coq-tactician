@@ -5,8 +5,7 @@ open Context
 open Sexpr
 open Proofview
 open Tactic_normalize
-
-module Id = Names.Id
+open Names
 
 type id = Id.t
 
@@ -20,11 +19,12 @@ let tactic_make tac = tac, Lazy.from_val (Hashtbl.hash_param 255 255 (tactic_nor
 
 module type TacticianStructures = sig
   type term
+  type named_context = (term, term) Named.pt
   val term_sexpr : term -> sexpr
   val term_repr  : term -> constr
 
   type proof_state
-  val proof_state_hypotheses  : proof_state -> (id * term option * term) list
+  val proof_state_hypotheses  : proof_state -> named_context
   val proof_state_goal        : proof_state -> term
   val proof_state_equal       : proof_state -> proof_state -> bool
   val proof_state_independent : proof_state -> bool
@@ -65,10 +65,11 @@ end
 module TS = struct
 
   type term = constr
+  type named_context = Constr.named_context
   let term_sexpr t = constr2s t
   let term_repr t = t
 
-  type proof_state = (id * term option * term) list * term
+  type proof_state = named_context * term
 
   let proof_state_hypotheses ps = fst ps
 
@@ -115,12 +116,7 @@ let goal_to_proof_state ps =
   let map = Goal.sigma ps in
   let to_term t = EConstr.to_constr ~abort_on_undefined_evars:false map t in
   let goal = to_term (Goal.concl ps) in
-  let hyps = List.map (function
-      | Context.Named.Declaration.LocalAssum (id, typ) ->
-        (id.binder_name, None, to_term typ)
-      | Context.Named.Declaration.LocalDef (id, term, typ) ->
-        (id.binder_name, Some (to_term term), to_term typ))
-      (Proofview.Goal.hyps ps) in
+  let hyps = EConstr.Unsafe.to_named_context (Proofview.Goal.hyps ps) in
   (hyps, goal)
 
 module type TacticianOnlineLearnerType =
