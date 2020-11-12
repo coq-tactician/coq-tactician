@@ -64,5 +64,6 @@
  (modules ("tactician"))
  (libraries
    unix
+   opam-client
  )
 )
