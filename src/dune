@@ -15,6 +15,7 @@
    tactic_learner_internal
    tactic_normalize
    tactic_annotate
+   known_witnesses
    cook_tacexpr
    gendischarge
    mapping_helpers
