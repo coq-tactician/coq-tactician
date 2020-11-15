@@ -34,6 +34,21 @@
  )
 )
 (library
+ (name tactician_ssreflect_plugin)
+ (public_name coq-tactician.ssreflect-plugin)
+ (flags :standard -rectypes -w -27 -warn-error -A)
+ (modules (
+   "known_ssr_witnesses"
+   map_ssr_witnesses
+ ))
+ (libraries
+   coq.plugins.ltac
+   coq.plugins.ssrmatching
+   coq.plugins.ssreflect
+   coq-tactician.record-plugin
+ )
+)
+(library
  (name tactician_ltac1_tactics_plugin)
  (public_name coq-tactician.tactics-plugin)
  (flags :standard -rectypes -w -27 -warn-error -A)

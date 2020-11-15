@@ -740,8 +740,17 @@ let qualid_of_global env r =
 
 (* End name globalization *)
 
+let load_plugins () =
+  let open Mltop in
+  let plugins = [("ssreflect_plugin", "tactician_ssreflect_plugin")] in
+  let load (dep, target) =
+    if module_is_known dep && not (module_is_known target) then
+      declare_ml_modules false [target] in
+  List.iter load plugins
+
 (* Returns true if tactic execution should be skipped *)
 let pre_vernac_solve pstate id =
+  load_plugins ();
   (* If this needs to work again, put the current name in the evdmap storage *)
   (* if not (Names.Id.equal !current_name new_name) then (
    *   if !featureprinting then print_to_feat ("#lemma " ^ (Names.Id.to_string new_name) ^ "\n");
