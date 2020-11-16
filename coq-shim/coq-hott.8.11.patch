@@ -1,7 +1,7 @@
 From c444aee0177d32593e679bfd95dffb55ac493914 Mon Sep 17 00:00:00 2001
 From: Lasse Blaauwbroek <lasse@blaauwbroek.eu>
 Date: Sun, 15 Nov 2020 23:52:30 +0100
-Subject: [PATCH] Patch for Tactician support
+Subject: [PATCH 1/2] Patch for Tactician support
 
 ---
  coq/theories/Init/Notations.v | 1 -
@@ -100,6 +100,68 @@ index 8f81e63fac..9bd2d2efe7 100755
 -exec "$COQTOP.byte" -coqlib "$COQLIB" -R "$HOTTLIB" HoTT -Q "$HOTTCONTRIB" "" -indices-matter "$@"
 +TACTICIANDIR=$(opam var coq:lib)/user-contrib/Tactician
 +exec "$COQTOP.byte" -I $TACTICIANDIR -R $TACTICIANDIR Tactician -coqlib "$COQLIB" -R "$HOTTLIB" HoTT -Q "$HOTTCONTRIB" "" -indices-matter "$@"
+-- 
+2.29.1
+
+
+From 8fee16ff06c33d678c575fc82512576ff2561aaa Mon Sep 17 00:00:00 2001
+From: Lasse Blaauwbroek <lasse@blaauwbroek.eu>
+Date: Mon, 16 Nov 2020 06:22:57 +0100
+Subject: [PATCH 2/2] Inject Tactician in a way that does not force the proof
+ mode on subsequent files.
+
+---
+ coq/theories/Init/Logic.v     | 1 +
+ coq/theories/Init/Notations.v | 1 +
+ coq/theories/Init/Peano.v     | 1 +
+ coq/theories/Init/Specif.v    | 1 +
+ 4 files changed, 4 insertions(+)
+
+diff --git a/coq/theories/Init/Logic.v b/coq/theories/Init/Logic.v
+index 9b51ccb280..249901323c 100644
+--- a/coq/theories/Init/Logic.v
++++ b/coq/theories/Init/Logic.v
+@@ -13,6 +13,7 @@
+ Set Implicit Arguments.
+ 
+ Require Export Notations.
++From Tactician Require Import Ltac1.Record.
+ 
+ Global Set Universe Polymorphism.
+ Global Set Asymmetric Patterns.
+diff --git a/coq/theories/Init/Notations.v b/coq/theories/Init/Notations.v
+index 3cc98d2b5e..a641b0c094 100644
+--- a/coq/theories/Init/Notations.v
++++ b/coq/theories/Init/Notations.v
+@@ -95,3 +95,4 @@ Open Scope type_scope.
+ 
+ Declare ML Module "ltac_plugin".
+ 
++Global Set Default Proof Mode "Classic".
+diff --git a/coq/theories/Init/Peano.v b/coq/theories/Init/Peano.v
+index 1ac83e72bf..9e588f04ae 100644
+--- a/coq/theories/Init/Peano.v
++++ b/coq/theories/Init/Peano.v
+@@ -28,6 +28,7 @@ Require Import Datatypes.
+ Local Open Scope identity_scope.
+ Require Import Logic_Type.
+ Require Coq.Init.Nat.
++From Tactician Require Import Ltac1.Record.
+ 
+ Open Scope nat_scope.
+ Local Notation "0" := O.
+diff --git a/coq/theories/Init/Specif.v b/coq/theories/Init/Specif.v
+index 1a03e6a07b..e15d9874a1 100644
+--- a/coq/theories/Init/Specif.v
++++ b/coq/theories/Init/Specif.v
+@@ -19,6 +19,7 @@ Require Import Datatypes.
+ Local Open Scope identity_scope.
+ Require Import Logic.
+ Local Unset Elimination Schemes.
++From Tactician Require Import Ltac1.Record.
+ 
+ (** [(sig A P)], or more suggestively [{x:A & (P x)}] is a Sigma-type.
+     Similarly for [(sig2 A P Q)], also written [{x:A & (P x) & (Q x)}]. *)
 -- 
 2.29.1
 

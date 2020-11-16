@@ -3,5 +3,5 @@ set -eu
 
 OPAMBIN=$(opam var bin)
 
-bwrap --dev-bind / / --bind $OPAMBIN/coqc $OPAMBIN/coqc.real \
+bwrap --dev-bind / / --bind $OPAMBIN/coqc /tmp/tactician.coqc.real \
       --bind $(opam var coq-tactician:lib)/coqc $OPAMBIN/coqc "$@"
