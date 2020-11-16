@@ -11,8 +11,11 @@ Options:
 - To disable Tactician, run
   tactician disable
 
-- To inject tactician into the installation or build of Coq packages, run
-  eval $(tactician inject)
+- To inject tacticians instrumentation into Opam installations, run
+  tactician inject
+
+- To disable tacticians instrumentation into Opam installations, run
+  tactician eject
 
 - After you have installed or removed the package coq-tactician-stdlib run the
   following command to help you with recompilation of other packages:
@@ -238,7 +241,6 @@ let () =
     | "inject" -> inject ()
     | "eject" -> eject ()
     | "enable" -> install_rcfile ()
-    | "check" -> exit 1
     | "disable" -> remove_rcfile ()
     | "recompile" -> stdlib ()
     | "--help" | "-h" | "help" -> usage ()
