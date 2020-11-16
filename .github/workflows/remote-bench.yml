@@ -3,11 +3,869 @@ name: Remote Bench
 on: push
 
 jobs:
-  build:
+  submit:
     runs-on: ubuntu-latest
+    outputs:
+      benchid: ${{ steps.submit.outputs.benchid }}
     steps:
-      - run: |
+      - id: submit
+        name: Submit
+        run: |
           echo "${{ secrets.BENCH_KEY }}" > bench-key
           chmod 600 bench-key
-          ssh -i bench-key -o StrictHostKeyChecking=no -o LogLevel=error \
-              ${{ secrets.BENCH_HOST }} $GITHUB_SHA BENCHMARK=40
+          BENCHID=$(ssh -i bench-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} http://github.com/${{ github.repository }}.git $GITHUB_SHA BENCHMARK=40)
+          echo $BENCHID
+          echo "::set-output name=benchid::$BENCHID"
+          sleep 1m
+  attach0:
+    runs-on: ubuntu-latest
+    needs: [submit]
+    outputs:
+      finished: ${{ steps.attach.outputs.finished }}
+    
+    steps:
+      - id: attach
+        name: Attach
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}. 2>&1 | tee output.txt || ATTACH_ERROR=1
+          if [ -n $ATTACH_ERROR ]; then
+              if grep -q "Job is pending execution" output.txt; then
+                  echo "::set-output name=finished::false"
+                  sleep 2h
+              else
+                  exit 1
+              fi
+          fi
+  attach1:
+    runs-on: ubuntu-latest
+    needs: [submit, attach0]
+    outputs:
+      finished: ${{ steps.attach.outputs.finished }}
+    if: ${{ needs.attach0.outputs.finished == 'false' }}
+    steps:
+      - id: attach
+        name: Attach
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}. 2>&1 | tee output.txt || ATTACH_ERROR=1
+          if [ -n $ATTACH_ERROR ]; then
+              if grep -q "Job is pending execution" output.txt; then
+                  echo "::set-output name=finished::false"
+                  sleep 2h
+              else
+                  exit 1
+              fi
+          fi
+  attach2:
+    runs-on: ubuntu-latest
+    needs: [submit, attach1]
+    outputs:
+      finished: ${{ steps.attach.outputs.finished }}
+    if: ${{ needs.attach1.outputs.finished == 'false' }}
+    steps:
+      - id: attach
+        name: Attach
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}. 2>&1 | tee output.txt || ATTACH_ERROR=1
+          if [ -n $ATTACH_ERROR ]; then
+              if grep -q "Job is pending execution" output.txt; then
+                  echo "::set-output name=finished::false"
+                  sleep 2h
+              else
+                  exit 1
+              fi
+          fi
+  attach3:
+    runs-on: ubuntu-latest
+    needs: [submit, attach2]
+    outputs:
+      finished: ${{ steps.attach.outputs.finished }}
+    if: ${{ needs.attach2.outputs.finished == 'false' }}
+    steps:
+      - id: attach
+        name: Attach
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}. 2>&1 | tee output.txt || ATTACH_ERROR=1
+          if [ -n $ATTACH_ERROR ]; then
+              if grep -q "Job is pending execution" output.txt; then
+                  echo "::set-output name=finished::false"
+                  sleep 2h
+              else
+                  exit 1
+              fi
+          fi
+  attach4:
+    runs-on: ubuntu-latest
+    needs: [submit, attach3]
+    outputs:
+      finished: ${{ steps.attach.outputs.finished }}
+    if: ${{ needs.attach3.outputs.finished == 'false' }}
+    steps:
+      - id: attach
+        name: Attach
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}. 2>&1 | tee output.txt || ATTACH_ERROR=1
+          if [ -n $ATTACH_ERROR ]; then
+              if grep -q "Job is pending execution" output.txt; then
+                  echo "::set-output name=finished::false"
+                  sleep 2h
+              else
+                  exit 1
+              fi
+          fi
+  attach5:
+    runs-on: ubuntu-latest
+    needs: [submit, attach4]
+    outputs:
+      finished: ${{ steps.attach.outputs.finished }}
+    if: ${{ needs.attach4.outputs.finished == 'false' }}
+    steps:
+      - id: attach
+        name: Attach
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}. 2>&1 | tee output.txt || ATTACH_ERROR=1
+          if [ -n $ATTACH_ERROR ]; then
+              if grep -q "Job is pending execution" output.txt; then
+                  echo "::set-output name=finished::false"
+                  sleep 2h
+              else
+                  exit 1
+              fi
+          fi
+  attach6:
+    runs-on: ubuntu-latest
+    needs: [submit, attach5]
+    outputs:
+      finished: ${{ steps.attach.outputs.finished }}
+    if: ${{ needs.attach5.outputs.finished == 'false' }}
+    steps:
+      - id: attach
+        name: Attach
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}. 2>&1 | tee output.txt || ATTACH_ERROR=1
+          if [ -n $ATTACH_ERROR ]; then
+              if grep -q "Job is pending execution" output.txt; then
+                  echo "::set-output name=finished::false"
+                  sleep 2h
+              else
+                  exit 1
+              fi
+          fi
+  attach7:
+    runs-on: ubuntu-latest
+    needs: [submit, attach6]
+    outputs:
+      finished: ${{ steps.attach.outputs.finished }}
+    if: ${{ needs.attach6.outputs.finished == 'false' }}
+    steps:
+      - id: attach
+        name: Attach
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}. 2>&1 | tee output.txt || ATTACH_ERROR=1
+          if [ -n $ATTACH_ERROR ]; then
+              if grep -q "Job is pending execution" output.txt; then
+                  echo "::set-output name=finished::false"
+                  sleep 2h
+              else
+                  exit 1
+              fi
+          fi
+  attach8:
+    runs-on: ubuntu-latest
+    needs: [submit, attach7]
+    outputs:
+      finished: ${{ steps.attach.outputs.finished }}
+    if: ${{ needs.attach7.outputs.finished == 'false' }}
+    steps:
+      - id: attach
+        name: Attach
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}. 2>&1 | tee output.txt || ATTACH_ERROR=1
+          if [ -n $ATTACH_ERROR ]; then
+              if grep -q "Job is pending execution" output.txt; then
+                  echo "::set-output name=finished::false"
+                  sleep 2h
+              else
+                  exit 1
+              fi
+          fi
+  attach9:
+    runs-on: ubuntu-latest
+    needs: [submit, attach8]
+    outputs:
+      finished: ${{ steps.attach.outputs.finished }}
+    if: ${{ needs.attach8.outputs.finished == 'false' }}
+    steps:
+      - id: attach
+        name: Attach
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}. 2>&1 | tee output.txt || ATTACH_ERROR=1
+          if [ -n $ATTACH_ERROR ]; then
+              if grep -q "Job is pending execution" output.txt; then
+                  echo "::set-output name=finished::false"
+                  sleep 2h
+              else
+                  exit 1
+              fi
+          fi
+  attach10:
+    runs-on: ubuntu-latest
+    needs: [submit, attach9]
+    outputs:
+      finished: ${{ steps.attach.outputs.finished }}
+    if: ${{ needs.attach9.outputs.finished == 'false' }}
+    steps:
+      - id: attach
+        name: Attach
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}. 2>&1 | tee output.txt || ATTACH_ERROR=1
+          if [ -n $ATTACH_ERROR ]; then
+              if grep -q "Job is pending execution" output.txt; then
+                  echo "::set-output name=finished::false"
+                  sleep 2h
+              else
+                  exit 1
+              fi
+          fi
+  attach11:
+    runs-on: ubuntu-latest
+    needs: [submit, attach10]
+    outputs:
+      finished: ${{ steps.attach.outputs.finished }}
+    if: ${{ needs.attach10.outputs.finished == 'false' }}
+    steps:
+      - id: attach
+        name: Attach
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}. 2>&1 | tee output.txt || ATTACH_ERROR=1
+          if [ -n $ATTACH_ERROR ]; then
+              if grep -q "Job is pending execution" output.txt; then
+                  echo "::set-output name=finished::false"
+                  sleep 2h
+              else
+                  exit 1
+              fi
+          fi
+  attach12:
+    runs-on: ubuntu-latest
+    needs: [submit, attach11]
+    outputs:
+      finished: ${{ steps.attach.outputs.finished }}
+    if: ${{ needs.attach11.outputs.finished == 'false' }}
+    steps:
+      - id: attach
+        name: Attach
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}. 2>&1 | tee output.txt || ATTACH_ERROR=1
+          if [ -n $ATTACH_ERROR ]; then
+              if grep -q "Job is pending execution" output.txt; then
+                  echo "::set-output name=finished::false"
+                  sleep 2h
+              else
+                  exit 1
+              fi
+          fi
+  attach13:
+    runs-on: ubuntu-latest
+    needs: [submit, attach12]
+    outputs:
+      finished: ${{ steps.attach.outputs.finished }}
+    if: ${{ needs.attach12.outputs.finished == 'false' }}
+    steps:
+      - id: attach
+        name: Attach
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}. 2>&1 | tee output.txt || ATTACH_ERROR=1
+          if [ -n $ATTACH_ERROR ]; then
+              if grep -q "Job is pending execution" output.txt; then
+                  echo "::set-output name=finished::false"
+                  sleep 2h
+              else
+                  exit 1
+              fi
+          fi
+  attach14:
+    runs-on: ubuntu-latest
+    needs: [submit, attach13]
+    outputs:
+      finished: ${{ steps.attach.outputs.finished }}
+    if: ${{ needs.attach13.outputs.finished == 'false' }}
+    steps:
+      - id: attach
+        name: Attach
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}. 2>&1 | tee output.txt || ATTACH_ERROR=1
+          if [ -n $ATTACH_ERROR ]; then
+              if grep -q "Job is pending execution" output.txt; then
+                  echo "::set-output name=finished::false"
+                  sleep 2h
+              else
+                  exit 1
+              fi
+          fi
+  attach15:
+    runs-on: ubuntu-latest
+    needs: [submit, attach14]
+    outputs:
+      finished: ${{ steps.attach.outputs.finished }}
+    if: ${{ needs.attach14.outputs.finished == 'false' }}
+    steps:
+      - id: attach
+        name: Attach
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}. 2>&1 | tee output.txt || ATTACH_ERROR=1
+          if [ -n $ATTACH_ERROR ]; then
+              if grep -q "Job is pending execution" output.txt; then
+                  echo "::set-output name=finished::false"
+                  sleep 2h
+              else
+                  exit 1
+              fi
+          fi
+  attach16:
+    runs-on: ubuntu-latest
+    needs: [submit, attach15]
+    outputs:
+      finished: ${{ steps.attach.outputs.finished }}
+    if: ${{ needs.attach15.outputs.finished == 'false' }}
+    steps:
+      - id: attach
+        name: Attach
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}. 2>&1 | tee output.txt || ATTACH_ERROR=1
+          if [ -n $ATTACH_ERROR ]; then
+              if grep -q "Job is pending execution" output.txt; then
+                  echo "::set-output name=finished::false"
+                  sleep 2h
+              else
+                  exit 1
+              fi
+          fi
+  attach17:
+    runs-on: ubuntu-latest
+    needs: [submit, attach16]
+    outputs:
+      finished: ${{ steps.attach.outputs.finished }}
+    if: ${{ needs.attach16.outputs.finished == 'false' }}
+    steps:
+      - id: attach
+        name: Attach
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}. 2>&1 | tee output.txt || ATTACH_ERROR=1
+          if [ -n $ATTACH_ERROR ]; then
+              if grep -q "Job is pending execution" output.txt; then
+                  echo "::set-output name=finished::false"
+                  sleep 2h
+              else
+                  exit 1
+              fi
+          fi
+  attach18:
+    runs-on: ubuntu-latest
+    needs: [submit, attach17]
+    outputs:
+      finished: ${{ steps.attach.outputs.finished }}
+    if: ${{ needs.attach17.outputs.finished == 'false' }}
+    steps:
+      - id: attach
+        name: Attach
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}. 2>&1 | tee output.txt || ATTACH_ERROR=1
+          if [ -n $ATTACH_ERROR ]; then
+              if grep -q "Job is pending execution" output.txt; then
+                  echo "::set-output name=finished::false"
+                  sleep 2h
+              else
+                  exit 1
+              fi
+          fi
+  attach19:
+    runs-on: ubuntu-latest
+    needs: [submit, attach18]
+    outputs:
+      finished: ${{ steps.attach.outputs.finished }}
+    if: ${{ needs.attach18.outputs.finished == 'false' }}
+    steps:
+      - id: attach
+        name: Attach
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}. 2>&1 | tee output.txt || ATTACH_ERROR=1
+          if [ -n $ATTACH_ERROR ]; then
+              if grep -q "Job is pending execution" output.txt; then
+                  echo "::set-output name=finished::false"
+                  sleep 2h
+              else
+                  exit 1
+              fi
+          fi
+  attach20:
+    runs-on: ubuntu-latest
+    needs: [submit, attach19]
+    outputs:
+      finished: ${{ steps.attach.outputs.finished }}
+    if: ${{ needs.attach19.outputs.finished == 'false' }}
+    steps:
+      - id: attach
+        name: Attach
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}. 2>&1 | tee output.txt || ATTACH_ERROR=1
+          if [ -n $ATTACH_ERROR ]; then
+              if grep -q "Job is pending execution" output.txt; then
+                  echo "::set-output name=finished::false"
+                  sleep 2h
+              else
+                  exit 1
+              fi
+          fi
+  attach21:
+    runs-on: ubuntu-latest
+    needs: [submit, attach20]
+    outputs:
+      finished: ${{ steps.attach.outputs.finished }}
+    if: ${{ needs.attach20.outputs.finished == 'false' }}
+    steps:
+      - id: attach
+        name: Attach
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}. 2>&1 | tee output.txt || ATTACH_ERROR=1
+          if [ -n $ATTACH_ERROR ]; then
+              if grep -q "Job is pending execution" output.txt; then
+                  echo "::set-output name=finished::false"
+                  sleep 2h
+              else
+                  exit 1
+              fi
+          fi
+  attach22:
+    runs-on: ubuntu-latest
+    needs: [submit, attach21]
+    outputs:
+      finished: ${{ steps.attach.outputs.finished }}
+    if: ${{ needs.attach21.outputs.finished == 'false' }}
+    steps:
+      - id: attach
+        name: Attach
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}. 2>&1 | tee output.txt || ATTACH_ERROR=1
+          if [ -n $ATTACH_ERROR ]; then
+              if grep -q "Job is pending execution" output.txt; then
+                  echo "::set-output name=finished::false"
+                  sleep 2h
+              else
+                  exit 1
+              fi
+          fi
+  attach23:
+    runs-on: ubuntu-latest
+    needs: [submit, attach22]
+    outputs:
+      finished: ${{ steps.attach.outputs.finished }}
+    if: ${{ needs.attach22.outputs.finished == 'false' }}
+    steps:
+      - id: attach
+        name: Attach
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}. 2>&1 | tee output.txt || ATTACH_ERROR=1
+          if [ -n $ATTACH_ERROR ]; then
+              if grep -q "Job is pending execution" output.txt; then
+                  echo "::set-output name=finished::false"
+                  sleep 2h
+              else
+                  exit 1
+              fi
+          fi
+  attach24:
+    runs-on: ubuntu-latest
+    needs: [submit, attach23]
+    outputs:
+      finished: ${{ steps.attach.outputs.finished }}
+    if: ${{ needs.attach23.outputs.finished == 'false' }}
+    steps:
+      - id: attach
+        name: Attach
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}. 2>&1 | tee output.txt || ATTACH_ERROR=1
+          if [ -n $ATTACH_ERROR ]; then
+              if grep -q "Job is pending execution" output.txt; then
+                  echo "::set-output name=finished::false"
+                  sleep 2h
+              else
+                  exit 1
+              fi
+          fi
+  attach25:
+    runs-on: ubuntu-latest
+    needs: [submit, attach24]
+    outputs:
+      finished: ${{ steps.attach.outputs.finished }}
+    if: ${{ needs.attach24.outputs.finished == 'false' }}
+    steps:
+      - id: attach
+        name: Attach
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}. 2>&1 | tee output.txt || ATTACH_ERROR=1
+          if [ -n $ATTACH_ERROR ]; then
+              if grep -q "Job is pending execution" output.txt; then
+                  echo "::set-output name=finished::false"
+                  sleep 2h
+              else
+                  exit 1
+              fi
+          fi
+  attach26:
+    runs-on: ubuntu-latest
+    needs: [submit, attach25]
+    outputs:
+      finished: ${{ steps.attach.outputs.finished }}
+    if: ${{ needs.attach25.outputs.finished == 'false' }}
+    steps:
+      - id: attach
+        name: Attach
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}. 2>&1 | tee output.txt || ATTACH_ERROR=1
+          if [ -n $ATTACH_ERROR ]; then
+              if grep -q "Job is pending execution" output.txt; then
+                  echo "::set-output name=finished::false"
+                  sleep 2h
+              else
+                  exit 1
+              fi
+          fi
+  attach27:
+    runs-on: ubuntu-latest
+    needs: [submit, attach26]
+    outputs:
+      finished: ${{ steps.attach.outputs.finished }}
+    if: ${{ needs.attach26.outputs.finished == 'false' }}
+    steps:
+      - id: attach
+        name: Attach
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}. 2>&1 | tee output.txt || ATTACH_ERROR=1
+          if [ -n $ATTACH_ERROR ]; then
+              if grep -q "Job is pending execution" output.txt; then
+                  echo "::set-output name=finished::false"
+                  sleep 2h
+              else
+                  exit 1
+              fi
+          fi
+  attach28:
+    runs-on: ubuntu-latest
+    needs: [submit, attach27]
+    outputs:
+      finished: ${{ steps.attach.outputs.finished }}
+    if: ${{ needs.attach27.outputs.finished == 'false' }}
+    steps:
+      - id: attach
+        name: Attach
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}. 2>&1 | tee output.txt || ATTACH_ERROR=1
+          if [ -n $ATTACH_ERROR ]; then
+              if grep -q "Job is pending execution" output.txt; then
+                  echo "::set-output name=finished::false"
+                  sleep 2h
+              else
+                  exit 1
+              fi
+          fi
+  attach29:
+    runs-on: ubuntu-latest
+    needs: [submit, attach28]
+    outputs:
+      finished: ${{ steps.attach.outputs.finished }}
+    if: ${{ needs.attach28.outputs.finished == 'false' }}
+    steps:
+      - id: attach
+        name: Attach
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}. 2>&1 | tee output.txt || ATTACH_ERROR=1
+          if [ -n $ATTACH_ERROR ]; then
+              if grep -q "Job is pending execution" output.txt; then
+                  echo "::set-output name=finished::false"
+                  sleep 2h
+              else
+                  exit 1
+              fi
+          fi
+  attach30:
+    runs-on: ubuntu-latest
+    needs: [submit, attach29]
+    outputs:
+      finished: ${{ steps.attach.outputs.finished }}
+    if: ${{ needs.attach29.outputs.finished == 'false' }}
+    steps:
+      - id: attach
+        name: Attach
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}. 2>&1 | tee output.txt || ATTACH_ERROR=1
+          if [ -n $ATTACH_ERROR ]; then
+              if grep -q "Job is pending execution" output.txt; then
+                  echo "::set-output name=finished::false"
+                  sleep 2h
+              else
+                  exit 1
+              fi
+          fi
+  attach31:
+    runs-on: ubuntu-latest
+    needs: [submit, attach30]
+    outputs:
+      finished: ${{ steps.attach.outputs.finished }}
+    if: ${{ needs.attach30.outputs.finished == 'false' }}
+    steps:
+      - id: attach
+        name: Attach
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}. 2>&1 | tee output.txt || ATTACH_ERROR=1
+          if [ -n $ATTACH_ERROR ]; then
+              if grep -q "Job is pending execution" output.txt; then
+                  echo "::set-output name=finished::false"
+                  sleep 2h
+              else
+                  exit 1
+              fi
+          fi
+  attach32:
+    runs-on: ubuntu-latest
+    needs: [submit, attach31]
+    outputs:
+      finished: ${{ steps.attach.outputs.finished }}
+    if: ${{ needs.attach31.outputs.finished == 'false' }}
+    steps:
+      - id: attach
+        name: Attach
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}. 2>&1 | tee output.txt || ATTACH_ERROR=1
+          if [ -n $ATTACH_ERROR ]; then
+              if grep -q "Job is pending execution" output.txt; then
+                  echo "::set-output name=finished::false"
+                  sleep 2h
+              else
+                  exit 1
+              fi
+          fi
+  attach33:
+    runs-on: ubuntu-latest
+    needs: [submit, attach32]
+    outputs:
+      finished: ${{ steps.attach.outputs.finished }}
+    if: ${{ needs.attach32.outputs.finished == 'false' }}
+    steps:
+      - id: attach
+        name: Attach
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}. 2>&1 | tee output.txt || ATTACH_ERROR=1
+          if [ -n $ATTACH_ERROR ]; then
+              if grep -q "Job is pending execution" output.txt; then
+                  echo "::set-output name=finished::false"
+                  sleep 2h
+              else
+                  exit 1
+              fi
+          fi
+  attach34:
+    runs-on: ubuntu-latest
+    needs: [submit, attach33]
+    outputs:
+      finished: ${{ steps.attach.outputs.finished }}
+    if: ${{ needs.attach33.outputs.finished == 'false' }}
+    steps:
+      - id: attach
+        name: Attach
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}. 2>&1 | tee output.txt || ATTACH_ERROR=1
+          if [ -n $ATTACH_ERROR ]; then
+              if grep -q "Job is pending execution" output.txt; then
+                  echo "::set-output name=finished::false"
+                  sleep 2h
+              else
+                  exit 1
+              fi
+          fi
+  attach35:
+    runs-on: ubuntu-latest
+    needs: [submit, attach34]
+    outputs:
+      finished: ${{ steps.attach.outputs.finished }}
+    if: ${{ needs.attach34.outputs.finished == 'false' }}
+    steps:
+      - id: attach
+        name: Attach
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}. 2>&1 | tee output.txt || ATTACH_ERROR=1
+          if [ -n $ATTACH_ERROR ]; then
+              if grep -q "Job is pending execution" output.txt; then
+                  echo "::set-output name=finished::false"
+                  sleep 2h
+              else
+                  exit 1
+              fi
+          fi
+  attach36:
+    runs-on: ubuntu-latest
+    needs: [submit, attach35]
+    outputs:
+      finished: ${{ steps.attach.outputs.finished }}
+    if: ${{ needs.attach35.outputs.finished == 'false' }}
+    steps:
+      - id: attach
+        name: Attach
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}. 2>&1 | tee output.txt || ATTACH_ERROR=1
+          if [ -n $ATTACH_ERROR ]; then
+              if grep -q "Job is pending execution" output.txt; then
+                  echo "::set-output name=finished::false"
+                  sleep 2h
+              else
+                  exit 1
+              fi
+          fi

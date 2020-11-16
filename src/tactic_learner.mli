@@ -1,12 +1,7 @@
 open Ltac_plugin
 open Tacexpr
 open Constr
-
-module Id : sig
-  type t
-  val equal     : t -> t -> bool
-  val to_string : t -> string
-end
+open Names
 
 type id = Id.t
 
@@ -17,11 +12,12 @@ type sexpr = Node of sexpr list | Leaf of string
 
 module type TacticianStructures = sig
   type term
+  type named_context = (term, term) Context.Named.pt
   val term_sexpr : term -> sexpr
   val term_repr  : term -> constr
 
   type proof_state
-  val proof_state_hypotheses  : proof_state -> (id * term option * term) list
+  val proof_state_hypotheses  : proof_state -> named_context
   val proof_state_goal        : proof_state -> term
   val proof_state_equal       : proof_state -> proof_state -> bool
   val proof_state_independent : proof_state -> bool

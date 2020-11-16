@@ -1,4 +1,5 @@
 open Printf
+open OpamConfigCommand
 
 let usage () = print_endline "\
 This is a utility for Tactician that will help you configure it correctly.
@@ -60,7 +61,7 @@ let find_exists files =
   let exists_text = List.map (fun b -> if b then "exists" else "does not exist") exists in
   List.iter2 (fun f e -> printf "File %s %s\n" f e) files exists_text;
   let combined = List.map2 (fun a b -> (a, b)) files exists in
-  let coqrcs = List.filter (fun (f, e) -> e) combined in
+  let coqrcs = List.filter (fun (_, e) -> e) combined in
   List.map fst coqrcs
 
 let find_coqrc_files () =
@@ -155,8 +156,31 @@ From Tactician Require Import Ltac1.
     print_endline "Files patched!"
   )
 
+let opam_init_no_lock f =
+  OpamClientConfig.opam_init ();
+  OpamGlobalState.with_ `Lock_none f
+
+let config_add_remove gt ?st name value =
+  let st = set_opt_switch gt ?st name (`Remove value) in
+  set_opt_switch gt ?st name (`Add value)
+
+let wrap_command = "[\"with-tactician\"] {coq-tactician:installed}"
+let pre_build_command = "[\"tactician-patch\" name version] {coq-tactician:installed}"
+
 let inject () =
-  print_endline "COQEXTRAFLAGS='-rifrom Tactician Ltac1.Record'; export COQEXTRAFLAGS;"
+  opam_init_no_lock @@ fun gt ->
+  let st = config_add_remove gt "wrap-build-commands" wrap_command in
+  let _ = config_add_remove gt ?st "pre-build-commands" pre_build_command in
+  print_endline "\nTactician will now instrument Coq packages installed through opam.";
+  print_endline "Run tactician eject to reverse this command."
+
+let eject () =
+  OpamClientConfig.opam_init ();
+  OpamGlobalState.with_ `Lock_none @@ fun gt ->
+  let st = set_opt_switch gt "wrap-build-commands" (`Remove wrap_command) in
+  let _ = set_opt_switch gt ?st "pre-build-commands" (`Remove pre_build_command) in
+  print_endline "\nTactician will no longer instrument packages installed through opam.";
+  print_endline "Run tactician inject to re-inject."
 
 let string_in str ls =
   let filtered = List.filter (fun s -> String.equal s str) ls in
@@ -186,6 +210,20 @@ let stdlib () =
     )
   )
 
+let install () =
+  OpamClientConfig.opam_init ();
+  let pkg = OpamFormula.atom_of_string "irmin<2.0.0" in
+  OpamGlobalState.with_ `Lock_none @@ fun gt ->
+  OpamSwitchState.with_ `Lock_write gt  @@ fun st ->
+  OpamClient.install st [ pkg ]
+
+
+(*
+setenv: [
+  COQEXTRAFLAGS = "-rifrom Tactician Ltac1.Record"
+]
+*)
+
 let () =
   let args = Sys.argv in
   if Array.length args == 1 then
@@ -198,7 +236,9 @@ let () =
     let arg = Sys.argv.(1) in
     match arg with
     | "inject" -> inject ()
+    | "eject" -> eject ()
     | "enable" -> install_rcfile ()
+    | "check" -> exit 1
     | "disable" -> remove_rcfile ()
     | "recompile" -> stdlib ()
     | "--help" | "-h" | "help" -> usage ()

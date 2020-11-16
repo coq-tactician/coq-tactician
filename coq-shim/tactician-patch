@@ -1,0 +1,36 @@
+#!/bin/bash
+
+if [ $# -lt 1 ]
+then
+    echo "Usage: tactician-patch package-name [package-version]"
+    exit 1
+fi
+
+patch() {
+    echo "Patching ${1}"
+    echo
+    git apply $1 || { echo "Patch error!" ; exit 1 ; }
+    echo "Package patched!"
+}
+
+TACTICIANLIB=$(opam var coq-tactician:share)
+PACKAGE="$1"; shift
+VERSION="$1"; shift
+
+if [ ! -z "$VERSION" ]; then
+    VERSION=".$VERSION"
+fi
+
+SPATCH="${TACTICIANLIB}/${PACKAGE}${VERSION}.patch"
+PATCH="${TACTICIANLIB}/${PACKAGE}.patch"
+
+if test -f "$SPATCH"
+then
+    patch $SPATCH
+else if test -f "$PATCH"
+     then
+         patch $PATCH
+     else
+         echo "No patch available for ${PACKAGE}${VERSION}"
+     fi
+fi

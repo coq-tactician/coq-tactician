@@ -1,4 +1,3 @@
-module Id = Tactic_learner_internal.Id
 type id = Tactic_learner_internal.id
 
 module IdMap = Tactic_learner_internal.IdMap
