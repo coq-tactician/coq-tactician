@@ -1,4 +1,4 @@
 #!/bin/bash
 TACTICIANDIR=$(opam var coq:lib)/user-contrib/Tactician
 TACTICIANFLAGS="-q -I $TACTICIANDIR -R $TACTICIANDIR Tactician -rifrom Tactician Ltac1.Record"
-coqc.real ${TACTICIANFLAGS} "$@"
+/tmp/tactician.coqc.real ${TACTICIANFLAGS} "$@"
