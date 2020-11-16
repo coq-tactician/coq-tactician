@@ -76,6 +76,7 @@ let try_locate_absolute_library dir =
 
 let benchmarking = ref None
 let featureprinting = ref false
+let deterministic = ref false
 
 let base_filename =
   let dirpath = Global.current_dirpath () in
@@ -118,9 +119,13 @@ let benchoptions = Goptions.{optdepr = false;
                                               | None -> Feedback.msg_notice (
                                                   Pp.str "No source file could be found. Disabling benchmarking.");
                                                 benchmarking := None
-                                              | Some f ->
+                                              | Some _ ->
                                                 disable_queue (); ignore (eval_file ()))
                                           | _ -> ())}
+let deterministicoptions = Goptions.{optdepr = false;
+                             optkey = ["Tactician"; "Benchmark"; "Deterministic"];
+                             optread = (fun () -> !deterministic);
+                             optwrite = (fun b -> deterministic := b)}
 let featureoptions = Goptions.{optdepr = false;
                                optkey = ["Tactician"; "Output"; "Features"];
                                optread = (fun () -> !featureprinting);
@@ -129,9 +134,10 @@ let featureoptions = Goptions.{optdepr = false;
                                               | None -> Feedback.msg_notice (
                                                   Pp.str "No source file could be found. Disabling feature writing.");
                                                 benchmarking := None
-                                              | Some f -> ignore (feat_file ())))}
+                                              | Some _ -> ignore (feat_file ())))}
 
 let _ = Goptions.declare_int_option benchoptions
+let _ = Goptions.declare_bool_option deterministicoptions
 let _ = Goptions.declare_bool_option featureoptions
 
 let _ = Random.self_init ()
@@ -147,8 +153,16 @@ let subst_outcomes (s, (outcomes, tac)) =
   let subst_tac tac =
     let tac = tactic_repr tac in
     TS.tactic_make (Tacsubst.subst_tactic s tac) in
-  let subst_pf (hyps, g) = Mod_subst.(List.map (
-      fun (id, te, ty) -> (id, Option.map (subst_mps s) te, subst_mps s ty)) hyps, subst_mps s g) in
+  let subst_named_context =
+    let open Mod_subst in
+    let open Context in
+    List.map (function
+        | Named.Declaration.LocalAssum (id, typ) ->
+          Named.Declaration.LocalAssum (id, subst_mps s typ)
+        | Named.Declaration.LocalDef (id, term, typ) ->
+          Named.Declaration.LocalDef (id, subst_mps s term, subst_mps s typ)
+      ) in
+  let subst_pf (hyps, g) = Mod_subst.(subst_named_context hyps, subst_mps s g) in
   let rec subst_pd = function
     | End -> End
     | Step ps -> Step (subst_ps ps)
@@ -514,6 +528,7 @@ let tclDebugTac t env debug =
     let open Proofview in
     let open Notations in
     let tac2 = parse_tac t in
+    let tac2 = tclTIMEOUT 1 tac2 in
     (* let tac2 = tclUNIT () >>= fun () ->
      *     try
      *         tac2 >>= (fun () -> CErrors.user_err (Pp.str "blaat"))
@@ -567,21 +582,22 @@ let userPredict =
   (Proofview.tclLIFT (Proofview.NonLogical.print_info (print_rank env r)))
 
 let tac_exec_count = ref 0
-let tacpredict =
+let tacpredict max_reached =
   let open Proofview in
   let open Notations in
   predict >>= fun predictions ->
-  let taceval i focus (t, h) =
-    tclFOCUS ~nosuchgoal:(Tacticals.New.tclZEROMSG (Pp.str "Predictor gave wrong focus"))
-      (focus+1) (focus+1)
-    (Goal.enter_one (fun gl ->
-      let env = Goal.env gl in
-      push_witness { tac = t; focus; prediction_index = i } <*>
-      (tac_exec_count := 1 + !tac_exec_count;
-      tclDebugTac t env false) >>= fun () ->
-      Goal.goals >>= fun gls ->
-      let outcome = mk_outcome (gl, gls) in
-      tclUNIT (learner_evaluate outcome (t, h)))) in
+  let taceval i focus (t, h) = tclUNIT () >>= fun () ->
+    if max_reached () then Tacticals.New.tclZEROMSG (Pp.str "Ran out of executions") else
+      tclFOCUS ~nosuchgoal:(Tacticals.New.tclZEROMSG (Pp.str "Predictor gave wrong focus"))
+        (focus+1) (focus+1)
+        (Goal.enter_one (fun gl ->
+             let env = Goal.env gl in
+             push_witness { tac = t; focus; prediction_index = i } <*>
+             (tac_exec_count := 1 + !tac_exec_count;
+              tclDebugTac t env false) >>= fun () ->
+             Goal.goals >>= fun gls ->
+             let outcome = mk_outcome (gl, gls) in
+             tclUNIT (learner_evaluate outcome (t, h)))) in
   let transform i (r : Tactic_learner_internal.TS.prediction) =
     { confidence = r.confidence; focus = r.focus; tactic = taceval i r.focus r.tactic } in
   tclUNIT (stream_mapi (fun i p -> transform i p) predictions)
@@ -609,9 +625,13 @@ let dec_search_recursion_depth () =
 let get_search_recursion_depth () =
   modify_field search_recursion_depth_field (fun n -> n, n) (fun () -> 0)
 
-let commonSearch () =
+let commonSearch max_exec =
     let open Proofview in
     let open Notations in
+    (* TODO: Remove this hack *)
+    let max_reached () = match max_exec with
+      | None -> false
+      | Some t -> !tac_exec_count >= t in
     (* We want to allow at least one nested search, such that users can embed search in more complicated
        expressions. But allowing infinite nesting will just lead to divergence. *)
     inc_search_recursion_depth () >>= fun n ->
@@ -625,7 +645,7 @@ let commonSearch () =
              tclLIFT (NonLogical.make (fun () ->
                  tac_exec_count := 0; Dumpglob.pause(); CWarnings.set_flags ("-all"))))
           <*> tclOR
-            (tclONCE (Tacticals.New.tclCOMPLETE (search_with_strategy tacpredict)) <*>
+            (tclONCE (Tacticals.New.tclCOMPLETE (search_with_strategy max_reached (tacpredict max_reached))) <*>
              get_witness () >>= fun wit -> empty_witness () <*>
              dec_search_recursion_depth () >>= fun () -> setFlags () <*> tclUNIT (wit, !tac_exec_count))
             (fun (e, i) -> setFlags () <*> tclZERO ~info:i e))
@@ -640,9 +660,11 @@ let benchmarkSearch name : unit Proofview.tactic =
     let open Proofview in
     let open Notations in
     let modpath = Global.current_modpath () in
-    let time = match !benchmarking with
+    let abstract_time = match !benchmarking with
       | None -> assert false
       | Some t -> t in
+    let timeout_command = if !deterministic then fun x -> x else tclTIMEOUT2 abstract_time in
+    let max_exec = if !deterministic then Some abstract_time else None in
     let full_name = Names.ModPath.to_string modpath ^ "." ^ Names.Id.to_string name in
     let print_success env (wit, count) start_time =
       let tcs, m = List.split (List.map (fun {tac;focus;prediction_index} ->
@@ -654,16 +676,16 @@ let benchmarkSearch name : unit Proofview.tactic =
       (make (fun () -> print_to_eval ("\t" ^ m ^ "\t" ^ tstring ^ "\t" ^ tdiff ^ "\t" ^ string_of_int count))) >>
       (print_info (Pp.str ("Proof found for " ^ full_name ^ "!"))) in
     let print_name = NonLogical.make (fun () ->
-        print_to_eval ("\n" ^ (full_name) ^ "\t" ^ string_of_int time)) in
+        print_to_eval ("\n" ^ (full_name) ^ "\t" ^ string_of_int abstract_time)) in
     get_benchmarked () >>= fun benchmarked ->
     if benchmarked then tclUNIT () else
       set_benchmarked () <*>
       let start_time = Unix.gettimeofday () in
-      tclTIMEOUT2 time (tclENV >>= fun env ->
-                        tclLIFT (NonLogical.print_info (Pp.str ("Start proof search for " ^ full_name))) <*>
-                        tclLIFT print_name <*>
-                        commonSearch () >>=
-                        fun m -> tclLIFT (print_success env m start_time))
+      timeout_command (tclENV >>= fun env ->
+                       tclLIFT (NonLogical.print_info (Pp.str ("Start proof search for " ^ full_name))) <*>
+                       tclLIFT print_name <*>
+                       commonSearch max_exec >>=
+                       fun m -> tclLIFT (print_success env m start_time))
 
 let nested_search_solutions_field : (glob_tactic_expr * int) list list Evd.Store.field = Evd.Store.field ()
 let push_nested_search_solutions tcs =
@@ -673,7 +695,7 @@ let empty_nested_search_solutions () =
 let userSearch =
     let open Proofview in
     let open Notations in
-    tclUNIT () >>= fun () -> commonSearch () >>= fun (wit, count) -> get_search_recursion_depth () >>= fun n ->
+    tclUNIT () >>= fun () -> commonSearch None >>= fun (wit, count) -> get_search_recursion_depth () >>= fun n ->
     let tcs, _ = List.split (List.map (fun {tac;focus;prediction_index} ->
         ((tac, focus), prediction_index)) wit) in
     if n >= 1 then push_nested_search_solutions tcs else
@@ -715,8 +737,17 @@ let qualid_of_global env r =
 
 (* End name globalization *)
 
+let load_plugins () =
+  let open Mltop in
+  let plugins = [("ssreflect_plugin", "tactician_ssreflect_plugin")] in
+  let load (dep, target) =
+    if module_is_known dep && not (module_is_known target) then
+      declare_ml_modules false [target] in
+  List.iter load plugins
+
 (* Returns true if tactic execution should be skipped *)
 let pre_vernac_solve pstate id =
+  load_plugins ();
   (* If this needs to work again, put the current name in the evdmap storage *)
   (* if not (Names.Id.equal !current_name new_name) then (
    *   if !featureprinting then print_to_feat ("#lemma " ^ (Names.Id.to_string new_name) ^ "\n");

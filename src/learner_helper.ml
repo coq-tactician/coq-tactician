@@ -1,4 +1,5 @@
 open Tactic_learner
+open Context
 
 module L (TS: TacticianStructures) = struct
   open TS
@@ -98,9 +99,12 @@ module L (TS: TacticianStructures) = struct
     let goal = proof_state_goal ps in
     let mkfeats t = term_sexpr_to_features max_length (term_sexpr t) in
     (* TODO: distinquish goal features from hyp features *)
-    let hyp_feats = List.map (fun (id, term, typ) ->
-        mkfeats typ @ Option.default [] (Option.map mkfeats term)
-      ) hyps in
+    let hyp_feats = List.map (function
+        | Named.Declaration.LocalAssum (_, typ) ->
+          mkfeats typ
+        | Named.Declaration.LocalDef (_, term, typ) ->
+          mkfeats typ @ mkfeats term)
+        hyps in
     mkfeats goal @ List.flatten hyp_feats
 
   let s2s s = Leaf s
@@ -108,9 +112,12 @@ module L (TS: TacticianStructures) = struct
   let proof_state_to_sexpr ps =
     let goal = proof_state_goal ps in
     let hyps = proof_state_hypotheses ps in
-    let hyps = List.map (fun (id, term, typ) ->
-        Node (s2s (Id.to_string id) :: term_sexpr typ ::
-              Option.default [] (Option.map (fun t -> [term_sexpr t]) term))) hyps in
+    let hyps = List.map (function
+        | Named.Declaration.LocalAssum (id, typ) ->
+          Node (s2s (Names.Id.to_string id.binder_name) :: term_sexpr typ :: [])
+        | Named.Declaration.LocalDef (id, term, typ) ->
+          Node (s2s (Names.Id.to_string id.binder_name) :: term_sexpr typ :: [term_sexpr term]))
+         hyps in
     Node [s2s "State"; Node [s2s "Goal"; term_sexpr goal]; Node [s2s "Hypotheses"; Node hyps]]
 
   let proof_state_to_string ps env evar_map =
@@ -118,11 +125,12 @@ module L (TS: TacticianStructures) = struct
         Printer.pr_constr_env env evar_map (term_repr t))) in
     let goal = constr_str (proof_state_goal ps) in
     let hyps = proof_state_hypotheses ps in
-    let hyps = List.map (fun (id, term, typ) ->
-        let id_str = Tactic_learner.Id.to_string id in
-        let term_str = Option.default "" (Option.map (fun t -> " := " ^ constr_str t) term) in
-        let typ_str = constr_str typ in
-        id_str ^ " " ^ term_str ^ " : " ^ typ_str
+    let id_str id = Names.Id.to_string id.binder_name in
+    let hyps = List.map (function
+        | Named.Declaration.LocalAssum (id, typ) ->
+          id_str id ^ " : " ^ constr_str typ
+        | Named.Declaration.LocalDef (id, term, typ) ->
+          id_str id ^ " := " ^ constr_str term ^ " : " ^ constr_str typ
       ) hyps in
     String.concat ", " hyps ^ " |- " ^ goal
 end

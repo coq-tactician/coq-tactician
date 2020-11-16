@@ -6,12 +6,16 @@
  (modules (
    "g_ltac1_record"
    ltacrecord
+   diagonal_iterative_search
+   naiveknn_learner
    search_strategy
    search_strategy_internal
+   learner_helper
    tactic_learner
    tactic_learner_internal
    tactic_normalize
    tactic_annotate
+   known_witnesses
    cook_tacexpr
    gendischarge
    mapping_helpers
@@ -30,6 +34,21 @@
  )
 )
 (library
+ (name tactician_ssreflect_plugin)
+ (public_name coq-tactician.ssreflect-plugin)
+ (flags :standard -rectypes -w -27 -warn-error -A)
+ (modules (
+   "known_ssr_witnesses"
+   map_ssr_witnesses
+ ))
+ (libraries
+   coq.plugins.ltac
+   coq.plugins.ssrmatching
+   coq.plugins.ssreflect
+   coq-tactician.record-plugin
+ )
+)
+(library
  (name tactician_ltac1_tactics_plugin)
  (public_name coq-tactician.tactics-plugin)
  (flags :standard -rectypes -w -27 -warn-error -A)
@@ -45,5 +64,6 @@
  (modules ("tactician"))
  (libraries
    unix
+   opam-client
  )
 )

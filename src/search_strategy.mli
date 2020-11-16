@@ -6,6 +6,7 @@ type prediction =
   ; tactic     : float tactic }
 
 (* TODO: Modify this with a more failsafe contract *)
-type search_strategy = prediction Stream.t tactic -> unit tactic
+(* TODO: Remove (unit -> bool) this is a hack *)
+type search_strategy = (unit -> bool) -> prediction Stream.t tactic -> unit tactic
 
 val register_search_strategy : string -> search_strategy -> unit

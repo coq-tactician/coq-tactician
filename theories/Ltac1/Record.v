@@ -2,10 +2,8 @@ Declare ML Module "ltac_plugin".
 Declare ML Module "ground_plugin".
 Declare ML Module "extraction_plugin".
 Declare ML Module "recdef_plugin".
-Declare ML Module "ssrmatching_plugin".
-Declare ML Module "ssreflect_plugin".
 Declare ML Module "tactician_ltac1_record_plugin".
-Global Set Default Proof Mode "Tactician Ltac1".
+Export Set Default Proof Mode "Tactician Ltac1".
 
 Tactician Record Then Decompose.
 Tactician Record Dispatch Decompose.

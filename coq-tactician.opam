@@ -20,9 +20,11 @@ authors: "Lasse Blaauwbroek <lasse@blaauwbroek.eu"
 depends: [
   "ocaml" {>= "4.08"}
   "dune" {>= "2.5"}
+  "opam-client" {>= "2.1.0~beta2"}
   "coq" {>= "8.12" & < "8.13~"}
   "coq-tactician-dummy"
 ]
+depexts: ["git"]
 build: [
   ["dune" "build" "--release" "-j" jobs]
 ]
@@ -33,9 +35,6 @@ In order to enable Tactician, you should run
 
 tactician enable
 " {success}]
-setenv: [
-  COQEXTRAFLAGS = "-rifrom Tactician Ltac1.Record"
-]
 tags: [
   "keyword:tactic-learning"
   "keyword:machine-learning"

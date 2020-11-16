@@ -1,0 +1,7 @@
+#!/bin/bash
+set -eu
+
+OPAMBIN=$(opam var bin)
+
+bwrap --dev-bind / / --bind $OPAMBIN/coqc $OPAMBIN/coqc.real \
+      --bind $(opam var coq-tactician:lib)/coqc $OPAMBIN/coqc "$@"
