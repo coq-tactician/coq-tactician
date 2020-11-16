@@ -35,10 +35,10 @@ ATTACH=$(cat <<'EOF'
           set +e
           ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
               ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}. 2>&1 | tee output.txt
-          set -e
           if [ $? -eq 1 ]; then
               if grep -q "Job is pending execution" output.txt; then
                   echo "::set-output name=finished::false"
+                  echo "Sleeping 2h to wait for job execution"
                   sleep 2h
               else
                   exit 1
