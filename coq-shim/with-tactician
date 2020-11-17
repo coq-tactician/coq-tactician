@@ -2,6 +2,7 @@
 set -eu
 
 OPAMBIN=$(opam var bin)
+TACTICIANLIB=$(opam var coq-tactician:lib)
 
-bwrap --dev-bind / / --bind $OPAMBIN/coqc /tmp/tactician.coqc.real \
-      --bind $(opam var coq-tactician:lib)/coqc $OPAMBIN/coqc "$@"
+bwrap --dev-bind / / --bind $OPAMBIN/coqc $TACTICIANLIB/coqc.real \
+      --bind $TACTICIANLIB/coqc $OPAMBIN/coqc "$@"

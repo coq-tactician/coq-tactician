@@ -9,6 +9,11 @@
  (package coq-tactician)
 )
 (install
+ (files coqc.real) ; mount point for the real coqc
+ (section lib)
+ (package coq-tactician)
+)
+(install
  (files
    coq-hott.patch
    coq-hott.8.11.patch
