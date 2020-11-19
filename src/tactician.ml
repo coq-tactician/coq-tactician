@@ -1,26 +1,6 @@
 open Printf
 open OpamConfigCommand
-
-let usage () = print_endline "\
-This is a utility for Tactician that will help you configure it correctly.
-Options:
-
-- To enable Tactician, run
-  tactician enable
-
-- To disable Tactician, run
-  tactician disable
-
-- To inject tacticians instrumentation into Opam installations, run
-  tactician inject
-
-- To disable tacticians instrumentation into Opam installations, run
-  tactician eject
-
-- After you have installed or removed the package coq-tactician-stdlib run the
-  following command to help you with recompilation of other packages:
-  tactician recompile
-"
+open Cmdliner
 
 let coqrc_string = "From Tactician Require Import Ltac1.\n"
 
@@ -34,14 +14,6 @@ let syscall cmd =
    with End_of_file -> ());
   let _ = Unix.close_process (ic, oc) in
   (Buffer.contents buf)
-
-let rec question str =
-  printf "%s [y/n]\n" str;
-  let answer = read_line () in
-  match answer with
-  | "y" -> true
-  | "n" -> false
-  | _ -> print_endline "No valid answer"; question str
 
 (* Taken from coq envars.ml *)
 let getenv_else s dft = try Sys.getenv s with Not_found -> dft ()
@@ -102,30 +74,28 @@ let append file str =
   close_out oc
 
 let install_rcfile () =
-  let string1 = "\
-In order to activate Tactician, the following snippet needs to be in your coqrc file:
-
-From Tactician Require Import Ltac1.
-" in
-  print_endline string1;
-  match find_coqrc_files () with
+  let success = "\nFile patched! Run 'tactician disable' to reverse this command" in
+  (match find_coqrc_files () with
   | [] ->
-    let ans = question "\nNo coqrc file appears to exist on your system.\n\
-                        Would you like us to create and populate the file ~/.coqrc?" in
+    let ans = OpamConsole.confirm
+        ("\nNo coqrc file appears to exist on your system. Would you like to create and \
+          populate the file ~/.coqrc for Tactician support?") in
     if ans then (
       append (homedir () ^ ".coqrc")  coqrc_string;
-      print_endline "File created!"
+      print_endline success
     )
   | f::_ ->
     let already_installed = check_coqrc_file f in
     if already_installed then
-      print_endline ("\nIt appears that your coqrc file " ^ f ^ " already properly loads Tactician")
+      print_endline
+        ("\nIt appears that the coqrc file " ^ f ^ " already properly loads Tactician")
     else
-      let ans = question ("\nWould you like tactician to modify the coqrc file " ^ f ^ " for you?") in
+      let ans = OpamConsole.confirm
+          "\nWould you like to modify the coqrc file %s for Tactician support?" f in
       if ans then (
         append f coqrc_string;
-        print_endline "File patched!"
-      )
+        print_endline success
+      )); `Ok ()
 
 let write f lines =
   let rec aux chan lines =
@@ -146,18 +116,12 @@ let remove_from_file f str =
   close_in chan
 
 let remove_rcfile () =
-  let string1 = "\
-In order to disable Tactician, the following snippet needs to be removed from your coqrc files:
-
-From Tactician Require Import Ltac1.
-" in
-  print_endline string1;
-  let ans = question "Would you like to proceed?" in
+  let ans = OpamConsole.confirm "Would you like to rmove Tactician support from your coqrc files?" in
   if ans then (
     let coqrcs = find_coqrc_files () in
     List.iter (fun f -> remove_from_file f coqrc_string) coqrcs;
-    print_endline "Files patched!"
-  )
+    print_endline "\nFile patched! Run 'tactician enable' to reverse this command"
+  ); `Ok ()
 
 let opam_init_no_lock f =
   OpamClientConfig.opam_init ();
@@ -175,7 +139,8 @@ let inject () =
   let st = config_add_remove gt "wrap-build-commands" wrap_command in
   let _ = config_add_remove gt ?st "pre-build-commands" pre_build_command in
   print_endline "\nTactician will now instrument Coq packages installed through opam.";
-  print_endline "Run tactician eject to reverse this command."
+  print_endline "Run tactician eject to reverse this command.";
+  `Ok ()
 
 let eject () =
   OpamClientConfig.opam_init ();
@@ -183,7 +148,8 @@ let eject () =
   let st = set_opt_switch gt "wrap-build-commands" (`Remove wrap_command) in
   let _ = set_opt_switch gt ?st "pre-build-commands" (`Remove pre_build_command) in
   print_endline "\nTactician will no longer instrument packages installed through opam.";
-  print_endline "Run tactician inject to re-inject."
+  print_endline "Run tactician inject to re-inject.";
+  `Ok ()
 
 let string_in str ls =
   let filtered = List.filter (fun s -> String.equal s str) ls in
@@ -194,8 +160,9 @@ let string_in str ls =
 let stdlib () =
   let installed = not (String.equal "" (String.trim (syscall "opam list -i coq-tactician-stdlib --short"))) in
   if not installed then (
-    print_endline "This utility helps you recompile packages if you have just installed or removed";
-    print_endline "the package coq-tactician-stdlib. Otherwise, you do not have to run this command"
+    print_endline
+      "This utility helps you recompile packages if you have just installed or removed \
+       the package coq-tactician-stdlib. Otherwise, you do not have to run this command"
   )
   else (
     print_endline "If you just installed coq-tactician-stdlib, you should recompile all Coq packages.";
@@ -207,42 +174,76 @@ let stdlib () =
     else (
       print_endline "The following relevant Coq packages are installed:";
       print_endline (String.concat " " packages);
-      let ans = question "Would you like to reinstall them?" in
+      let ans = OpamConsole.confirm "Would you like to reinstall them?" in
       if ans then
         ignore (Sys.command ("opam reinstall " ^ (String.concat " " packages)))
     )
-  )
+  ); `Ok ()
 
-let install () =
-  OpamClientConfig.opam_init ();
-  let pkg = OpamFormula.atom_of_string "irmin<2.0.0" in
-  OpamGlobalState.with_ `Lock_none @@ fun gt ->
-  OpamSwitchState.with_ `Lock_write gt  @@ fun st ->
-  OpamClient.install st [ pkg ]
+(* Command line interface *)
 
+let enable =
+  let doc = "Modify your coqrc file to load Tactician when Coq is started." in
+  let man =
+    [ `P "Tactician can be activated in a Coq source file, with the following load command."
+    ; `P coqrc_string
+    ; `P "However, it is not recommended to add this snippet in your developments. Instead, this utility \
+         will add it to your 'coqrc' file, which gets executed every time Coq is started. The reason for \
+         this is that you might not want Tactician as an explicit dependency of your developments pakcage. \
+         This would result in reproducibility issues when people install your package (and they would have \
+         to install Tactician them self). Instead, your package should rely on a dummy version of Tactician \
+         in found in the plugin coq-tactician-dummy. This package contains shims for all of Tacticians \
+         tactics that do nothing except for 'search with cache ..', which simply executes the cached tactic. \
+         This way, you can use the real Tactician while developing without needing a dependency on it."
+    ] in
+  Term.(ret (const install_rcfile $ const ())),
+  Term.info "enable" ~doc ~man
 
-(*
-setenv: [
-  COQEXTRAFLAGS = "-rifrom Tactician Ltac1.Record"
-]
-*)
+let disable =
+  let doc = "Remove the script that loads Tactician on Coq startup from your coqrc files." in
+  let man =
+    [ `P "This utility removes the following snippet from your 'coqrc' files, thereby disabling Tactician."
+    ; `P coqrc_string
+    ] in
+  Term.(ret (const remove_rcfile $ const ())),
+  Term.info "disable" ~doc ~man
 
-let () =
-  let args = Sys.argv in
-  if Array.length args == 1 then
-    usage ()
-  else if Array.length args > 2 then (
-    printf "Error: Only one argument is expected\n\n";
-    usage ()
-  )
-  else (
-    let arg = Sys.argv.(1) in
-    match arg with
-    | "inject" -> inject ()
-    | "eject" -> eject ()
-    | "enable" -> install_rcfile ()
-    | "disable" -> remove_rcfile ()
-    | "recompile" -> stdlib ()
-    | "--help" | "-h" | "help" -> usage ()
-    | _ -> printf "Error: Unknown subcommand '%s'\n\n" arg; usage ()
-  );
+let inject =
+  let doc = "Add hooks to Opam that allow Tactician to instrument the installation of Coq packages \
+             for learning purposes." in
+  let man =
+    [ `P "This utility modifies Opam's configuration file with hooks that add Tactician support during \
+         installation of Coq packages. This command can be reversed by running 'tactician eject'."
+    ] in
+  Term.(ret (const inject $ (const ()))),
+  Term.info "inject" ~doc ~man
+
+let eject =
+  let doc = "Remove hooks to Opam that allow Tactician to instrument the installation of Coq packages \
+             for learning purposes." in
+  let man = [ `P "This utility modifies Opam's configuration file to remove hooks that have been added by \
+                  'tactician inject'. After this, newly installed packages will no longer be instrumented \
+                 by Tactician."
+            ] in
+  Term.(ret (const eject $ const ())),
+  Term.info "eject" ~doc ~man
+
+let recompile =
+  let doc = "Find and recompile installed Coq packages after Coq's standard library has been \
+             instrumented with Tactician support through installation of 'coq-tactician-stdlib." in
+  let man = [ `P "The package 'coq-tactician-stdlib' will recompile Coq's standard library with \
+                  Tactician support. After that, all other packages also need to be reinstalled in order \
+                  to be consistent with the new standard library. This utility will take care of that."
+            ] in
+  Term.(ret (const stdlib $ const ())),
+  Term.info "recompile" ~doc ~man
+
+let default_cmd =
+  let doc = "Management utilities for the Tactician tactic learner and prover." in
+  let sdocs = Manpage.s_common_options in
+  let man_xrefs = [ `Cmd "enable"; `Cmd "disable"; `Cmd "inject"; `Cmd "eject"; `Cmd "recompile" ] in
+  Term.(ret (const (`Help (`Pager, None)))),
+  Term.info "tactician" ~doc ~sdocs ~man_xrefs
+
+let cmds = [enable; disable; inject; eject; recompile]
+let () = Term.(exit @@ eval_choice default_cmd cmds)
