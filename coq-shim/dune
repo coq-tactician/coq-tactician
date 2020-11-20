@@ -4,11 +4,6 @@
  (package coq-tactician)
 )
 (install
- (files coqc)
- (section libexec)
- (package coq-tactician)
-)
-(install
  (files coqc.real) ; mount point for the real coqc
  (section lib)
  (package coq-tactician)
