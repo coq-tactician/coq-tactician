@@ -623,13 +623,13 @@ let tacpredict max_reached =
     { confidence = r.confidence; focus = r.focus; tactic = taceval i r.focus r.tactic } in
   tclUNIT (stream_mapi (fun i p -> transform i p) predictions)
 
-  let tclTIMEOUT2 n t =
-    Proofview.tclOR
-      (Timeouttac.ptimeout n t)
-      begin function (e, info) -> match e with
-        | Logic_monad.Tac_Timeout -> Tacticals.New.tclZEROMSG (Pp.str "timout")
-        | e -> Tacticals.New.tclZEROMSG (Pp.str "haha")
-      end
+let tclTIMEOUT2 n t =
+  Proofview.tclOR
+    (Timeouttac.ptimeout n t)
+    begin function (e, info) -> match e with
+      | Logic_monad.Tac_Timeout -> Tacticals.New.tclZEROMSG (Pp.str "timout")
+      | e -> Tacticals.New.tclZEROMSG (Pp.str "haha")
+    end
 
 let contains s1 s2 =
     let re = Str.regexp_string s2
