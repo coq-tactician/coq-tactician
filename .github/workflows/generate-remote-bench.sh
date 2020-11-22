@@ -2,8 +2,17 @@
 
 set -eu
 
-cat <<'EOF'
-name: Remote Bench
+if [ $# -lt 1 ]
+then
+    echo "Usage: generate-remote-bench.sh name [make-params..]"
+    exit 1
+fi
+
+NAME="$1"; shift
+PARAMS="$@"
+
+cat <<EOF
+name: $NAME
 
 on: push
 
@@ -11,17 +20,17 @@ jobs:
   submit:
     runs-on: ubuntu-latest
     outputs:
-      benchid: ${{ steps.submit.outputs.benchid }}
+      benchid: \${{ steps.submit.outputs.benchid }}
     steps:
       - id: submit
         name: Submit
         run: |
-          echo "${{ secrets.BENCH_KEY }}" > bench-key
+          echo "\${{ secrets.BENCH_KEY }}" > bench-key
           chmod 600 bench-key
-          BENCHID=$(ssh -i bench-key -o StrictHostKeyChecking=no -o LogLevel=error \
-              ${{ secrets.BENCH_HOST }} http://github.com/${{ github.repository }}.git $GITHUB_SHA BENCHMARK=40)
-          echo $BENCHID
-          echo "::set-output name=benchid::$BENCHID"
+          BENCHID=\$(ssh -i bench-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              \${{ secrets.BENCH_HOST }} http://github.com/\${{ github.repository }}.git \$GITHUB_SHA $PARAMS)
+          echo \$BENCHID
+          echo "::set-output name=benchid::\$BENCHID"
           sleep 1m
 EOF
 

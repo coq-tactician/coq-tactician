@@ -1,4 +1,4 @@
-name: Remote Bench
+name: Deterministic Remote Bench
 
 on: push
 
@@ -13,8 +13,7 @@ jobs:
         run: |
           echo "${{ secrets.BENCH_KEY }}" > bench-key
           chmod 600 bench-key
-          BENCHID=$(ssh -i bench-key -o StrictHostKeyChecking=no -o LogLevel=error \
-              ${{ secrets.BENCH_HOST }} http://github.com/${{ github.repository }}.git $GITHUB_SHA BENCHMARK=40)
+          BENCHID=$(ssh -i bench-key -o StrictHostKeyChecking=no -o LogLevel=error               ${{ secrets.BENCH_HOST }} http://github.com/${{ github.repository }}.git $GITHUB_SHA BENCHMARK=600 INFERENCES=100000)
           echo $BENCHID
           echo "::set-output name=benchid::$BENCHID"
           sleep 1m
