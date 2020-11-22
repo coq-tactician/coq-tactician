@@ -97,7 +97,7 @@ module NaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStructures
       {entries = comb::purgedentries; length = l; frequencies = newfreq}
 
     let learn db outcomes tac =
-      List.fold_left (fun a out -> add db out.before tac) db outcomes
+      List.fold_left (fun db out -> add db out.before tac) db outcomes
 
     (* TODO: This doesn't work on multisets *)
     let rec intersect l1 l2 =
