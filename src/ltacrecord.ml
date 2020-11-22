@@ -487,11 +487,6 @@ let register tac name =
 
 let run_ml_tac name = TacML (CAst.make ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = name}; mltac_index = 0}, []))
 
-let print_rank env rank =
-  let tac_pp env t = Sexpr.format_oneline (Pptactic.pr_glob_tactic env t) in
-  let strs = List.map (fun (x, t) -> (Printf.sprintf "%.4f " x) ^ (Pp.string_of_ppcmds (tac_pp env t))) rank in
-  Pp.str (String.concat "\n" strs)
-
 (* Running predicted tactics *)
 
 let parse_tac tac =
@@ -574,15 +569,38 @@ let predict =
      on goal zero will focus in the first goal of the reversed `situation` *)
   tclUNIT (learner_predict (List.rev situation))
 
-let userPredict =
+let filterTactics n (tacs : Tactic_learner_internal.TS.prediction Stream.t) =
+  let exception SuccessException in
   let open Proofview in
   let open Notations in
-  tclENV >>= fun env -> predict >>= fun r ->
+  let rec aux n tacs filtered = match n = 0, Stream.peek tacs with
+    | true, _ | _, None -> tclUNIT filtered
+    | false, Some (Tactic_learner_internal.TS.{ tactic; _} as p) -> Stream.junk tacs;
+      let tactic = parse_tac (tactic_repr tactic) in
+      tclOR (tclPROGRESS tactic >>= (fun _ -> tclZERO SuccessException))
+        (function
+          | (SuccessException, _) -> aux (n - 1) tacs (p::filtered)
+          | _ -> aux (n - 1) tacs filtered)
+  in aux n tacs []
+
+let print_rank env rank =
+  let tac_pp env t = Sexpr.format_oneline (Pptactic.pr_glob_tactic env t) in
+  let strs = List.map (fun (x, t) -> (Printf.sprintf "%.4f " x) ^ (Pp.string_of_ppcmds (tac_pp env t))) rank in
+  Pp.str (String.concat "\n" strs)
+
+let userPredict =
+  let debug = false in
+  let open Proofview in
+  let open Notations in
+  tclENV >>= fun env -> predict >>=
+  (if debug then (fun r -> tclUNIT (Stream.npeek 10 r)) else filterTactics 10) >>= fun r ->
   let r = List.map (fun ({confidence; focus; tactic} : Tactic_learner_internal.TS.prediction) ->
-      (confidence, focus, tactic)) (Stream.npeek 10 r) in
+      (confidence, focus, tactic)) r in
   let r = List.map (fun (x, _, (y, _)) -> (x, y)) r in
   (* Print predictions *)
-  (Proofview.tclLIFT (Proofview.NonLogical.print_info (print_rank env r)))
+  (Proofview.tclLIFT (if List.is_empty r then
+                        NonLogical.print_info (Pp.str "Ran out of suggestions to give...") else
+                        Proofview.NonLogical.print_info (print_rank env r)))
 
 let tac_exec_count = ref 0
 let tacpredict max_reached =
