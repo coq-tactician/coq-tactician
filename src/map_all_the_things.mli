@@ -29,6 +29,7 @@ module type MapDef = sig
     ; mutind : MutInd.t map
     ; short_name : Id.t CAst.t option map
     ; located : Loc.t option map
+    ; variable : Id.t map
     ; constr_pattern : constr_pattern transformer
     ; constr_expr : constr_expr_r transformer
     ; glob_constr : ([ `any ] glob_constr_r) transformer }
@@ -41,6 +42,7 @@ module type MapDef = sig
     ; mutind_map : MutInd.t map
     ; short_name_map : Id.t CAst.t option map
     ; located_map : 'a. 'a map -> 'a located map
+    ; variable_map : Id.t map
     ; constr_expr_map : constr_expr map
     ; glob_constr_and_expr_map : glob_constr_and_expr map
     ; intro_pattern_expr_map : 'a. 'a map -> 'a intro_pattern_expr map
@@ -50,6 +52,9 @@ module type MapDef = sig
     ; destruction_arg_map : 'a. 'a map -> 'a destruction_arg map
     ; raw_tactic_expr_map : raw_tactic_expr map
     ; glob_tactic_expr_map : glob_tactic_expr map
+    ; qualid_map : Libnames.qualid map
+    ; globref_map : GlobRef.t map
+    ; quantified_hypothesis_map : quantified_hypothesis map
     }
 
   type ('raw, 'glb) gen_map =
@@ -76,6 +81,7 @@ module MapDefTemplate (M: Monad.Def) : sig
     ; mutind : MutInd.t map
     ; short_name : Id.t CAst.t option map
     ; located : Loc.t option map
+    ; variable : Id.t map
     ; constr_pattern : constr_pattern transformer
     ; constr_expr : constr_expr_r transformer
     ; glob_constr : ([ `any ] glob_constr_r) transformer }
@@ -87,6 +93,7 @@ module MapDefTemplate (M: Monad.Def) : sig
     ; mutind_map : MutInd.t map
     ; short_name_map : Id.t CAst.t option map
     ; located_map : 'a. 'a map -> 'a located map
+    ; variable_map : Id.t map
     ; constr_expr_map : constr_expr map
     ; glob_constr_and_expr_map : glob_constr_and_expr map
     ; intro_pattern_expr_map : 'a. 'a map -> 'a intro_pattern_expr map
@@ -96,6 +103,9 @@ module MapDefTemplate (M: Monad.Def) : sig
     ; destruction_arg_map : 'a. 'a map -> 'a destruction_arg map
     ; raw_tactic_expr_map : raw_tactic_expr map
     ; glob_tactic_expr_map : glob_tactic_expr map
+    ; qualid_map : Libnames.qualid map
+    ; globref_map : GlobRef.t map
+    ; quantified_hypothesis_map : quantified_hypothesis map
     }
   val default_mapper : mapper
   type ('raw, 'glb) gen_map =
