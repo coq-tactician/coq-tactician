@@ -15,21 +15,23 @@ open Names
 module type MapDef = sig
   include MonadNotations
 
+  type 'a transformer = 'a -> ('a -> 'a t) -> 'a t
+
   type mapper =
-    { glob_tactic : glob_tactic_expr map
-    ; raw_tactic : raw_tactic_expr map
-    ; glob_atomic_tactic : glob_atomic_tactic_expr map
-    ; raw_atomic_tactic : raw_atomic_tactic_expr map
-    ; glob_tactic_arg : glob_tactic_arg map
-    ; raw_tactic_arg : raw_tactic_arg map
+    { glob_tactic : glob_tactic_expr transformer
+    ; raw_tactic : raw_tactic_expr transformer
+    ; glob_atomic_tactic : glob_atomic_tactic_expr transformer
+    ; raw_atomic_tactic : raw_atomic_tactic_expr transformer
+    ; glob_tactic_arg : glob_tactic_arg transformer
+    ; raw_tactic_arg : raw_tactic_arg transformer
     ; cast : 'a. 'a CAst.t map
     ; constant : Constant.t map
     ; mutind : MutInd.t map
     ; short_name : Id.t CAst.t option map
     ; located : Loc.t option map
-    ; constr_pattern : constr_pattern map
-    ; constr_expr : constr_expr_r map
-    ; glob_constr : ([ `any ] glob_constr_r) map }
+    ; constr_pattern : constr_pattern transformer
+    ; constr_expr : constr_expr_r transformer
+    ; glob_constr : ([ `any ] glob_constr_r) transformer }
 
   type recursor =
     { option_map : 'a. 'a map -> 'a option map
@@ -61,21 +63,22 @@ end
 
 module MapDefTemplate (M: Monad.Def) : sig
   include MonadNotations
+  type 'a transformer = 'a -> ('a -> 'a t) -> 'a t
   type mapper =
-    { glob_tactic : glob_tactic_expr map
-    ; raw_tactic : raw_tactic_expr map
-    ; glob_atomic_tactic : glob_atomic_tactic_expr map
-    ; raw_atomic_tactic : raw_atomic_tactic_expr map
-    ; glob_tactic_arg : glob_tactic_arg map
-    ; raw_tactic_arg : raw_tactic_arg map
+    { glob_tactic : glob_tactic_expr transformer
+    ; raw_tactic : raw_tactic_expr transformer
+    ; glob_atomic_tactic : glob_atomic_tactic_expr transformer
+    ; raw_atomic_tactic : raw_atomic_tactic_expr transformer
+    ; glob_tactic_arg : glob_tactic_arg transformer
+    ; raw_tactic_arg : raw_tactic_arg transformer
     ; cast : 'a. 'a CAst.t map
     ; constant : Constant.t map
     ; mutind : MutInd.t map
     ; short_name : Id.t CAst.t option map
     ; located : Loc.t option map
-    ; constr_pattern : constr_pattern map
-    ; constr_expr : constr_expr_r map
-    ; glob_constr : ([ `any ] glob_constr_r) map }
+    ; constr_pattern : constr_pattern transformer
+    ; constr_expr : constr_expr_r transformer
+    ; glob_constr : ([ `any ] glob_constr_r) transformer }
   type recursor =
     { option_map : 'a. 'a map -> 'a option map
     ; or_var_map : 'a. 'a map -> 'a or_var map

@@ -17,21 +17,23 @@ open Names
 module type MapDef = sig
   include MonadNotations
 
+  type 'a transformer = 'a -> ('a -> 'a t) -> 'a t
+
   type mapper =
-    { glob_tactic : glob_tactic_expr map
-    ; raw_tactic : raw_tactic_expr map
-    ; glob_atomic_tactic : glob_atomic_tactic_expr map
-    ; raw_atomic_tactic : raw_atomic_tactic_expr map
-    ; glob_tactic_arg : glob_tactic_arg map
-    ; raw_tactic_arg : raw_tactic_arg map
+    { glob_tactic : glob_tactic_expr transformer
+    ; raw_tactic : raw_tactic_expr transformer
+    ; glob_atomic_tactic : glob_atomic_tactic_expr transformer
+    ; raw_atomic_tactic : raw_atomic_tactic_expr transformer
+    ; glob_tactic_arg : glob_tactic_arg transformer
+    ; raw_tactic_arg : raw_tactic_arg transformer
     ; cast : 'a. 'a CAst.t map
     ; constant : Constant.t map
     ; mutind : MutInd.t map
     ; short_name : Id.t CAst.t option map
     ; located : Loc.t option map
-    ; constr_pattern : constr_pattern map
-    ; constr_expr : constr_expr_r map
-    ; glob_constr : ([ `any ] glob_constr_r) map }
+    ; constr_pattern : constr_pattern transformer
+    ; constr_expr : constr_expr_r transformer
+    ; glob_constr : ([ `any ] glob_constr_r) transformer }
 
   type recursor =
     { option_map : 'a. 'a map -> 'a option map
@@ -64,37 +66,39 @@ end
 module MapDefTemplate (M: Monad.Def) = struct
   include WithMonadNotations(M)
 
+  type 'a transformer = 'a -> ('a -> 'a t) -> 'a t
   type 'a map = 'a -> 'a t
   type mapper =
-    { glob_tactic : glob_tactic_expr map
-    ; raw_tactic : raw_tactic_expr map
-    ; glob_atomic_tactic : glob_atomic_tactic_expr map
-    ; raw_atomic_tactic : raw_atomic_tactic_expr map
-    ; glob_tactic_arg : glob_tactic_arg map
-    ; raw_tactic_arg : raw_tactic_arg map
+    { glob_tactic : glob_tactic_expr transformer
+    ; raw_tactic : raw_tactic_expr transformer
+    ; glob_atomic_tactic : glob_atomic_tactic_expr transformer
+    ; raw_atomic_tactic : raw_atomic_tactic_expr transformer
+    ; glob_tactic_arg : glob_tactic_arg transformer
+    ; raw_tactic_arg : raw_tactic_arg transformer
     ; cast : 'a. 'a CAst.t map
     ; constant : Constant.t map
     ; mutind : MutInd.t map
     ; short_name : Id.t CAst.t option map
     ; located : Loc.t option map
-    ; constr_pattern : constr_pattern map
-    ; constr_expr : constr_expr_r map
-    ; glob_constr : ([ `any ] glob_constr_r) map }
+    ; constr_pattern : constr_pattern transformer
+    ; constr_expr : constr_expr_r transformer
+    ; glob_constr : ([ `any ] glob_constr_r) transformer }
+    let none_transformer x f = f x
   let default_mapper =
-    { glob_tactic = id
-    ; raw_tactic = id
-    ; glob_atomic_tactic = id
-    ; raw_atomic_tactic = id
-    ; glob_tactic_arg = id
-    ; raw_tactic_arg = id
+    { glob_tactic = none_transformer
+    ; raw_tactic = none_transformer
+    ; glob_atomic_tactic = none_transformer
+    ; raw_atomic_tactic = none_transformer
+    ; glob_tactic_arg = none_transformer
+    ; raw_tactic_arg = none_transformer
     ; cast = id
     ; constant = id
     ; mutind = id
     ; short_name = id
     ; located = id
-    ; constr_pattern = id
-    ; constr_expr = id
-    ; glob_constr = id }
+    ; constr_pattern = none_transformer
+    ; constr_expr = none_transformer
+    ; glob_constr = none_transformer }
   type recursor =
     { option_map : 'a. 'a map -> 'a option map
     ; or_var_map : 'a. 'a map -> 'a or_var map
@@ -129,7 +133,7 @@ module type GenMap = sig
 end
 
 let generic_identity_map (type r) (type g)
-    (wit : (r, g, 't) genarg_type) : (module GenMap with type raw = r and type glob = g) =
+    (_ : (r, g, 't) genarg_type) : (module GenMap with type raw = r and type glob = g) =
 (module struct
   type raw = r
   type glob = g
@@ -493,9 +497,9 @@ module MakeMapper (M: MapDef) = struct
     ref_map      : 'ref map;
     cst_map      : 'cst map;
     nam_map      : 'nam map;
-    tactic       : 'a gen_tactic_expr map;
-    atomic_tactic : 'a gen_atomic_tactic_expr map;
-    tactic_arg   : 'a gen_tactic_arg map;
+    tactic       : 'a gen_tactic_expr transformer;
+    atomic_tactic : 'a gen_atomic_tactic_expr transformer;
+    tactic_arg   : 'a gen_tactic_arg transformer;
     u            : mapper
   }
     constraint 'a = <
@@ -509,20 +513,20 @@ module MakeMapper (M: MapDef) = struct
       level     :'lev
     >
 
-  let rec glob_constr_r_map m r c =
+  let rec glob_constr_r_map m r c' =
     let glob_constr_map = glob_constr_map m r in
-    (match c with
+    m.glob_constr c' @@ function
      | GRef (r, l) ->
        let+ r = globref_map m r
        and+ l = option_map (List.map (glob_level_map m)) l in
        GRef (r, l)
-     | GVar _ -> return c
+     | GVar _ as c -> return c
      | GEvar (e, xs) ->
        let+ xs = List.map (fun (l, c) ->
            let+ c = glob_constr_map c in
            (l, c)) xs in
        GEvar (e, xs)
-     | GPatVar _ -> return c
+     | GPatVar _ as c -> return c
      | GApp (c, cs) ->
        let+ c = glob_constr_map c
        and+ cs = List.map glob_constr_map cs in
@@ -570,7 +574,7 @@ module MakeMapper (M: MapDef) = struct
        and+ cs1 = array_map glob_constr_map cs1
        and+ cs2 = array_map glob_constr_map cs2 in
        GRec (fk, ids, decls, cs1, cs2)
-     | GSort _ -> return c
+     | GSort _ as c -> return c
      | GHole (k, intr, gen) ->
        let+ gen = option_map (generic_glob_map (r m)) gen in
        GHole (k, intr, gen)
@@ -578,9 +582,8 @@ module MakeMapper (M: MapDef) = struct
        let+ c1 = glob_constr_map c1
        and+ c2 = cast_type_map glob_constr_map c2 in
        GCast (c1, c2)
-     | GInt _ -> return c
-     | GFloat _ -> return c
-    ) >>= m.glob_constr
+     | GInt _ as c -> return c
+     | GFloat _ as c -> return c
   and glob_constr_map m r c = mdast m (glob_constr_r_map m r) c
 
   let rec cases_pattern_expr_r_map m r (case : cases_pattern_expr_r) =
@@ -621,9 +624,9 @@ module MakeMapper (M: MapDef) = struct
       and+ c2 = constr_expr_map m r c2 in
       CPatCast (c1, c2)
   and cases_pattern_expr_map m r = mcast m (cases_pattern_expr_r_map m r)
-  and constr_expr_r_map m (r : mapper -> recursor) (c : constr_expr_r) =
+  and constr_expr_r_map m (r : mapper -> recursor) (c' : constr_expr_r) =
     let constr_expr_map = constr_expr_map m r in
-    (match c with
+    m.constr_expr c' @@ function
     | CRef (qu, i) ->
       let+ qu = m.cast qu in
       CRef (qu, i)
@@ -694,13 +697,13 @@ module MakeMapper (M: MapDef) = struct
     | CHole (k, intr, gen) ->
       let+ gen = option_map (generic_raw_map (r m)) gen in
       CHole (k, intr, gen)
-    | CPatVar _ -> return c
+    | CPatVar _ as c -> return c
     | CEvar (e, xs) ->
       let+ xs = List.map (fun (l, c) ->
           let+ c = constr_expr_map c in
           (l, c)) xs in
       CEvar (e, xs)
-    | CSort _ -> return c
+    | CSort _ as c -> return c
     | CCast (c, ct) ->
       let+ c = constr_expr_map c
       and+ ct = cast_type_map constr_expr_map ct in
@@ -714,10 +717,10 @@ module MakeMapper (M: MapDef) = struct
     | CGeneralization (bk, ak, c) ->
       let+ c = constr_expr_map c in
       CGeneralization (bk, ak, c)
-    | CPrim _ -> return c
+    | CPrim _ as c -> return c
     | CDelimiters (str, c) ->
      let+ c = constr_expr_map c in
-     CDelimiters (str, c)) >>= m.constr_expr
+     CDelimiters (str, c)
   and fix_expr_map m r (li, ord, bi, c1, c2) =
     let+ li = m.cast li
     and+ ord = option_map (recursion_order_expr m r) ord
@@ -764,17 +767,17 @@ module MakeMapper (M: MapDef) = struct
   and constr_expr_map (m : mapper) r c =
     mcast m (constr_expr_r_map m r) c
 
-  and constr_pattern_map m pat =
+  and constr_pattern_map m pat' =
     let constr_pattern_map = constr_pattern_map m in
-    (match pat with
+    m.constr_pattern pat' @@ function
      | PRef r ->
        let+ r = globref_map m r in
        PRef r
-     | PVar _ -> return pat
+     | PVar _ as pat -> return pat
      | PEvar (e, ps) ->
        let+ ps = array_map constr_pattern_map ps in
        PEvar (e, ps)
-     | PRel _ -> return pat
+     | PRel _ as pat -> return pat
      | PApp (p, ps) ->
        let+ p = constr_pattern_map p
        and+ ps = array_map constr_pattern_map ps in
@@ -798,8 +801,8 @@ module MakeMapper (M: MapDef) = struct
        and+ p2 = option_map constr_pattern_map p2
        and+ p3 = constr_pattern_map p3 in
        PLetIn (id, p1, p2, p3)
-     | PSort _ -> return pat
-     | PMeta _ -> return pat
+     | PSort _ as pat -> return pat
+     | PMeta _ as pat -> return pat
      | PIf (p1, p2, p3) ->
        let+ p1 = constr_pattern_map p1
        and+ p2 = constr_pattern_map p2
@@ -820,8 +823,8 @@ module MakeMapper (M: MapDef) = struct
        let+ p1s = array_map constr_pattern_map p1s
        and+ p2s = array_map constr_pattern_map p2s in
        PCoFix (i, (ids, p1s, p2s))
-     | PInt _ -> return pat
-     | PFloat _ -> return pat) >>= m.constr_pattern
+     | PInt _ as pat -> return pat
+     | PFloat _ as pat -> return pat
 
   and glob_constr_and_expr_map m r ((gc, ce) : g_trm) =
     let+ gc = glob_constr_map m r gc
@@ -832,8 +835,8 @@ module MakeMapper (M: MapDef) = struct
     and+ cp = constr_pattern_map m cp in
     (ids, c, cp)
 
-  and tactic_arg_map (m : 'a tactic_mapper) tac =
-    (match tac with
+  and tactic_arg_map (m : 'a tactic_mapper) tac' =
+    m.tactic_arg tac' @@ function
      | TacGeneric genarg ->
        let+ genarg = m.generic_map genarg in
        TacGeneric genarg
@@ -848,15 +851,14 @@ module MakeMapper (M: MapDef) = struct
            let+ ref = m.ref_map ref
            and+ args = List.map (tactic_arg_map m) args in (ref, args)) c in
        TacCall c
-     | TacFreshId _ -> return tac
+     | TacFreshId _ as tac -> return tac
      | Tacexp t ->
        let+ t = m.tactic_map t in
        Tacexp t
      | TacPretype t ->
        let+ t = m.trm_map t in
        TacPretype t
-     | TacNumgoals -> return tac)
-    >>= m.tactic_arg
+     | TacNumgoals as tac -> return tac
   and match_rule_map (m : 'a tactic_mapper) tac = List.map (function
       | Pat (hyps, pat, t) ->
         let+ hyps = List.map (match_context_hyps m.u m.pat_map) hyps
@@ -867,8 +869,8 @@ module MakeMapper (M: MapDef) = struct
         let+ t = m.tactic_map t in
         All t) tac
   and atomic_tactic_map
-      (m : 'a tactic_mapper) (tac : 'a gen_atomic_tactic_expr) : 'a gen_atomic_tactic_expr t =
-    (match tac with
+      (m : 'a tactic_mapper) (tac' : 'a gen_atomic_tactic_expr) : 'a gen_atomic_tactic_expr t =
+    m.atomic_tactic tac' @@ function
      | TacIntroPattern (flg, intros) ->
        let+ intros = List.map (mcast m.u (intro_pattern_expr_map m.u m.trm_map)) intros in
        TacIntroPattern (flg, intros)
@@ -934,17 +936,15 @@ module MakeMapper (M: MapDef) = struct
        TacRewrite (flg1, bis, cl, t)
      | TacInversion (is, qh) ->
        let+ is = inversion_strength_map m.u m.trm_map m.trm_map m.u.cast is in
-       TacInversion (is, qh))
+       TacInversion (is, qh)
   and tactic_map
-      (m : 'a tactic_mapper) (tac : 'a gen_tactic_expr) : 'a gen_tactic_expr t =
-    (match tac with
+      (m : 'a tactic_mapper) (tac' : 'a gen_tactic_expr) : 'a gen_tactic_expr t =
+    m.tactic tac' @@ function
      | TacInfo t ->
        let+ t = m.tactic_map t in
        TacInfo t
      | TacAtom a ->
-       let+ a = mcast m.u (fun a ->
-           let* a = atomic_tactic_map m a in
-           m.atomic_tactic a) a in
+       let+ a = mcast m.u (atomic_tactic_map m) a in
        TacAtom a
      | TacThen (t1, t2)  ->
        let+ t1 = m.tactic_map t1
@@ -1020,8 +1020,8 @@ module MakeMapper (M: MapDef) = struct
      | TacAbstract (t, id) ->
        let+ t = m.tactic_map t in
        TacAbstract (t, id)
-     | TacId _ -> return tac
-     | TacFail _ -> return tac
+     | TacId _ as tac -> return tac
+     | TacFail _ as tac -> return tac
      | TacLetIn (flg, ts, t) ->
        let lns, args = OList.split ts in
        let+ t = m.tactic_map t
@@ -1050,7 +1050,7 @@ module MakeMapper (M: MapDef) = struct
      | TacAlias c ->
        let+ c = mcast m.u (fun (id, args) ->
            let+ args = List.map (tactic_arg_map m) args in (id, args)) c in
-       TacAlias c) >>= m.tactic
+       TacAlias c
 
   let rec recursor m =
     { option_map = option_map
