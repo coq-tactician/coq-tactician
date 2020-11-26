@@ -593,9 +593,10 @@ let filterTactics p q (tacs : Tactic_learner_internal.TS.prediction Stream.t) =
           | _ -> aux n m tacs solve progress)
   in aux p q tacs [] []
 
-let print_rank env rank =
+let print_rank debug env rank =
   let tac_pp env t = Sexpr.format_oneline (Pptactic.pr_glob_tactic env t) in
-  let strs = List.map (fun (x, t) -> (Printf.sprintf "%.4f " x) ^ (Pp.string_of_ppcmds (tac_pp env t))) rank in
+  let strs = List.map (fun (x, t) -> (if debug then Printf.sprintf "%.4f " x else "") ^
+                                     (Pp.string_of_ppcmds (tac_pp env t))) rank in
   Pp.str (String.concat "\n" strs)
 
 let userPredict =
@@ -610,7 +611,7 @@ let userPredict =
   (* Print predictions *)
   (Proofview.tclLIFT (if List.is_empty r then
                         NonLogical.print_info (Pp.str "Ran out of suggestions to give...") else
-                        Proofview.NonLogical.print_info (print_rank env r)))
+                        Proofview.NonLogical.print_info (print_rank debug env r)))
 
 let tac_exec_count = ref 0
 let tacpredict max_reached =
@@ -878,7 +879,7 @@ let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO:
     let string_tac t = Pp.string_of_ppcmds (tac_pp t) in
     let tryadd (execs, tac) =
       let s = string_tac tac in
-      (* TODO: There is probably a much better way to do this *)
+      (* TODO: Move this to annotation time *)
       if (String.equal s "admit" || String.equal s "search" || String.is_prefix "search with cache" s
           || String.is_prefix "tactician ignore" s)
       then () else add_to_db2 id (execs, tac);
