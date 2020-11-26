@@ -123,6 +123,26 @@ let remove_rcfile () =
     print_endline "\nFile patched! Run 'tactician enable' to reverse this command"
   ); `Ok ()
 
+let string_in str ls =
+  let filtered = List.filter (fun s -> String.equal s str) ls in
+  match filtered with
+  | [] -> false
+  | _ -> true
+
+let recompile_packages no_pkgs_msg pkgs_msg confirm_msg =
+  let packages = String.split_on_char '\n' (String.trim (syscall ("opam list -i --depends-on coq --short"))) in
+  let blacklist = ["coqide"; "coq-tactician"; "coq-tactician-dummy"; "coq-tactician-stdlib" ] in
+  let packages = List.filter (fun p -> not (string_in p blacklist)) packages in
+  if packages == [] then
+    print_endline no_pkgs_msg
+  else (
+    print_endline pkgs_msg;
+    print_endline (String.concat " " packages);
+    let ans = OpamConsole.confirm confirm_msg in
+    if ans then
+      ignore (Sys.command ("opam reinstall " ^ (String.concat " " packages)))
+  )
+
 let opam_init_no_lock f =
   OpamClientConfig.opam_init ();
   OpamGlobalState.with_ `Lock_none f
@@ -140,6 +160,9 @@ let inject () =
   let _ = config_add_remove gt ?st "pre-build-commands" pre_build_command in
   print_endline "\nTactician will now instrument Coq packages installed through opam.";
   print_endline "Run tactician eject to reverse this command.";
+  recompile_packages ""
+    "\nThe following Coq packages are installed on your system:"
+    "Would you like to recompile them with the new settings?";
   `Ok ()
 
 let eject () =
@@ -149,36 +172,28 @@ let eject () =
   let _ = set_opt_switch gt ?st "pre-build-commands" (`Remove pre_build_command) in
   print_endline "\nTactician will no longer instrument packages installed through opam.";
   print_endline "Run tactician inject to re-inject.";
+  recompile_packages ""
+    "\nThe following Coq packages are installed on your system:"
+    "Would you like to recompile them with the new settings?";
   `Ok ()
 
-let string_in str ls =
-  let filtered = List.filter (fun s -> String.equal s str) ls in
-  match filtered with
-  | [] -> false
-  | _ -> true
-
 let stdlib () =
-  let installed = not (String.equal "" (String.trim (syscall "opam list -i coq-tactician-stdlib --short"))) in
-  if not installed then (
-    print_endline
-      "This utility helps you recompile packages if you have just installed or removed \
-       the package coq-tactician-stdlib. Otherwise, you do not have to run this command"
-  )
-  else (
-    print_endline "If you just installed coq-tactician-stdlib, you should recompile all Coq packages.";
-    let packages = String.split_on_char '\n' (String.trim (syscall ("opam list -i --depends-on coq --short"))) in
-    let blacklist = ["coqide"; "coq-tactician"; "coq-tactician-dummy"; "coq-tactician-stdlib" ] in
-    let packages = List.filter (fun p -> not (string_in p blacklist)) packages in
-    if packages == [] then
-      print_endline "However, it appears that you do not have any packages installed. No actions are needed."
-    else (
-      print_endline "The following relevant Coq packages are installed:";
-      print_endline (String.concat " " packages);
-      let ans = OpamConsole.confirm "Would you like to reinstall them?" in
-      if ans then
-        ignore (Sys.command ("opam reinstall " ^ (String.concat " " packages)))
-    )
-  ); `Ok ()
+  (* let installed = not (String.equal "" (String.trim (syscall "opam list -i coq-tactician-stdlib --short"))) in
+   * if not installed then (
+   *   print_endline
+   *     "This utility helps you recompile packages if you have just installed or removed \
+   *      the package coq-tactician-stdlib. Otherwise, you do not have to run this command"
+   * )
+   * else ( *)
+  print_endline "This utility helps you recompile all your Coq packages. \
+                 You only need to do this when:\n\n\
+                 (1) You have injected/ejected Tactician and want to recompile \
+                 all packages with/without Tactician support.\n\
+                 (2) You have installed/removed the package `coq-tactician-stdlib`.\n";
+  recompile_packages "It appears that you do not have any packages installed. No actions are needed."
+    "The following relevant Coq packages are installed:"
+    "Would you like to reinstall them?";
+  `Ok ()
 
 (* Command line interface *)
 
@@ -229,8 +244,8 @@ let eject =
   Term.info "eject" ~doc ~man
 
 let recompile =
-  let doc = "Find and recompile installed Coq packages after Coq's standard library has been \
-             instrumented with Tactician support through installation of 'coq-tactician-stdlib." in
+  let doc = "Find and recompile all installed Coq packages. This is mainly needed when you install or remove\
+             the package 'coq-tactician-stdlib', which recompiles Coq's standard library." in
   let man = [ `P "The package 'coq-tactician-stdlib' will recompile Coq's standard library with \
                   Tactician support. After that, all other packages also need to be reinstalled in order \
                   to be consistent with the new standard library. This utility will take care of that."
