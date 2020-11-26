@@ -25,13 +25,3 @@ VERNAC COMMAND EXTEND TacticianSuggest CLASSIFIED AS QUERY STATE proof_query
                       Tactician_ltac1_record_plugin.Ltacrecord.userPredict
                       (Proof_global.get_proof pstate) in () }
 END
-
-VERNAC COMMAND EXTEND TacticianStart CLASSIFIED AS SIDEFF
-| [ "Tactician" "Start" ]
-  -> { Tactician_ltac1_record_plugin.Ltacrecord.global_record := true }
-END
-
-VERNAC COMMAND EXTEND TacticianStop CLASSIFIED AS SIDEFF
-| [ "Tactician" "Stop" ]
-  -> { Tactician_ltac1_record_plugin.Ltacrecord.global_record := false }
-END

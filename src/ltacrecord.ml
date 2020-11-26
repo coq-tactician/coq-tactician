@@ -143,6 +143,14 @@ let _ = Goptions.declare_int_option benchoptions
 let _ = Goptions.declare_bool_option deterministicoptions
 let _ = Goptions.declare_bool_option featureoptions
 
+let global_record = ref true
+let recordoptions = Goptions.{optdepr = false;
+                              optname = "Tactician Record";
+                              optkey = ["Tactician"; "Record"];
+                              optread = (fun () -> !global_record);
+                              optwrite = (fun b -> global_record := b)}
+let _ = Goptions.declare_bool_option recordoptions
+
 let _ = Random.self_init ()
 
 type data_in = outcome list * tactic
@@ -285,7 +293,7 @@ let in_db : data_in -> Libobject.obj =
                               cache_function = (fun (_,((outcomes, tac) : data_in)) ->
                                   learner_learn outcomes tac)
                             ; load_function = (fun i (_, (outcomes, tac)) ->
-                                  learner_learn outcomes tac)
+                                  if !global_record then learner_learn outcomes tac else ())
                             ; open_function = (fun i (_, (execs, tac)) -> ())
                             ; classify_function = (fun data -> Libobject.Substitute data)
                             ; subst_function = subst_outcomes
@@ -305,7 +313,6 @@ type goal_stack = Proofview.Goal.t list list
 type tactic_trace = glob_tactic_expr list
 type state_id_stack = int list
 
-let global_record = Summary.ref ~name:"TACTICIAN-RECORD" true
 let record_field : bool Evd.Store.field = Evd.Store.field ()
 let localdb_field : localdb Evd.Store.field = Evd.Store.field ()
 let goal_stack_field : goal_stack Evd.Store.field = Evd.Store.field ()
