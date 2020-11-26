@@ -10,7 +10,7 @@ let () = Tactician_ltac1_record_plugin.Tactic_learner_internal.disable_queue ()
 }
 
 TACTIC EXTEND tacticianignore
-| [ "tactician" "ignore" tactic1(t) ] ->
+| [ "ml_tactician_ignore" tactic3(t) ] ->
   { Tactician_ltac1_record_plugin.Ltacrecord.tactician_ignore (Tacinterp.tactic_of_value ist t) }
 END
 

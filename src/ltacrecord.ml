@@ -879,7 +879,7 @@ let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO:
     let tryadd (execs, tac) =
       let s = string_tac tac in
       (* TODO: There is probably a much better way to do this *)
-      if (String.equal s "admit" || String.equal s "search" || String.is_prefix "search failing" s
+      if (String.equal s "admit" || String.equal s "search" || String.is_prefix "search with cache" s
           || String.is_prefix "tactician ignore" s)
       then () else add_to_db2 id (execs, tac);
       try (* This is purely for parsing bug detection and could be removed for performance reasons *)
