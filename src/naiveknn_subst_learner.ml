@@ -69,12 +69,6 @@ module NaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStructures
       | x::ls' -> let (last, lsn) = deletelast ls' in (last, x::lsn)
 
     let add db b obj =
-      Feedback.msg_info (Pptactic.pr_glob_tactic Environ.empty_env (tactic_repr obj));
-      let vars = Tactic_substitute.tactic_free_variables (tactic_repr obj) in
-      Feedback.msg_info (Pp.pr_enum Names.Id.print vars);
-      let subst t = Tactic_substitute.tactic_substitute (fun _ -> Names.Id.of_string "bibaboe") t in
-      Feedback.msg_info (Pptactic.pr_glob_tactic Environ.empty_env @@ subst (tactic_repr obj));
-
       let feats = proof_state_to_ints b in
       let ctx = context_to_ints (proof_state_hypotheses b) in
       let comb = {features = feats; context = ctx; obj = obj} in
