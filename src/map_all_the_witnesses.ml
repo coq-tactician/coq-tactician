@@ -26,14 +26,11 @@ module OList = List
 let at wit = register_generic_map_identity wit
 let _ = [
   (* Stdarg *)
-  at wit_unit; at wit_bool; at wit_int; at wit_string; at wit_pre_ident; at wit_ident;
+  at wit_unit; at wit_bool; at wit_int; at wit_string; at wit_pre_ident;
   at wit_sort_family;
 
   (* Extraargs *)
-  at wit_orient; at wit_rename; at wit_natural; at wit_test_lpar_id_colon;
-
-  (* Tacarg *)
-  at wit_quant_hyp;
+  at wit_orient; at wit_natural; at wit_test_lpar_id_colon;
 
   (* Taccoerce *)
   at wit_constr_context; at wit_constr_under_binders;
@@ -43,6 +40,26 @@ let _ = [
 
   (* TODO: See if there is something that can be done for Ltac2 *)
 ]
+
+let _ = register_generic_map wit_ident (module struct
+    type raw = Id.t
+    type glob = Id.t
+    module M = functor (M : MapDef) -> struct
+      open M
+      let raw_map m = m.variable_map
+      let glob_map m = m.variable_map
+    end
+  end)
+
+let _ = register_generic_map wit_var (module struct
+    type raw = lident
+    type glob = lident
+    module M = functor (M : MapDef) -> struct
+      open M
+      let raw_map m = m.cast_map m.variable_map
+      let glob_map m = m.cast_map m.variable_map
+    end
+  end)
 
 let _ = register_generic_map wit_uconstr (module struct
     type raw = constr_expr
@@ -79,18 +96,18 @@ let _ = register_generic_map wit_ref (module struct
     type glob = GlobRef.t located or_var
     module M = functor (M : MapDef) -> struct
       open M
-      let raw_map m = m.cast_map id
-      let glob_map m = m.or_var_map (m.located_map id)
+      let raw_map m = m.qualid_map
+      let glob_map m = m.or_var_map (m.located_map m.globref_map)
     end
   end)
 
-let _ = register_generic_map wit_hyp (module struct
-    type raw = lident
-    type glob = lident
+let _ = register_generic_map wit_quant_hyp (module struct
+    type raw = quantified_hypothesis
+    type glob = quantified_hypothesis
     module M = functor (M : MapDef) -> struct
       open M
-      let raw_map m = m.cast_map id
-      let glob_map m = m.cast_map id
+      let raw_map m = m.quantified_hypothesis_map
+      let glob_map m = m.quantified_hypothesis_map
     end
   end)
 
@@ -109,8 +126,24 @@ let _ = register_generic_map wit_clause_dft_concl (module struct
     type glob = lident clause_expr
     module M = functor (M : MapDef) -> struct
       open M
-      let raw_map m = m.clause_expr_map (m.cast_map id)
-      let glob_map m = m.clause_expr_map (m.cast_map id)
+      let raw_map m = m.clause_expr_map (m.cast_map m.variable_map)
+      let glob_map m = m.clause_expr_map (m.cast_map m.variable_map)
+    end
+  end)
+
+let _ = register_generic_map wit_rename (module struct
+    type raw = Id.t * Id.t
+    type glob = Id.t * Id.t
+    module M = functor (M : MapDef) -> struct
+      open M
+      let raw_map m = fun (a, b) ->
+        let+ a = m.variable_map a
+        and+ b = m.variable_map b in
+        (a, b)
+      let glob_map m = fun (a, b) ->
+        let+ a = m.variable_map a
+        and+ b = m.variable_map b in
+        (a, b)
     end
   end)
 
@@ -122,8 +155,8 @@ let _ = register_generic_map wit_hloc (module struct
       let location_map f g = function
         | HypLocation x -> let+ x = f x in HypLocation x
         | ConclLocation x -> let+ x = g x in ConclLocation x
-      let raw_map m = location_map (fun (a, b) -> let+ a = m.cast_map id a in a, b) id
-      let glob_map m = location_map (fun (a, b) -> let+ a = m.cast_map id a in a, b) id
+      let raw_map m = location_map (fun (a, b) -> let+ a = m.cast_map m.variable_map a in a, b) id
+      let glob_map m = location_map (fun (a, b) -> let+ a = m.cast_map m.variable_map a in a, b) id
     end
   end)
 
@@ -162,8 +195,8 @@ let _ = register_generic_map wit_in_clause (module struct
     type glob = lident clause_expr
     module M = functor (M : MapDef) -> struct
       open M
-      let raw_map m = m.clause_expr_map (m.cast_map id)
-      let glob_map m = m.clause_expr_map (m.cast_map id)
+      let raw_map m = m.clause_expr_map (m.cast_map m.variable_map)
+      let glob_map m = m.clause_expr_map (m.cast_map m.variable_map)
     end
   end)
 
@@ -254,8 +287,8 @@ let _ = register_generic_map wit_firstorder_using (module struct
     module M = functor (M : MapDef) -> struct
       open M
       open Monad.Make(M)
-      let raw_map m = List.map (m.cast_map id)
-      let glob_map m = List.map (m.or_var_map (m.located_map id))
+      let raw_map m = List.map (m.qualid_map)
+      let glob_map m = List.map (m.or_var_map (m.located_map m.globref_map))
     end
   end)
 

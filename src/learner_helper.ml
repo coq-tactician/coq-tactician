@@ -107,6 +107,17 @@ module L (TS: TacticianStructures) = struct
         hyps in
     mkfeats goal @ List.flatten hyp_feats
 
+  let context_map f g =
+    List.map (function
+        | Named.Declaration.LocalAssum (id, typ) ->
+          Named.Declaration.LocalAssum (id, f typ)
+        | Named.Declaration.LocalDef (id, term, typ) ->
+          Named.Declaration.LocalDef (id, g term, f typ))
+      
+  let context_features max_length ctx =
+    let mkfeats t = term_sexpr_to_features max_length (term_sexpr t) in
+    context_map mkfeats mkfeats ctx
+
   let s2s s = Leaf s
 
   let proof_state_to_sexpr ps =

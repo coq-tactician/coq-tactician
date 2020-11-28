@@ -13,13 +13,23 @@ open Names
 let at wit = register_generic_map_identity wit
 let _ = [
   (* Ssrparser *)
-  at wit_ssrseqdir; at wit_ssrfwdid; at wit_ssrfwdfmt; at wit_ssrdir;
+  at wit_ssrseqdir; at wit_ssrfwdfmt; at wit_ssrdir;
 
   (* Ssrmatching *)
   at Internal.wit_rpatternty
 ]
 
 let _ = [at wit_ssrtacarg; at wit_ssrtclarg]
+
+let _ = register_generic_map wit_ssrfwdid (module struct
+    type raw = Id.t
+    type glob = Id.t
+    module M = functor (M : MapDef) -> struct
+      open M
+      let raw_map m = m.variable_map
+      let glob_map m = m.variable_map
+    end
+  end)
 
 (* TODO: What is the runtime overhead of this? *)
 module SSRMap (M : MapDef) = struct
@@ -35,7 +45,7 @@ module SSRMap (M : MapDef) = struct
     in {at with body}
 
   let ssrhyp_map m (SsrHyp h) =
-    let+ h = m.located_map id h in SsrHyp h
+    let+ h = m.located_map m.variable_map h in SsrHyp h
 
   let ssrhyp_or_id_map m = function
     | Hyp h -> let+ h = ssrhyp_map m h in Hyp h
@@ -43,14 +53,36 @@ module SSRMap (M : MapDef) = struct
 
   let ssrhyps_map m = List.map (ssrhyp_map m)
 
-  let ssripat_map m = function
+  let id_block_map m = function
+    | Prefix id ->
+      let+ id = m.variable_map id in Prefix id
+    | SuffixId id ->
+      let+ id = m.variable_map id in SuffixId id
+    | SuffixNum _ as x -> return x
+
+  let rec ssripat_map m = function
+    | IPatId id ->
+      let+ id = m.variable_map id in IPatId id
+    | IPatDispatch b ->
+      let+ b = ssripatss_or_block_map m b in IPatDispatch b
+    | IPatCase b ->
+      let+ b = ssripatss_or_block_map m b in IPatCase b
+    | IPatInj ls ->
+      let+ ls = ssripatss_map m ls in IPatInj ls
     | IPatView v ->
       let+ v = List.map (ast_closure_term_map m) v in IPatView v
     | IPatClear c ->
       let+ c = ssrhyps_map m c in IPatClear c
+    | IPatAbstractVars ids ->
+      let+ ids = List.map m.variable_map ids in IPatAbstractVars ids
     | x -> return x
-
-  let ssripats_map m = List.map (ssripat_map m)
+  and ssripats_map m = List.map (ssripat_map m)
+  and ssripatss_map m = List.map (ssripats_map m)
+  and ssripatss_or_block_map m = function
+    | Block b ->
+      let+ b = id_block_map m b in Block b
+    | Regular ls ->
+      let+ ls = List.map (ssripats_map m) ls in Regular ls
 
   let ssrhpats_map m (((clr, ipats1), ipats2), ipats3) =
     let+ clr = m.option_map (ssrhyps_map m) clr
@@ -73,9 +105,9 @@ module SSRMap (M : MapDef) = struct
     (doccs, clr)
 
   (* TODO: We are blocked from accessing this one *)
-  let cpattern_map m = id
+  let cpattern_map _ = id
   (* TODO: We are blocked from accessing this one *)
-  let rpattern_map m = id
+  let rpattern_map _ = id
 
   let ssrarg_map m ((fwdview, (eqid, (agens, ipats))) : ssrarg) : ssrarg t =
     let+ fwdview = List.map (ast_closure_term_map m) fwdview
@@ -365,7 +397,8 @@ let _ = register_generic_map wit_ssrfixfwd (module struct
       open M
       open SSRMap(M)
       let map m (id, (fwdfmt, cl)) =
-        let+ cl = ast_closure_term_map m cl in
+        let+ id = m.variable_map id
+        and+ cl = ast_closure_term_map m cl in
         id, (fwdfmt, cl)
       let raw_map = map
       let glob_map = map
