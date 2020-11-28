@@ -1,4 +1,3 @@
-open Ltac_plugin
 open Tactic_learner
 open Learner_helper
 open Context
