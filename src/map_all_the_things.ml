@@ -529,9 +529,9 @@ module MakeMapper (M: MapDef) = struct
       EvalVarRef id
 
   let glob_sort_name_map m = function
-    | GType li ->
+    | GLocalUniv li ->
       let+ li = m.cast li in
-      GType li
+      GLocalUniv li
     | x -> return x
 
   let glob_sort_expr_map f = function

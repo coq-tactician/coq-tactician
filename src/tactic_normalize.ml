@@ -36,8 +36,8 @@ let lookup id = KerNameHash.repr (KerName.hash id) id t
 let mapper = { NormalizeDef.default_mapper with
                cast = (fun (CAst.{v; _}) -> CAst.make ?loc:None v)
              ; located = (fun _ -> None)
-             ; constant = (fun x -> ignore(Constant.hash x); return x)
-             ; mutind = (fun x -> ignore(MutInd.hash x); return x)
+             ; constant = (fun x -> ignore(Environ.QConstant.hash Environ.empty_env x); return x)
+             ; mutind = (fun x -> ignore(Environ.QMutInd.hash Environ.empty_env x); return x)
              ; glob_tactic_arg = (fun t g -> match g t with
                  | Reference (ArgArg (_, n)) ->
                    Reference (ArgArg (None, lookup n))

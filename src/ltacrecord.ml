@@ -665,13 +665,12 @@ let commonSearch max_exec =
     inc_search_recursion_depth () >>= fun n ->
     if n >= max_recursion_depth then Tacticals.New.tclZEROMSG (Pp.str "too much search nesting") else
       tclLIFT (NonLogical.make (fun () -> CWarnings.get_flags ())) >>= (fun oldFlags ->
-          (* TODO: Find a way to reset dumbglob to original value. This is a temporary hack. *)
           let doFlags = n = 0 in
           let setFlags () = if not doFlags then tclUNIT () else tclLIFT (NonLogical.make (fun () ->
-              Dumpglob.continue (); CWarnings.set_flags (oldFlags))) in
+              Dumpglob.pop_output (); CWarnings.set_flags (oldFlags))) in
           (if not doFlags then tclUNIT () else
              tclLIFT (NonLogical.make (fun () ->
-                 tac_exec_count := 0; Dumpglob.pause(); CWarnings.set_flags ("-all"))))
+                 tac_exec_count := 0; Dumpglob.pause (); CWarnings.set_flags ("-all"))))
           <*> tclOR
             (tclONCE (Tacticals.New.tclCOMPLETE (search_with_strategy max_reached (tacpredict max_reached))) <*>
              get_witness () >>= fun wit -> empty_witness () <*>
@@ -880,7 +879,7 @@ let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO:
           || String.is_prefix "tactician ignore" s)
       then () else add_to_db2 id (execs, tac);
       try (* This is purely for parsing bug detection and could be removed for performance reasons *)
-        let _ = Pcoq.parse_string Pltac.tactic_eoi s in ()
+        let _ = Pcoq.parse_string Pltac.tactic s in ()
       with e ->
         Feedback.msg_warning (Pp.str (
             "Tactician detected a printing/parsing problem " ^

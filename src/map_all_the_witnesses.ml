@@ -51,7 +51,7 @@ let _ = register_generic_map wit_ident (module struct
     end
   end)
 
-let _ = register_generic_map wit_var (module struct
+let _ = register_generic_map wit_hyp (module struct
     type raw = lident
     type glob = lident
     module M = functor (M : MapDef) -> struct
