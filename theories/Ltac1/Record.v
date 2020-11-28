@@ -27,7 +27,8 @@ Tactician Record LetIn Keep.
 Tactician Record Match Keep.
 Tactician Record MatchGoal Keep.
 Tactician Record Arg Keep.
-Tactician Record Select Keep.
+Tactician Record Select Decompose. (* TODO: This setting should be kept like this until we implement
+                                      an override in tactic_annotate in case we are in 'search with cache' *)
 Tactician Record ML Keep.
 Tactician Record Alias Keep.
 Tactician Record Call Keep.

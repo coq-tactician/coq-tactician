@@ -140,6 +140,13 @@ let _ = Goptions.declare_int_option benchoptions
 let _ = Goptions.declare_bool_option deterministicoptions
 let _ = Goptions.declare_bool_option featureoptions
 
+let global_record = ref true
+let recordoptions = Goptions.{optdepr = false;
+                              optkey = ["Tactician"; "Record"];
+                              optread = (fun () -> !global_record);
+                              optwrite = (fun b -> global_record := b)}
+let _ = Goptions.declare_bool_option recordoptions
+
 let _ = Random.self_init ()
 
 type data_in = outcome list * tactic
@@ -282,7 +289,7 @@ let in_db : data_in -> Libobject.obj =
                               cache_function = (fun (_,((outcomes, tac) : data_in)) ->
                                   learner_learn outcomes tac)
                             ; load_function = (fun i (_, (outcomes, tac)) ->
-                                  learner_learn outcomes tac)
+                                  if !global_record then learner_learn outcomes tac else ())
                             ; open_function = (fun _ _ (_, (execs, tac)) -> ())
                             ; classify_function = (fun data -> Libobject.Substitute data)
                             ; subst_function = subst_outcomes
@@ -302,7 +309,6 @@ type goal_stack = Proofview.Goal.t list list
 type tactic_trace = glob_tactic_expr list
 type state_id_stack = int list
 
-let global_record = Summary.ref ~name:"TACTICIAN-RECORD" true
 let record_field : bool Evd.Store.field = Evd.Store.field ()
 let localdb_field : localdb Evd.Store.field = Evd.Store.field ()
 let goal_stack_field : goal_stack Evd.Store.field = Evd.Store.field ()
@@ -484,11 +490,6 @@ let register tac name =
 
 let run_ml_tac name = TacML (CAst.make ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = name}; mltac_index = 0}, []))
 
-let print_rank env rank =
-  let tac_pp env t = Sexpr.format_oneline (Pptactic.pr_glob_tactic env t) in
-  let strs = List.map (fun (x, t) -> (Printf.sprintf "%.4f " x) ^ (Pp.string_of_ppcmds (tac_pp env t))) rank in
-  Pp.str (String.concat "\n" strs)
-
 (* Running predicted tactics *)
 
 let parse_tac tac =
@@ -571,15 +572,42 @@ let predict =
      on goal zero will focus in the first goal of the reversed `situation` *)
   tclUNIT (learner_predict (List.rev situation))
 
-let userPredict =
+let filterTactics p q (tacs : Tactic_learner_internal.TS.prediction Stream.t) =
+  let exception SuccessException of bool in
   let open Proofview in
   let open Notations in
-  tclENV >>= fun env -> predict >>= fun r ->
+  let rec aux n m tacs solve progress = match n = 0 || m = 0, Stream.peek tacs with
+    | true, _ | _, None -> tclUNIT (firstn p (List.rev (if List.is_empty solve then progress else solve)))
+    | false, Some (Tactic_learner_internal.TS.{ tactic; _} as p) -> Stream.junk tacs;
+      let tactic = parse_tac (tactic_repr tactic) in
+      tclOR (
+        tclPROGRESS (tclTIMEOUT 1 tactic) <*>
+        (tclINDEPENDENT (tclZERO (SuccessException false))) <*> tclZERO (SuccessException true))
+        (function
+          | (SuccessException true, _) -> aux (n - 1) m tacs (p::solve) progress
+          | (SuccessException false, _) -> aux n (m - 1) tacs solve (p::progress)
+          | _ -> aux n m tacs solve progress)
+  in aux p q tacs [] []
+
+let print_rank debug env rank =
+  let tac_pp env t = Sexpr.format_oneline (Pptactic.pr_glob_tactic env t) in
+  let strs = List.map (fun (x, t) -> (if debug then Printf.sprintf "%.4f " x else "") ^
+                                     (Pp.string_of_ppcmds (tac_pp env t))) rank in
+  Pp.str (String.concat "\n" strs)
+
+let userPredict =
+  let debug = false in
+  let open Proofview in
+  let open Notations in
+  tclENV >>= fun env -> predict >>=
+  (if debug then (fun r -> tclUNIT (Stream.npeek 10 r)) else filterTactics 10 10000) >>= fun r ->
   let r = List.map (fun ({confidence; focus; tactic} : Tactic_learner_internal.TS.prediction) ->
-      (confidence, focus, tactic)) (Stream.npeek 10 r) in
+      (confidence, focus, tactic)) r in
   let r = List.map (fun (x, _, (y, _)) -> (x, y)) r in
   (* Print predictions *)
-  (Proofview.tclLIFT (Proofview.NonLogical.print_info (print_rank env r)))
+  (Proofview.tclLIFT (if List.is_empty r then
+                        NonLogical.print_info (Pp.str "Ran out of suggestions to give...") else
+                        Proofview.NonLogical.print_info (print_rank debug env r)))
 
 let tac_exec_count = ref 0
 let tacpredict max_reached =
@@ -602,13 +630,13 @@ let tacpredict max_reached =
     { confidence = r.confidence; focus = r.focus; tactic = taceval i r.focus r.tactic } in
   tclUNIT (stream_mapi (fun i p -> transform i p) predictions)
 
-  let tclTIMEOUT2 n t =
-    Proofview.tclOR
-      (Timeouttac.ptimeout n t)
-      begin function (e, info) -> match e with
-        | Logic_monad.Tac_Timeout -> Tacticals.New.tclZEROMSG (Pp.str "timout")
-        | e -> Tacticals.New.tclZEROMSG (Pp.str "haha")
-      end
+let tclTIMEOUT2 n t =
+  Proofview.tclOR
+    (Timeouttac.ptimeout n t)
+    begin function (e, info) -> match e with
+      | Logic_monad.Tac_Timeout -> Tacticals.New.tclZEROMSG (Pp.str "timout")
+      | e -> Tacticals.New.tclZEROMSG (Pp.str "haha")
+    end
 
 let contains s1 s2 =
     let re = Str.regexp_string s2
@@ -847,8 +875,8 @@ let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO:
     let string_tac t = Pp.string_of_ppcmds (tac_pp t) in
     let tryadd (execs, tac) =
       let s = string_tac tac in
-      (* TODO: There is probably a much better way to do this *)
-      if (String.equal s "admit" || String.equal s "search" || String.is_prefix "search failing" s
+      (* TODO: Move this to annotation time *)
+      if (String.equal s "admit" || String.equal s "search" || String.is_prefix "search with cache" s
           || String.is_prefix "tactician ignore" s)
       then () else add_to_db2 id (execs, tac);
       try (* This is purely for parsing bug detection and could be removed for performance reasons *)

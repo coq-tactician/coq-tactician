@@ -40,7 +40,7 @@ module NaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStructures
         IntMap.empty
         ranking
     in
-    let new_ranking = List.map (fun (hash, (score, tac)) -> (score, tac)) (IntMap.bindings ranking_map) in
+    let new_ranking = List.map (fun (_hash, (score, tac)) -> (score, tac)) (IntMap.bindings ranking_map) in
     List.sort (fun (x, _) (y, _) -> Float.compare y x) new_ranking
 
   let proof_state_to_ints ps =
@@ -97,7 +97,7 @@ module NaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStructures
       {entries = comb::purgedentries; length = l; frequencies = newfreq}
 
     let learn db outcomes tac =
-      List.fold_left (fun a out -> add db out.before tac) db outcomes
+      List.fold_left (fun db out -> add db out.before tac) db outcomes
 
     (* TODO: This doesn't work on multisets *)
     let rec intersect l1 l2 =
@@ -106,13 +106,13 @@ module NaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStructures
       | h1::t1 -> (
           match l2 with
           | [] -> []
-          | h2::t2 when compare h1 h2 < 0 -> intersect t1 l2
+          | h2::_ when compare h1 h2 < 0 -> intersect t1 l2
           | h2::t2 when compare h1 h2 > 0 -> intersect l1 t2
-          | h2::t2 -> (
+          | _::t2 -> (
               match intersect t1 t2 with
               | [] -> [h1]
-              | h3::t3 as l when h3 = h1 -> l
-              | h3::t3 as l -> h1::l
+              | h3::_ as l when h3 = h1 -> l
+              | _::_ as l -> h1::l
             )
         )
 

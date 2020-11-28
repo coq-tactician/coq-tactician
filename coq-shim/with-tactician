@@ -2,6 +2,18 @@
 set -eu
 
 OPAMBIN=$(opam var bin)
+TACTICIANLIB=$(opam var coq-tactician:lib)
+TACTICIANDIR=$(opam var coq:lib)/user-contrib/Tactician
 
-bwrap --dev-bind / / --bind $OPAMBIN/coqc /tmp/tactician.coqc.real \
-      --bind $(opam var coq-tactician:lib)/coqc $OPAMBIN/coqc "$@"
+TACTICIANFLAGS="-q -I $TACTICIANDIR -R $TACTICIANDIR Tactician -rifrom Tactician Ltac1.Record "
+
+trap 'rm -f "$COQC"' EXIT
+COQC=$(mktemp)
+chmod +x $COQC
+cat <<EOF > $COQC
+#!/bin/bash
+$TACTICIANLIB/coqc.real $TACTICIANFLAGS "\$@"
+EOF
+
+bwrap --dev-bind / / --bind $OPAMBIN/coqc $TACTICIANLIB/coqc.real \
+      --bind $COQC $OPAMBIN/coqc "$@"
