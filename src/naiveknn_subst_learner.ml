@@ -140,7 +140,7 @@ module NaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStructures
                  | Some _ -> id)
                  (tactic_repr obj) in
              IntMap.update
-               (tactic_hash (tactic_make tac'))
+               (tactic_hash obj (* (tactic_make tac') *))
                (function
                  | None -> Some (score, entry)
                  | Some (lscore, ltac) ->
@@ -178,7 +178,7 @@ module NaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStructures
             let tactic = tactic_make (Tactic_substitute.tactic_substitute subst (tactic_repr obj)) in
             f, {entry with obj = tactic}) tdidfs in
         (* TODO: This is a totally random decision *)
-        let combined = tdidfs @ List.map (fun (s, o) -> s /. 100., o) subst in
+        let combined = tdidfs (* @ List.map (fun (s, o) -> s /. 100., o) subst *) in
         let deduped = remove_dups ctx combined in
         let sorted = List.stable_sort (fun (x, _) (y, _) -> Float.compare y x) deduped in
         let out = List.map (fun (a, entry) -> { confidence = a; focus = 0; tactic = entry.obj }) sorted in
