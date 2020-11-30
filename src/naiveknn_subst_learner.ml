@@ -159,6 +159,12 @@ module NaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStructures
       in
       List.map (fun (_hash, (score, tac)) -> (score, tac)) (IntMap.bindings ranking_map)
 
+    let stream_append s1 (s2 : 'a Stream.t) =
+      let next _ =
+        try Some (Stream.next s1)
+        with Stream.Failure -> Some (Stream.next s2) in
+      Stream.from next
+
     let predict db f =
       if f = [] then Stream.of_list [] else
         let ps = (List.hd f).state in
@@ -169,7 +175,7 @@ module NaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStructures
             db.entries in
         let deduped = remove_dups tdidfs in
         let sorted = List.stable_sort (fun (x, _) (y, _) -> Float.compare y x) deduped in
-        let subst = List.map (fun (f, ({context; obj; _} as entry)) ->
+        let subst (_, {context; obj; _}) =
             let subst id =
               match find_decl context id with
               | None -> id
@@ -184,11 +190,13 @@ module NaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStructures
                 | (_, id)::_ -> id
             in
             let tactic = tactic_make (Tactic_substitute.tactic_substitute subst (tactic_repr obj)) in
-            f, {entry with obj = tactic}) sorted in
-        (* TODO: This is a totally random decision *)
-        let combined = sorted @ List.map (fun (_, o) -> Float.neg_infinity, o) subst in
-        let out = List.map (fun (a, entry) -> { confidence = a; focus = 0; tactic = entry.obj }) combined in
-        Stream.of_list out
+            {confidence = Float.neg_infinity; focus = 0; tactic} in
+        let out = List.map (fun (a, entry) -> { confidence = a; focus = 0; tactic = entry.obj }) sorted in
+        let last_ditch = Stream.from (fun i ->
+            match List.nth_opt sorted i with
+            | None -> None
+            | Some x -> Some (subst x)) in
+        stream_append (Stream.of_list out) last_ditch
 
     let evaluate db _ _ = 1., db
 
