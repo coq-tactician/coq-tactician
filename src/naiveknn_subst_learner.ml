@@ -146,7 +146,7 @@ module NaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStructures
           (fun map (score, ({obj; substituted_hash; _} as entry)) ->
              (* TODO: this is a total hack *)
              IntMap.update
-               (tactic_hash obj (* (tactic_make tac') *))
+               (substituted_hash (* (tactic_make tac') *))
                (function
                  | None -> Some (score, entry)
                  | Some (lscore, ltac) ->
