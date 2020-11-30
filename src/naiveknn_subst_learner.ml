@@ -116,29 +116,29 @@ module NaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStructures
                                      (Float.of_int (1 + (default 0 (Frequencies.find_opt f db.frequencies))))))
                 inter)
 
-    let decl2id = function
-      | Named.Declaration.LocalAssum (id, _) -> id.binder_name
-      | Named.Declaration.LocalDef (id, _, _) -> id.binder_name
-
-    let find_decl ctx id =
-      List.find_opt (function
-          | Named.Declaration.LocalAssum (id', _) -> Id.equal id id'.binder_name
-          | Named.Declaration.LocalDef (id', _, _) -> Id.equal id id'.binder_name
-        ) ctx
-
-    let decl2feats = function
-      | Named.Declaration.LocalAssum (_, typ) -> typ
-      | Named.Declaration.LocalDef (_, _, typ) -> typ
+    (* let decl2id = function
+     *   | Named.Declaration.LocalAssum (id, _) -> id.binder_name
+     *   | Named.Declaration.LocalDef (id, _, _) -> id.binder_name
+     * 
+     * let find_decl ctx id =
+     *   List.find_opt (function
+     *       | Named.Declaration.LocalAssum (id', _) -> Id.equal id id'.binder_name
+     *       | Named.Declaration.LocalDef (id', _, _) -> Id.equal id id'.binder_name
+     *     ) ctx
+     * 
+     * let decl2feats = function
+     *   | Named.Declaration.LocalAssum (_, typ) -> typ
+     *   | Named.Declaration.LocalDef (_, _, typ) -> typ *)
 
     let remove_dups ctx ranking =
       let ranking_map = List.fold_left
           (fun map (score, ({obj; _} as entry)) ->
              (* TODO: this is a total hack *)
-             let tac' = Tactic_substitute.tactic_substitute (fun id ->
-                 match find_decl ctx id with
-                 | None -> Id.of_string "__knnpl"
-                 | Some _ -> id)
-                 (tactic_repr obj) in
+             (* let tac' = Tactic_substitute.tactic_substitute (fun id ->
+              *     match find_decl ctx id with
+              *     | None -> Id.of_string "__knnpl"
+              *     | Some _ -> id)
+              *     (tactic_repr obj) in *)
              IntMap.update
                (tactic_hash obj (* (tactic_make tac') *))
                (function
@@ -161,24 +161,24 @@ module NaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStructures
         let tdidfs = List.map
             (fun ent -> let x = tfidf db feats ent.features in (x, ent))
             db.entries in
-        let subst = List.map (fun (f, ({context; obj; _} as entry)) ->
-            let subst id =
-              match find_decl context id with
-              | None -> id
-              | Some decl ->
-                let feats = decl2feats decl in
-                let ids_scored = List.map
-                    (fun decl -> let x = tfidf db feats (decl2feats decl) in (x, decl2id decl))
-                    ctx in
-                let ids_sorted = List.sort (fun (x, _) (y, _) -> Float.compare y x) ids_scored in
-                match ids_sorted with
-                | [] -> id
-                | (_, id)::_ -> id
-            in
-            let tactic = tactic_make (Tactic_substitute.tactic_substitute subst (tactic_repr obj)) in
-            f, {entry with obj = tactic}) tdidfs in
+        (* let subst = List.map (fun (f, ({context; obj; _} as entry)) ->
+         *     let subst id =
+         *       match find_decl context id with
+         *       | None -> id
+         *       | Some decl ->
+         *         let feats = decl2feats decl in
+         *         let ids_scored = List.map
+         *             (fun decl -> let x = tfidf db feats (decl2feats decl) in (x, decl2id decl))
+         *             ctx in
+         *         let ids_sorted = List.sort (fun (x, _) (y, _) -> Float.compare y x) ids_scored in
+         *         match ids_sorted with
+         *         | [] -> id
+         *         | (_, id)::_ -> id
+         *     in
+         *     let tactic = tactic_make (Tactic_substitute.tactic_substitute subst (tactic_repr obj)) in
+         *     f, {entry with obj = tactic}) tdidfs in *)
         (* TODO: This is a totally random decision *)
-        let combined = tdidfs @ List.map (fun (s, o) -> s /. 100., o) subst in
+        let combined = tdidfs (* @ List.map (fun (s, o) -> s /. 100., o) subst *) in
         let deduped = remove_dups ctx combined in
         let sorted = List.stable_sort (fun (x, _) (y, _) -> Float.compare y x) deduped in
         let out = List.map (fun (a, entry) -> { confidence = a; focus = 0; tactic = entry.obj }) sorted in
