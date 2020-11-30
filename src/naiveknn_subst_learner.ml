@@ -27,24 +27,6 @@ module NaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStructures
   module IntMap = Stdlib.Map.Make(struct type t = int
       let compare = Int.compare end)
 
-  let remove_dups_and_sort ranking =
-    let ranking_map = List.fold_left
-        (fun map (score, tac) ->
-           IntMap.update
-             (tactic_hash tac)
-             (function
-               | None -> Some (score, tac)
-               | Some (lscore, ltac) ->
-                 if score > lscore then Some (score, tac) else Some (lscore, ltac)
-             )
-             map
-        )
-        IntMap.empty
-        ranking
-    in
-    let new_ranking = List.map (fun (_hash, (score, tac)) -> (score, tac)) (IntMap.bindings ranking_map) in
-    List.sort (fun (x, _) (y, _) -> Float.compare y x) new_ranking
-
   let proof_state_to_ints ps =
     let feats = proof_state_to_features 2 ps in
     (* print_endline (String.concat ", " feats); *)
@@ -134,16 +116,36 @@ module NaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStructures
                                      (Float.of_int (1 + (default 0 (Frequencies.find_opt f db.frequencies))))))
                 inter)
 
+    let remove_dups ctx ranking =
+      let ranking_map = List.fold_left
+          (fun map (score, ({obj; _} as entry)) ->
+             IntMap.update
+               (tactic_hash obj (* (tactic_make tac') *))
+               (function
+                 | None -> Some (score, entry)
+                 | Some (lscore, ltac) ->
+                   if score > lscore then Some (score, entry) else Some (lscore, ltac)
+               )
+               map
+          )
+          IntMap.empty
+          ranking
+      in
+      List.map (fun (_hash, (score, tac)) -> (score, tac)) (IntMap.bindings ranking_map)
+
     let predict db f =
       if f = [] then Stream.of_list [] else
         let ps = (List.hd f).state in
+        let ctx = context_to_ints (proof_state_hypotheses ps) in
         let feats = proof_state_to_ints ps in
         let tdidfs = List.map
-            (fun ent -> let x = tfidf db feats ent.features in (x, ent.obj))
+            (fun ent -> let x = tfidf db feats ent.features in (x, ent))
             db.entries in
         (* TODO: This is a totally random decision *)
-        let out = remove_dups_and_sort tdidfs in
-        let out = List.map (fun (a, c) -> { confidence = a; focus = 0; tactic = c }) out in
+        let combined = tdidfs in
+        let deduped = remove_dups ctx combined in
+        let sorted = List.stable_sort (fun (x, _) (y, _) -> Float.compare y x) deduped in
+        let out = List.map (fun (a, entry) -> { confidence = a; focus = 0; tactic = entry.obj }) sorted in
         Stream.of_list out
 
     let evaluate db _ _ = 1., db
