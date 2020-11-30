@@ -134,11 +134,11 @@ module NaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStructures
       let ranking_map = List.fold_left
           (fun map (score, ({obj; _} as entry)) ->
              (* TODO: this is a total hack *)
-             (* let tac' = Tactic_substitute.tactic_substitute (fun id ->
-              *     match find_decl ctx id with
-              *     | None -> Id.of_string "__knnpl"
-              *     | Some _ -> id)
-              *     (tactic_repr obj) in *)
+             let tac' = Tactic_substitute.tactic_substitute (fun id ->
+                 match find_decl ctx id with
+                 | None -> Id.of_string "__knnpl"
+                 | Some _ -> id)
+                 (tactic_repr obj) in
              IntMap.update
                (tactic_hash obj (* (tactic_make tac') *))
                (function
