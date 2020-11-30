@@ -27,6 +27,24 @@ module NaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStructures
   module IntMap = Stdlib.Map.Make(struct type t = int
       let compare = Int.compare end)
 
+  let remove_dups_and_sort ranking =
+    let ranking_map = List.fold_left
+        (fun map (score, tac) ->
+           IntMap.update
+             (tactic_hash tac)
+             (function
+               | None -> Some (score, tac)
+               | Some (lscore, ltac) ->
+                 if score > lscore then Some (score, tac) else Some (lscore, ltac)
+             )
+             map
+        )
+        IntMap.empty
+        ranking
+    in
+    let new_ranking = List.map (fun (_hash, (score, tac)) -> (score, tac)) (IntMap.bindings ranking_map) in
+    List.sort (fun (x, _) (y, _) -> Float.compare y x) new_ranking
+
   let proof_state_to_ints ps =
     let feats = proof_state_to_features 2 ps in
     (* print_endline (String.concat ", " feats); *)
@@ -116,72 +134,16 @@ module NaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStructures
                                      (Float.of_int (1 + (default 0 (Frequencies.find_opt f db.frequencies))))))
                 inter)
 
-    let decl2id = function
-      | Named.Declaration.LocalAssum (id, _) -> id.binder_name
-      | Named.Declaration.LocalDef (id, _, _) -> id.binder_name
-
-    let find_decl ctx id =
-      List.find_opt (function
-          | Named.Declaration.LocalAssum (id', _) -> Id.equal id id'.binder_name
-          | Named.Declaration.LocalDef (id', _, _) -> Id.equal id id'.binder_name
-        ) ctx
-
-    let decl2feats = function
-      | Named.Declaration.LocalAssum (_, typ) -> typ
-      | Named.Declaration.LocalDef (_, _, typ) -> typ
-
-    let remove_dups ctx ranking =
-      let ranking_map = List.fold_left
-          (fun map (score, ({obj; _} as entry)) ->
-             (* TODO: this is a total hack *)
-             let tac' = Tactic_substitute.tactic_substitute (fun id ->
-                 match find_decl ctx id with
-                 | None -> Id.of_string "__knnpl"
-                 | Some _ -> id)
-                 (tactic_repr obj) in
-             IntMap.update
-               (tactic_hash obj (* (tactic_make tac') *))
-               (function
-                 | None -> Some (score, entry)
-                 | Some (lscore, ltac) ->
-                   if score > lscore then Some (score, entry) else Some (lscore, ltac)
-               )
-               map
-          )
-          IntMap.empty
-          ranking
-      in
-      List.map (fun (_hash, (score, tac)) -> (score, tac)) (IntMap.bindings ranking_map)
-
     let predict db f =
       if f = [] then Stream.of_list [] else
         let ps = (List.hd f).state in
-        let ctx = context_to_ints (proof_state_hypotheses ps) in
         let feats = proof_state_to_ints ps in
         let tdidfs = List.map
-            (fun ent -> let x = tfidf db feats ent.features in (x, ent))
+            (fun ent -> let x = tfidf db feats ent.features in (x, ent.obj))
             db.entries in
-        let subst = List.map (fun (f, ({context; obj; _} as entry)) ->
-            let subst id =
-              match find_decl context id with
-              | None -> id
-              | Some decl ->
-                let feats = decl2feats decl in
-                let ids_scored = List.map
-                    (fun decl -> let x = tfidf db feats (decl2feats decl) in (x, decl2id decl))
-                    ctx in
-                let ids_sorted = List.sort (fun (x, _) (y, _) -> Float.compare y x) ids_scored in
-                match ids_sorted with
-                | [] -> id
-                | (_, id)::_ -> id
-            in
-            let tactic = tactic_make (Tactic_substitute.tactic_substitute subst (tactic_repr obj)) in
-            f, {entry with obj = tactic}) tdidfs in
         (* TODO: This is a totally random decision *)
-        let combined = tdidfs @ List.map (fun (s, o) -> s /. 100., o) subst in
-        let deduped = remove_dups ctx combined in
-        let sorted = List.stable_sort (fun (x, _) (y, _) -> Float.compare y x) deduped in
-        let out = List.map (fun (a, entry) -> { confidence = a; focus = 0; tactic = entry.obj }) sorted in
+        let out = remove_dups_and_sort tdidfs in
+        let out = List.map (fun (a, c) -> { confidence = a; focus = 0; tactic = c }) out in
         Stream.of_list out
 
     let evaluate db _ _ = 1., db
