@@ -161,8 +161,24 @@ module NaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStructures
         let tdidfs = List.map
             (fun ent -> let x = tfidf db feats ent.features in (x, ent))
             db.entries in
+        let subst = List.map (fun (f, ({context; obj; _} as entry)) ->
+            let subst id =
+              match find_decl context id with
+              | None -> id
+              | Some decl ->
+                let feats = decl2feats decl in
+                let ids_scored = List.map
+                    (fun decl -> let x = tfidf db feats (decl2feats decl) in (x, decl2id decl))
+                    ctx in
+                let ids_sorted = List.sort (fun (x, _) (y, _) -> Float.compare y x) ids_scored in
+                match ids_sorted with
+                | [] -> id
+                | (_, id)::_ -> id
+            in
+            let tactic = tactic_make (Tactic_substitute.tactic_substitute subst (tactic_repr obj)) in
+            f, {entry with obj = tactic}) tdidfs in
         (* TODO: This is a totally random decision *)
-        let combined = tdidfs in
+        let combined = tdidfs @ List.map (fun (s, o) -> s /. 100., o) subst in
         let deduped = remove_dups ctx combined in
         let sorted = List.stable_sort (fun (x, _) (y, _) -> Float.compare y x) deduped in
         let out = List.map (fun (a, entry) -> { confidence = a; focus = 0; tactic = entry.obj }) sorted in
