@@ -116,19 +116,19 @@ module NaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStructures
                                      (Float.of_int (1 + (default 0 (Frequencies.find_opt f db.frequencies))))))
                 inter)
 
-    (* let decl2id = function
-     *   | Named.Declaration.LocalAssum (id, _) -> id.binder_name
-     *   | Named.Declaration.LocalDef (id, _, _) -> id.binder_name
-     * 
-     * let find_decl ctx id =
-     *   List.find_opt (function
-     *       | Named.Declaration.LocalAssum (id', _) -> Id.equal id id'.binder_name
-     *       | Named.Declaration.LocalDef (id', _, _) -> Id.equal id id'.binder_name
-     *     ) ctx
-     * 
-     * let decl2feats = function
-     *   | Named.Declaration.LocalAssum (_, typ) -> typ
-     *   | Named.Declaration.LocalDef (_, _, typ) -> typ *)
+    let decl2id = function
+      | Named.Declaration.LocalAssum (id, _) -> id.binder_name
+      | Named.Declaration.LocalDef (id, _, _) -> id.binder_name
+    
+    let find_decl ctx id =
+      List.find_opt (function
+          | Named.Declaration.LocalAssum (id', _) -> Id.equal id id'.binder_name
+          | Named.Declaration.LocalDef (id', _, _) -> Id.equal id id'.binder_name
+        ) ctx
+    
+    let decl2feats = function
+      | Named.Declaration.LocalAssum (_, typ) -> typ
+      | Named.Declaration.LocalDef (_, _, typ) -> typ
 
     let remove_dups ctx ranking =
       let ranking_map = List.fold_left
