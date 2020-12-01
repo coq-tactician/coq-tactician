@@ -28,10 +28,11 @@ let tclSearchDiagonalDFS max_reached predict depth =
         predict >>= fun predictions ->
         tclFoldPredictions max_reached
           (stream_mapi
-             (fun i {focus; tactic; _} ->
+             (fun i {focus; tactic; confidence} ->
                 let ndepth = depth - i in
                 if ndepth <= 0 then tclZERO DepthEnd else
-                  (tactic >>= fun _ -> aux (ndepth - 1)))
+                  if confidence = Float.neg_infinity then tclZERO PredictionsEnd else (* TODO: Hack *)
+                    (tactic >>= fun _ -> aux (ndepth - 1)))
              predictions) >>= aux in
   aux depth >>= fun _ -> tclUNIT ()
 
