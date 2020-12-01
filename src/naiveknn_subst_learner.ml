@@ -162,7 +162,9 @@ module NaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStructures
     let stream_append s1 (s2 : 'a Stream.t) =
       let next _ =
         try Some (Stream.next s1)
-        with Stream.Failure -> Some (Stream.next s2) in
+        with Stream.Failure ->
+        try Some (Stream.next s2)
+        with Stream.Failure -> None in
       Stream.from next
 
     let predict db f =
@@ -192,11 +194,15 @@ module NaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStructures
             let tactic = tactic_make (Tactic_substitute.tactic_substitute subst (tactic_repr obj)) in
             {confidence = Float.neg_infinity; focus = 0; tactic} in
         let out = List.map (fun (a, entry) -> { confidence = a; focus = 0; tactic = entry.obj }) sorted in
-        let last_ditch = Stream.from (fun i ->
-            match List.nth_opt sorted i with
-            | None -> None
-            | Some x -> Some (subst x)) in
-        stream_append (Stream.of_list out) last_ditch
+        let open Tactician_util in
+        let subst_stream = stream_mapi
+            (fun _ (s, p) ->
+               let ts = subst (s, p) in
+               if (tactic_hash p.obj) = (tactic_hash ts.tactic) then
+                 {confidence = Float.neg_infinity; focus = 0; tactic = tactic_make (TacId []) } else ts
+            )
+            (Stream.of_list sorted) in
+        stream_append (Stream.of_list out) subst_stream
 
     let evaluate db _ _ = 1., db
 
