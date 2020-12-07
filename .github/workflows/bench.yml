@@ -21,3 +21,19 @@ jobs:
           coq_version: '8.11'
           ocaml_version: '4.09-flambda'
           custom_script: |
+            startGroup Print opam config
+              opam config list; opam repo list; opam list
+            endGroup
+            startGroup Build dependencies
+              opam repo add coq-extra-dev https://coq.inria.fr/opam/extra-dev
+              opam pin add -n -y -k path coq-tactician coq-tactician/
+              opam update -y
+              opam install -y -j 2 coq-tactician
+            endGroup
+            startGroup Build
+              sudo chmod -R 777 .
+              opam exec -- make -C coq-tactician-stdlib -j2 BENCHMARK=2
+            endGroup
+            startGroup Uninstallation test
+              opam remove coq-tactician-stdlib
+            endGroup
