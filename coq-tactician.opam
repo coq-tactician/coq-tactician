@@ -24,8 +24,8 @@ depends: [
   "cmdliner"
   "coq" {>= "8.11" & < "8.12~"}
   "coq-tactician-dummy"
+  "conf-git"
 ]
-depexts: ["git"]
 build: [
   ["dune" "build" "--release" "-j" jobs]
 ]
