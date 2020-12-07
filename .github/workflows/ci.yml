@@ -18,7 +18,7 @@ jobs:
               opam config list; opam repo list; opam list
             endGroup
             startGroup Build dependencies
-              opam repo add tactician git+https://github.com/coq-tactician/tmp-archive.git#dev
+              opam repo add coq-extra-dev https://coq.inria.fr/opam/extra-dev
               opam pin add -n -y -k path $PACKAGE $WORKDIR
               opam update -y
               opam install -y -j 2 $PACKAGE --deps-only
