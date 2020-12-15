@@ -19,7 +19,7 @@ jobs:
         with:
           opam_file: 'coq-tactician.opam'
           coq_version: '8.11'
-          ocaml_version: '4.09-flambda'
+          ocaml_version: '4.10-flambda'
           custom_script: |
             startGroup Print opam config
               opam config list; opam repo list; opam list
