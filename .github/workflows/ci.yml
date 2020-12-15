@@ -8,25 +8,15 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
-      - uses: coq-community/docker-coq-action@v1.1.0
+      - uses: coq-community/docker-coq-action@v1.2.3
         with:
           opam_file: 'coq-tactician.opam'
           coq_version: '8.11'
           ocaml_version: '4.10-flambda'
-          custom_script: |
-            startGroup Print opam config
-              opam config list; opam repo list; opam list
-            endGroup
-            startGroup Build dependencies
+          install: |
+            startGroup "Install dependencies"
               opam repo add coq-extra-dev https://coq.inria.fr/opam/extra-dev
               opam pin add -n -y -k path $PACKAGE $WORKDIR
               opam update -y
               opam install -y -j 2 $PACKAGE --deps-only
-            endGroup
-            startGroup Build
-              opam install -y -v -j 2 $PACKAGE
-              opam list
-            endGroup
-            startGroup Uninstallation test
-              opam remove $PACKAGE
             endGroup

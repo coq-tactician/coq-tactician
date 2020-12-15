@@ -15,25 +15,20 @@ jobs:
           repository: 'coq-tactician/coq-tactician-stdlib'
           ref: 'coq8.11'
           path: 'coq-tactician-stdlib'
-      - uses: coq-community/docker-coq-action@v1.1.0
+      - uses: coq-community/docker-coq-action@v1.2.3
         with:
           opam_file: 'coq-tactician.opam'
           coq_version: '8.11'
           ocaml_version: '4.10-flambda'
-          custom_script: |
-            startGroup Print opam config
-              opam config list; opam repo list; opam list
-            endGroup
-            startGroup Build dependencies
+          install: |
+            startGroup "Install dependencies"
               opam repo add coq-extra-dev https://coq.inria.fr/opam/extra-dev
-              opam pin add -n -y -k path coq-tactician coq-tactician/
+              opam pin add -n -y -k path $PACKAGE $WORKDIR
               opam update -y
-              opam install -y -j 2 coq-tactician
+              opam install -y -j 2 $PACKAGE
             endGroup
-            startGroup Build
+          script: |
+            startGroup "Build"
               sudo chmod -R 777 .
               opam exec -- make -C coq-tactician-stdlib -j2 BENCHMARK=2
-            endGroup
-            startGroup Uninstallation test
-              opam remove coq-tactician-stdlib
             endGroup
