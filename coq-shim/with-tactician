@@ -22,7 +22,7 @@ $TACTICIANLIB/coqc.real $TACTICIANFLAGS "\$@"
 EOF
 
     bwrap --dev-bind / / --bind $OPAMBIN/coqc $TACTICIANLIB/coqc.real \
-          --bind $COQC $OPAMBIN/coqc "$@"
+          --bind $COQC $OPAMBIN/coqc --die-with-parent "$@"
 }
 
 inject_path () {
