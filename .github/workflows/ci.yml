@@ -20,8 +20,8 @@ jobs:
               opam update -y
               opam install -y -j 2 -t $PACKAGE --deps-only
             endGroup
-         script: |
-           startGroup "Build"
-             opam install -y -v -j 2 -t $PACKAGE
-             opam list
-           endGroup
+          script: |
+            startGroup "Build"
+              opam install -y -v -j 2 -t $PACKAGE
+              opam list
+            endGroup
