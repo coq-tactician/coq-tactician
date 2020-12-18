@@ -1,4 +1,4 @@
-From Tactician Require Export Ltac1Dummy Ltac1.Record.
+From Tactician Require Export Ltac1.Record.
 
 Declare ML Module "tactician_ltac1_tactics_plugin".
 
