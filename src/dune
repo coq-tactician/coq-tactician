@@ -60,6 +60,7 @@
 )
 (executable
  (name tactician)
+ (package coq-tactician)
  (public_name tactician)
  (flags :standard -warn-error -A)
  (modules ("tactician"))

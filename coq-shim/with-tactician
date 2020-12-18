@@ -7,13 +7,58 @@ TACTICIANDIR=$(opam var coq:lib)/user-contrib/Tactician
 
 TACTICIANFLAGS="-q -I $TACTICIANDIR -R $TACTICIANDIR Tactician -rifrom Tactician Ltac1.Record "
 
-trap 'rm -f "$COQC"' EXIT
-COQC=$(mktemp)
-chmod +x $COQC
-cat <<EOF > $COQC
+link_binary() {
+    ln -s $OPAMBIN/${1} $COQBIN/${1}
+}
+
+inject_bwrap () {
+    # TODO: At some point deal with .opt and .byte versions
+    trap 'rm -f "$COQC"' EXIT
+    COQC=$(mktemp)
+    chmod +x $COQC
+    cat <<EOF > $COQC
 #!/bin/bash
 $TACTICIANLIB/coqc.real $TACTICIANFLAGS "\$@"
 EOF
 
-bwrap --dev-bind / / --bind $OPAMBIN/coqc $TACTICIANLIB/coqc.real \
-      --bind $COQC $OPAMBIN/coqc "$@"
+    bwrap --dev-bind / / --bind $OPAMBIN/coqc $TACTICIANLIB/coqc.real \
+          --bind $COQC $OPAMBIN/coqc --die-with-parent "$@"
+}
+
+inject_path () {
+    trap 'rm -rf "$COQBIN"' EXIT
+    # The coqbin has to be in the build directory, since that is the only dir that is both
+    # writable and in the opam path
+    COQBIN=$(mktemp -d --tmpdir=.)
+
+    # TODO: At some point deal with .opt and .byte versions
+    link_binary coqchk
+    link_binary coqdep
+    link_binary coqdoc
+    link_binary coq_makefile
+    link_binary coqpp
+    link_binary coq-tex
+    link_binary coqtop
+    link_binary coqwc
+
+    cat <<EOF > $COQBIN/coqc
+#!/bin/bash
+$OPAMBIN/coqc $TACTICIANFLAGS "\$@"
+EOF
+    chmod +x $COQBIN/coqc
+
+    PATH=$(pwd)/$COQBIN:$PATH; export PATH
+    # We add a trailing slash because some scripts assume it
+    COQBIN=$(pwd)/$COQBIN/; export COQBIN
+    COQC=${COQBIN}coqc; export COQC
+
+    "$@"
+}
+
+# Test if we have a functioning bwrap command
+if bwrap --dev-bind / / true &> /dev/null ; then
+    inject_bwrap "$@"
+else
+    inject_path "$@"
+fi
+

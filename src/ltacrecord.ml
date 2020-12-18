@@ -209,7 +209,7 @@ let with_let_prefix tac =
   prefix tac !tmp_ltac_defs
 
 let rebuild_outcomes (outcomes, tac) =
-  let rebuild_tac (tac, h) = with_let_prefix tac, h in
+  let rebuild_tac tac = tactic_make (with_let_prefix (tactic_repr tac)) in
   let rec rebuild_pd = function
     | End -> End
     | Step ps -> Step (rebuild_ps ps)
@@ -284,6 +284,15 @@ let section_notation_helper prods e =
     let func = TacFun (List.map Names.Name.mk_name alias.alias_args, alias.alias_body) in
     Lib.add_anonymous_leaf (in_section_ltac_defs [id, func])
 
+(* TODO: Determining where we have to call this exactly is tricky business *)
+let load_plugins () =
+  let open Mltop in
+  let plugins = [("ssreflect_plugin", "tactician_ssreflect_plugin")] in
+  let load (dep, target) =
+    if module_is_known dep && not (module_is_known target) then
+      declare_ml_modules false [target] in
+  List.iter load plugins
+
 let in_db : data_in -> Libobject.obj =
   Libobject.(declare_object { (default_object "LTACRECORD") with
                               cache_function = (fun (_,((outcomes, tac) : data_in)) ->
@@ -292,8 +301,10 @@ let in_db : data_in -> Libobject.obj =
                                   if !global_record then learner_learn outcomes tac else ())
                             ; open_function = (fun _ _ (_, (execs, tac)) -> ())
                             ; classify_function = (fun data -> Libobject.Substitute data)
-                            ; subst_function = subst_outcomes
+                            ; subst_function = (fun x ->
+                                load_plugins (); subst_outcomes x)
                             ; discharge_function = (fun (obj, data) ->
+                                load_plugins ();
                                 let env = Global.env () in
                                 Some (discharge_outcomes env data))
                             ; rebuild_function = (fun data ->
@@ -763,14 +774,6 @@ let qualid_of_global env r =
 *)
 
 (* End name globalization *)
-
-let load_plugins () =
-  let open Mltop in
-  let plugins = [("ssreflect_plugin", "tactician_ssreflect_plugin")] in
-  let load (dep, target) =
-    if module_is_known dep && not (module_is_known target) then
-      declare_ml_modules false [target] in
-  List.iter load plugins
 
 (* Returns true if tactic execution should be skipped *)
 let pre_vernac_solve pstate id =
