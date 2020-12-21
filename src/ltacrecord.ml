@@ -882,7 +882,7 @@ let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO:
           || String.is_prefix "tactician ignore" s)
       then () else add_to_db2 id (execs, tac);
       try (* This is purely for parsing bug detection and could be removed for performance reasons *)
-        let _ = Pcoq.parse_string Pltac.tactic s in ()
+        let _ = Pcoq.parse_string Pltac.tactic_eoi s in ()
       with e ->
         Feedback.msg_warning (Pp.str (
             "Tactician detected a printing/parsing problem " ^
