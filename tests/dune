@@ -5,4 +5,4 @@
 (alias
  (name runtest)
  (package coq-tactician)
- (deps DummyTest.vo DummyTest2.vo))
+ (deps (glob_files *.vo)))

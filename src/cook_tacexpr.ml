@@ -18,7 +18,7 @@ let correct_kername id =
     return (ArgVar (kername_tolname id))
 
 let discharge_genarg_tactic s
-    ((GenArg (Glbwit wit, _)) as g : glevel generic_argument)
+    ((GenArg (Glbwit _, _)) as g : glevel generic_argument)
   : glevel generic_argument discharged =
   let rec aux ((GenArg (Glbwit wit, _)) as g) = match wit with
     | ListArg wit as witl ->
@@ -193,9 +193,10 @@ let cook s (tac : glob_tactic_expr) : glob_tactic_expr discharged =
       let+ args = cook_args args in
       TacML (CAst.make (e, args))
     | TacAlias CAst.{v=(id, args); _} ->
-      let+ args = cook_args args in
-      if Tacenv.check_alias id then TacAlias (CAst.make (id, args)) else
+      let* args = cook_args args in
+      if Tacenv.check_alias id then return @@ TacAlias (CAst.make (id, args)) else
         let lid = CAst.make (Names.(Label.to_id (KerName.label id))) in
+        let+ () = log id in
         TacArg (CAst.make (TacCall (CAst.make (ArgVar lid, args))))
   in cook tac
 
