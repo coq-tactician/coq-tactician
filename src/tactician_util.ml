@@ -1,8 +1,13 @@
-let stream_mapi f stream =
-  let next i =
-    try Some (f i (Stream.next stream))
-    with Stream.Failure -> None in
-  Stream.from next
+let mapi f s : 'a IStream.t =
+  let rec mapi_node f i = function
+    | IStream.Nil -> IStream.Nil
+    | IStream.Cons (x, s) -> Cons (f i x, mapi f (i + 1) s)
+  and mapi f i s = IStream.thunk (fun () -> mapi_node f i (IStream.peek s))
+  in mapi f 0 s
+
+let rec to_list n s = match n, IStream.peek s with
+  | _, Nil | 0, _ -> []
+  | n, Cons (x, s) -> x :: (to_list (n - 1) s)
 
 exception PredictionsEnd
 exception DepthEnd

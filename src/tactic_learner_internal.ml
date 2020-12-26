@@ -125,7 +125,7 @@ module type TacticianOnlineLearnerType =
     type model
     val empty    : unit -> model
     val learn    : model -> outcome list -> tactic -> model (* TODO: Add lemma dependencies *)
-    val predict  : model -> situation list -> prediction Stream.t (* TODO: Add global environment *)
+    val predict  : model -> situation list -> prediction IStream.t (* TODO: Add global environment *)
     val evaluate : model -> outcome -> tactic -> float * model
   end
 
@@ -135,7 +135,7 @@ module type TacticianOfflineLearnerType =
     type model
     val add      : outcome list -> tactic -> unit (* TODO: Add lemma dependencies *)
     val train    : unit -> model
-    val predict  : model -> situation list -> prediction Stream.t (* TODO: Add global environment *)
+    val predict  : model -> situation list -> prediction IStream.t (* TODO: Add global environment *)
     val evaluate : model -> outcome -> tactic -> float
   end
 
@@ -151,7 +151,7 @@ module NullLearner : TacticianOnlineLearnerType = functor (_ : TacticianStructur
   type model = unit
   let empty () = ()
   let learn  () _ _ = ()
-  let predict () _ = Stream.sempty
+  let predict () _ = IStream.empty
   let evaluate () _ _ = 0., ()
 end
 

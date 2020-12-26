@@ -4,19 +4,19 @@ open Proofview
 open Notations
 
 let tclFoldPredictions max_reached tacs =
-  let rec aux depth i =
+  let rec aux tacs depth i =
       let open Proofview in
-      match Stream.peek tacs with
-      | None -> tclZERO (if depth then DepthEnd else PredictionsEnd)
-      | Some tac -> Stream.junk tacs;
+      match IStream.peek tacs with
+      | IStream.Nil -> tclZERO (if depth then DepthEnd else PredictionsEnd)
+      | IStream.Cons (tac, tacs) ->
         tclOR tac
           (fun e ->
              if max_reached () then tclZERO PredictionsEnd else
                let depth = depth || (match e with
                    | (DepthEnd, _) -> true
                    | _ -> false) in
-               aux depth (i+1)) in
-  aux false 0
+               aux tacs depth (i+1)) in
+  aux tacs false 0
 
 (* TODO: max_reached is a hack, remove *)
 let tclSearchDiagonalDFS max_reached predict depth =
@@ -27,7 +27,7 @@ let tclSearchDiagonalDFS max_reached predict depth =
       | _ ->
         predict >>= fun predictions ->
         tclFoldPredictions max_reached
-          (stream_mapi
+          (mapi
              (fun i {focus; tactic; confidence} ->
                 let ndepth = depth - i in
                 if ndepth <= 0 then tclZERO DepthEnd else
