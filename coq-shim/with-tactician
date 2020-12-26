@@ -1,6 +1,12 @@
 #!/bin/bash
 set -eu
 
+if [ $# -lt 1 ]
+then
+    echo "Usage: with-tactician command [argument ..]"
+    exit 1
+fi
+
 OPAMBIN=$(opam var bin)
 TACTICIANLIB=$(opam var coq-tactician:lib)
 TACTICIANDIR=$(opam var coq:lib)/user-contrib/Tactician
