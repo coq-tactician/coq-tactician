@@ -84,18 +84,41 @@ module LSHF : TacticianOnlineLearnerType = functor (TS : TacticianStructures) ->
   (* TODO: Would it be beneficial to initialize this better? *)
   let random = Random.State.make [||]
 
-  type model = tactic forest
+  type model =
+    { forest : tactic forest
+    ; length : int
+    ; frequencies : int Frequencies.t }
 
-  let empty () = List.init trie_count @@ fun _ -> init_trie random depth
+  let empty () =
+    { forest = List.init trie_count (fun _ -> init_trie random depth)
+    ; length = 0
+    ; frequencies = Frequencies.empty }
+
+  let add db b obj =
+    let feats = proof_state_to_ints b in
+    let frequencies = List.fold_left
+        (fun freq f ->
+           Frequencies.update f (fun y -> Some ((default 0 y) + 1)) freq)
+        db.frequencies
+        feats in
+    (* TODO: Length needs to be adjusted if we want to use multisets  *)
+    let length = db.length + 1 in
+    let forest = insert db.forest feats obj in
+    { forest; length; frequencies }
 
   let learn db outcomes tac =
-    List.fold_left (fun db out -> insert db (proof_state_to_ints out.before) tac) db outcomes
+    List.fold_left (fun db out -> add db out.before tac) db outcomes
 
   let predict db f =
     if f = [] then IStream.of_list [] else
       let feats = proof_state_to_ints (List.hd f).state in
-      let tacs, _ = query db feats 100 in
-      IStream.of_list @@ List.map (fun (tac, _) -> { confidence = 1.; focus = 0; tactic = tac }) tacs
+      let candidates, _ = query db.forest feats 100 in
+      let tdidfs = List.map
+          (fun (o, f) -> let x = tfidf db.length db.frequencies feats f in (x, o))
+          candidates in
+      let out = remove_dups_and_sort tdidfs in
+      let out = List.map (fun (a, c) -> { confidence = a; focus = 0; tactic = c }) out in
+      IStream.of_list out
 
   let evaluate db _ _ = 1., db
 
