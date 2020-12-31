@@ -587,13 +587,13 @@ let predict =
      on goal zero will focus in the first goal of the reversed `situation` *)
   tclUNIT (learner_predict (List.rev situation))
 
-let filterTactics p q (tacs : Tactic_learner_internal.TS.prediction Stream.t) =
+let filterTactics p q (tacs : Tactic_learner_internal.TS.prediction IStream.t) =
   let exception SuccessException of bool in
   let open Proofview in
   let open Notations in
-  let rec aux n m tacs solve progress = match n = 0 || m = 0, Stream.peek tacs with
-    | true, _ | _, None -> tclUNIT (firstn p (List.rev (if List.is_empty solve then progress else solve)))
-    | false, Some (Tactic_learner_internal.TS.{ tactic; _} as p) -> Stream.junk tacs;
+  let rec aux n m tacs solve progress = match n = 0 || m = 0, IStream.peek tacs with
+    | true, _ | _, IStream.Nil -> tclUNIT (firstn p (List.rev (if List.is_empty solve then progress else solve)))
+    | false, IStream.Cons (Tactic_learner_internal.TS.{ tactic; _} as p, tacs) ->
       let tactic = parse_tac (tactic_repr tactic) in
       tclOR (
         tclPROGRESS (tclTIMEOUT 1 tactic) <*>
@@ -615,7 +615,7 @@ let userPredict =
   let open Proofview in
   let open Notations in
   tclENV >>= fun env -> predict >>=
-  (if debug then (fun r -> tclUNIT (Stream.npeek 10 r)) else filterTactics 10 10000) >>= fun r ->
+  (if debug then (fun r -> tclUNIT (to_list 10 r)) else filterTactics 10 10000) >>= fun r ->
   let r = List.map (fun ({confidence; focus; tactic} : Tactic_learner_internal.TS.prediction) ->
       (confidence, focus, tactic)) r in
   let r = List.map (fun (x, _, (y, _)) -> (x, y)) r in
@@ -643,7 +643,7 @@ let tacpredict max_reached =
              tclUNIT (learner_evaluate outcome (t, h)))) in
   let transform i (r : Tactic_learner_internal.TS.prediction) =
     { confidence = r.confidence; focus = r.focus; tactic = taceval i r.focus r.tactic } in
-  tclUNIT (stream_mapi (fun i p -> transform i p) predictions)
+  tclUNIT (mapi (fun i p -> transform i p) predictions)
 
 let tclTIMEOUT2 n t =
   Proofview.tclOR
