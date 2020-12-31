@@ -78,8 +78,8 @@ module LSHF : TacticianOnlineLearnerType = functor (TS : TacticianStructures) ->
   open TS
   open LH
 
-  let depth = 15
-  let trie_count = 10
+  let depth = 9
+  let trie_count = 11
 
   (* TODO: Would it be beneficial to initialize this better? *)
   let random = Random.State.make [||]
