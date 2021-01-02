@@ -59,7 +59,7 @@ let query f feats max =
   let select_relevant { hashes; trie } = match hashes, trie with
     | _, Leaf _ -> None
     | [], Node _ -> CErrors.anomaly (Pp.str "LSHF invariant violated")
-    | h::hashes, Node (l, r) ->
+    | h::hashes', Node (l, r) ->
       Some { hashes; trie = if min_hash h feats then r else l } in
   let select_irrelevant { hashes; trie } = match hashes, trie with
     | _, Leaf _ -> trie
