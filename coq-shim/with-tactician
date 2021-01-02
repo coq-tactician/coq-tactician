@@ -11,7 +11,16 @@ OPAMBIN=$(opam var bin)
 TACTICIANLIB=$(opam var coq-tactician:lib)
 TACTICIANDIR=$(opam var coq:lib)/user-contrib/Tactician
 
-TACTICIANFLAGS="-q -I $TACTICIANDIR -R $TACTICIANDIR Tactician -rifrom Tactician Ltac1.Record "
+TACTICIANWRAP=("$@")
+TACTICIANEXTRAWRAP=$(opam var coq-tactician:injection-wrappers)
+if [ ! -z "$TACTICIANEXTRAWRAP" ]
+then
+    # Parsing trick taken from https://superuser.com/a/1066541
+    TACTICIANEXTRAWRAP=$(eval 'for CMD in '$TACTICIANEXTRAWRAP'; do echo $CMD; done')
+    TACTICIANWRAP=("${TACTICIANEXTRAWRAP[@]}" "${TACTICIANWRAP[@]}")
+fi
+TACTICIANEXTRAFLAGS=$(opam var coq-tactician:injection-flags)
+TACTICIANFLAGS="-q -I $TACTICIANDIR -R $TACTICIANDIR Tactician -rifrom Tactician Ltac1.Record"
 
 link_binary() {
     ln -s $OPAMBIN/${1} $COQBIN/${1}
@@ -24,11 +33,11 @@ inject_bwrap () {
     chmod +x $COQC
     cat <<EOF > $COQC
 #!/bin/bash
-$TACTICIANLIB/coqc.real $TACTICIANFLAGS "\$@"
+$TACTICIANLIB/coqc.real $TACTICIANFLAGS $TACTICIANEXTRAFLAGS "\$@"
 EOF
 
     bwrap --dev-bind / / --bind $OPAMBIN/coqc $TACTICIANLIB/coqc.real \
-          --bind $COQC $OPAMBIN/coqc --die-with-parent "$@"
+          --bind $COQC $OPAMBIN/coqc --die-with-parent "${TACTICIANWRAP[@]}"
 }
 
 inject_path () {
@@ -49,7 +58,7 @@ inject_path () {
 
     cat <<EOF > $COQBIN/coqc
 #!/bin/bash
-$OPAMBIN/coqc $TACTICIANFLAGS "\$@"
+$OPAMBIN/coqc $TACTICIANFLAGS TACTICIANEXTRAFLAGS "\$@"
 EOF
     chmod +x $COQBIN/coqc
 
@@ -58,7 +67,7 @@ EOF
     COQBIN=$(pwd)/$COQBIN/; export COQBIN
     COQC=${COQBIN}coqc; export COQC
 
-    "$@"
+    "${TACTICIANWRAP[@]}"
 }
 
 # Test if we have a functioning bwrap command
