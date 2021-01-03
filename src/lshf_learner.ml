@@ -51,12 +51,11 @@ let insert f feats elem =
     {hashes; trie = insert hashes trie} in
   List.map insert f
 
-(* TODO: Make more lazy *)
 let rec collect = function
-  | Leaf ls -> IStream.of_list ls
-  | Node (l, r) -> IStream.app (collect l) (collect r)
+  | Leaf ls -> ls
+  | Node (l, r) -> collect l @ collect r
 
-let query f feats =
+let query f feats max =
   let select_relevant { hashes; trie } = match hashes, trie with
     | _, Leaf _ -> None
     | [], Node _ -> CErrors.anomaly (Pp.str "LSHF invariant violated")
@@ -67,11 +66,11 @@ let query f feats =
     | [], Node _ -> CErrors.anomaly (Pp.str "LSHF invariant violated")
     | h::_, Node (l, r) -> if min_hash h feats then l else r in
   let rec query f =
-    if List.is_empty f then IStream.empty else
-      let res = query @@ List.filter_map select_relevant f in
-      let res' = IStream.concat @@ IStream.map collect @@ IStream.map select_irrelevant @@ IStream.of_list f in
-      (* TODO: Make more lazy *)
-      IStream.app res res' in
+    let filtered = List.filter_map select_relevant f in
+    let res, c = if List.is_empty filtered then [], 0 else query filtered in
+    if c >= max then res, c else
+      let res' = List.concat @@ List.map collect @@ List.map select_irrelevant f in
+      res @ res', List.length res' + c in
   query f
 
 module LSHF : TacticianOnlineLearnerType = functor (TS : TacticianStructures) -> struct

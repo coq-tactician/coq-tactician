@@ -7,7 +7,7 @@
    "g_ltac1_record"
    ltacrecord
    diagonal_iterative_search
-   knnLSHForest
+   lshf_learner
    knn
    tactic_substitute
    search_strategy
