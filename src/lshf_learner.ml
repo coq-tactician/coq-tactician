@@ -73,13 +73,33 @@ let query f feats max =
       res @ res', List.length res' + c in
   query f
 
+let declare_option name var d =
+  Goptions.declare_int_option Goptions.{
+    optdepr = false;
+    optname = String.concat " " name;
+    optkey = name;
+    optread = (fun () -> Some !var);
+    optwrite = (function
+        | None -> var := d
+        | Some i -> var := i)
+  }
+
+let depth_default = 9
+let depth = ref depth_default
+let () = declare_option ["Tactician"; "LSHF"; "Depth"] depth depth_default
+
+let trie_count_default = 11
+let trie_count = ref trie_count_default
+let () = declare_option ["Tactician"; "LSHF"; "Trie"; "Count"] trie_count trie_count_default
+
+let sort_window_default = 100
+let sort_window = ref sort_window_default
+let () = declare_option ["Tactician"; "LSHF"; "Sort"; "Window"] sort_window sort_window_default
+
 module LSHF : TacticianOnlineLearnerType = functor (TS : TacticianStructures) -> struct
   module LH = L(TS)
   open TS
   open LH
-
-  let depth = 9
-  let trie_count = 11
 
   (* TODO: Would it be beneficial to initialize this better? *)
   let random = Random.State.make [||]
@@ -90,7 +110,7 @@ module LSHF : TacticianOnlineLearnerType = functor (TS : TacticianStructures) ->
     ; frequencies : int Frequencies.t }
 
   let empty () =
-    { forest = List.init trie_count (fun _ -> init_trie random depth)
+    { forest = List.init !trie_count (fun _ -> init_trie random !depth)
     ; length = 0
     ; frequencies = Frequencies.empty }
 
@@ -112,7 +132,7 @@ module LSHF : TacticianOnlineLearnerType = functor (TS : TacticianStructures) ->
   let predict db f =
     if f = [] then IStream.of_list [] else
       let feats = proof_state_to_ints (List.hd f).state in
-      let candidates, _ = query db.forest feats 100 in
+      let candidates, _ = query db.forest feats !sort_window in
       let tdidfs = List.map
           (fun (o, f) -> let x = tfidf db.length db.frequencies feats f in (x, o))
           candidates in

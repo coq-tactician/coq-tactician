@@ -139,9 +139,9 @@ let featureoptions = Goptions.{optdepr = false;
                                                 benchmarking := None
                                               | Some _ -> ignore (feat_file ())))}
 
-let _ = Goptions.declare_int_option benchoptions
-let _ = Goptions.declare_bool_option deterministicoptions
-let _ = Goptions.declare_bool_option featureoptions
+let () = Goptions.declare_int_option benchoptions
+let () = Goptions.declare_bool_option deterministicoptions
+let () = Goptions.declare_bool_option featureoptions
 
 let global_record = ref true
 let recordoptions = Goptions.{optdepr = false;
