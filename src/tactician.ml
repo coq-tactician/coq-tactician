@@ -151,12 +151,17 @@ let config_add_remove gt ?st name value =
   let st = set_opt_switch gt ?st name (`Remove value) in
   set_opt_switch gt ?st name (`Add value)
 
-let wrap_command = "[\"with-tactician\"] {coq-tactician:installed}"
-let pre_build_command = "[\"tactician-patch\" name version] {coq-tactician:installed}"
+(* TODO: Remove old commands once enough time has elapsed *)
+let old_wrap_command = "[\"with-tactician\"] {coq-tactician:installed}"
+let old_pre_build_command = "[\"tactician-patch\" name version] {coq-tactician:installed}"
+let wrap_command = "[\"%{coq-tactician:lib}%/with-tactician\"] {coq-tactician:installed}"
+let pre_build_command = "[\"%{coq-tactician:lib}%/tactician-patch\" name version] {coq-tactician:installed}"
 
 let inject () =
   opam_init_no_lock @@ fun gt ->
-  let st = config_add_remove gt "wrap-build-commands" wrap_command in
+  let st = set_opt_switch gt "wrap-build-commands" (`Remove old_wrap_command) in
+  let st = set_opt_switch gt ?st "pre-build-commands" (`Remove old_pre_build_command) in
+  let st = config_add_remove gt ?st "wrap-build-commands" wrap_command in
   let _ = config_add_remove gt ?st "pre-build-commands" pre_build_command in
   print_endline "\nTactician will now instrument Coq packages installed through opam.";
   print_endline "Run tactician eject to reverse this command.";
@@ -168,7 +173,9 @@ let inject () =
 let eject () =
   OpamClientConfig.opam_init ();
   OpamGlobalState.with_ `Lock_none @@ fun gt ->
-  let st = set_opt_switch gt "wrap-build-commands" (`Remove wrap_command) in
+  let st = set_opt_switch gt "wrap-build-commands" (`Remove old_wrap_command) in
+  let st = set_opt_switch gt ?st "pre-build-commands" (`Remove old_pre_build_command) in
+  let st = set_opt_switch gt ?st "wrap-build-commands" (`Remove wrap_command) in
   let _ = set_opt_switch gt ?st "pre-build-commands" (`Remove pre_build_command) in
   print_endline "\nTactician will no longer instrument packages installed through opam.";
   print_endline "Run tactician inject to re-inject.";
