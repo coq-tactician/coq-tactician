@@ -103,7 +103,11 @@ let constr2s t =
     | Const (c, u) -> Node (s2s "Const" :: constant2s c :: instance2s u)
     | Ind (i, u) -> Node (s2s "Ind" :: inductive2s i :: instance2s u)
     | Construct (c, u) -> Node (s2s "Construct" :: constructor2s c @ instance2s u)
-    | Case (info, t1, inv, t2, bodies) -> (* TODO: Use inv *)
+    | Case (a, b, c, d, e, f, g) ->
+      let (info, t1, inv, t2, bodies) = (* TODO: Use inv *)
+        (* We assume here that the current environment is an extension of the environment where
+           the term was defined. *)
+        Inductive.expand_case (Global.env ()) (a, b, c, d, e, f, g) in
       Node (s2s "Case" :: case_info2s info :: aux ls t1 :: aux ls t2
            :: Array.to_list (Array.map (aux ls) bodies))
     | Fix (_, pd) -> Node (s2s "Fix" :: prec_declaration2s ls pd)

@@ -15,6 +15,7 @@ open Loc
 open Names
 open Goal_select
 open Namegen
+open Tacred
 
 module type MapDef = sig
   include MonadNotations
