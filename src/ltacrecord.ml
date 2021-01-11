@@ -300,9 +300,9 @@ let load_plugins () =
 let in_db : data_in -> Libobject.obj =
   Libobject.(declare_object { (default_object "LTACRECORD") with
                               cache_function = (fun (_,((outcomes, tac) : data_in)) ->
-                                  learner_learn outcomes tac)
+                                  learner_learn File outcomes tac)
                             ; load_function = (fun i (_, (outcomes, tac)) ->
-                                  if !global_record then learner_learn outcomes tac else ())
+                                  if !global_record then learner_learn Dependency outcomes tac else ())
                             ; open_function = (fun i (_, (execs, tac)) -> ())
                             ; classify_function = (fun data -> Libobject.Substitute data)
                             ; subst_function = (fun x ->

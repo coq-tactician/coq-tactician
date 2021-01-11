@@ -126,7 +126,7 @@ module LSHF : TacticianOnlineLearnerType = functor (TS : TacticianStructures) ->
     let forest = insert db.forest feats obj in
     { forest; length; frequencies }
 
-  let learn db outcomes tac =
+  let learn db _loc outcomes tac =
     List.fold_left (fun db out -> add db out.before tac) db outcomes
 
   let predict db f =

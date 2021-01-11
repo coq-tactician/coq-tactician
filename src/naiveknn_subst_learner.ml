@@ -112,7 +112,7 @@ module NaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStructures
       let l = if db.length >= max then db.length else db.length + 1 in
       {entries = comb::purgedentries; length = l; frequencies = newfreq}
 
-    let learn db outcomes tac =
+    let learn db _loc outcomes tac =
       List.fold_left (fun db out -> add db out.before tac) db outcomes
 
     (* TODO: This doesn't work on multisets *)
@@ -199,4 +199,4 @@ module NaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStructures
 
 end
 
-let () = register_online_learner "naive-knn" (module NaiveKnn)
+(* let () = register_online_learner "naive-knn" (module NaiveKnn) *)
