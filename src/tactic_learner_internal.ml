@@ -151,11 +151,12 @@ module type TacticianOfflineLearnerType =
 
 let new_database name (module Learner : TacticianOnlineLearnerType) =
   let module Learner = Learner(TS) in
-  let db = Summary.ref ~name:("tactician-db-" ^ name) (Learner.empty ()) in
-  ( (fun loc exes tac -> db := Learner.learn !db loc exes tac)
-  , (fun t -> Learner.predict !db t)
-  , (fun outcome tac -> let f, db' = Learner.evaluate !db outcome tac in
-    db := db'; f))
+  (* Note: This is lazy to give people a chance to set GOptions before a learner gets initialized *)
+  let db = Summary.ref ~name:("tactician-db-" ^ name) (lazy (Learner.empty ())) in
+  ( (fun loc exes tac -> db := Lazy.from_val @@ Learner.learn (Lazy.force !db) loc exes tac)
+  , (fun t -> Learner.predict (Lazy.force !db) t)
+  , (fun outcome tac -> let f, db' = Learner.evaluate (Lazy.force !db) outcome tac in
+      db := Lazy.from_val db'; f))
 
 module NullLearner : TacticianOnlineLearnerType = functor (_ : TacticianStructures) -> struct
   type model = unit
