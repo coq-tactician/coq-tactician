@@ -23,7 +23,6 @@ jobs:
               $GITHUB_SHA coq-tactician-stdlib.8.11.dev \"Set Tactician Benchmark 40\")
           echo $BENCHID
           echo "::set-output name=benchid::$BENCHID"
-          sleep 1m
 EOF
 
 NEEDS="[submit]"
