@@ -34,21 +34,19 @@ ATTACH=$(cat <<'EOF'
           chmod 600 attach-key
           set -o pipefail
           set +e
-          ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
-              ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}. 2>&1 | tee output.txt
-          if [ $? -ne 0 ]; then
-              if grep -q "Job is pending execution" output.txt; then
-                  echo "::set-output name=finished::false"
-                  echo "Sleeping 2h to wait for job execution"
-                  sleep 2h
-              else
-                  exit 1
-              fi
+          timeout 355m ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+                  ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}.
+          EXIT=$?
+          if [ $EXIT -eq 124 ]; then
+              echo "::set-output name=finished::false"
+              echo "Job did not finish before Github time limit, spilling to next step"
+          else
+              exit $EXIT
           fi
 EOF
 )
 
-for i in {0..36}; do
+for i in {0..13}; do
     cat << EOF
   attach${i}:
     runs-on: ubuntu-latest
