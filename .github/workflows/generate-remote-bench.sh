@@ -34,7 +34,7 @@ ATTACH=$(cat <<'EOF'
           set -o pipefail
           set +e
           timeout 355m ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
-                  ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}.
+                  ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}
           EXIT=$?
           echo "Exit code $EXIT"
           if [ $EXIT -eq 124 ]; then
