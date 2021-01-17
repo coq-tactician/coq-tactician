@@ -33,9 +33,10 @@ ATTACH=$(cat <<'EOF'
           chmod 600 attach-key
           set -o pipefail
           set +e
-          timeout 355m ssh -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+          timeout 355m ssh -t -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
                   ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}.
           EXIT=$?
+          echo "Exit code $EXIT"
           if [ $EXIT -eq 124 ]; then
               echo "::set-output name=finished::false"
               echo "Job did not finish before Github time limit, spilling to next step"
