@@ -33,7 +33,7 @@ ATTACH=$(cat <<'EOF'
           chmod 600 attach-key
           set -o pipefail
           set +e
-          timeout 355m ssh -t -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+          timeout 355m ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
                   ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}.
           EXIT=$?
           echo "Exit code $EXIT"
