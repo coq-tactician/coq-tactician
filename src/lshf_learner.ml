@@ -80,11 +80,8 @@ let declare_option name var d =
     optkey = name;
     optread = (fun () -> Some !var);
     optwrite = (function
-        | None -> var := d; 
-          Feedback.msg_warning Pp.(str ("Triecount default set " ^ string_of_int d));
-        | Some i -> var := i;
-          Feedback.msg_warning Pp.(str ("Triecount set " ^ string_of_int i));
-      )
+        | None -> var := d
+        | Some i -> var := i)
   }
 
 let depth_default = 9
