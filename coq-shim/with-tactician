@@ -1,11 +1,19 @@
 #!/bin/bash
 set -eu
 
+if [ $# -lt 1 ]
+then
+    echo "Usage: with-tactician command [argument ..]"
+    exit 1
+fi
+
 OPAMBIN=$(opam var bin)
 TACTICIANLIB=$(opam var coq-tactician:lib)
 TACTICIANDIR=$(opam var coq:lib)/user-contrib/Tactician
 
-TACTICIANFLAGS="-q -I $TACTICIANDIR -R $TACTICIANDIR Tactician -rifrom Tactician Ltac1.Record "
+TACTICIANWRAP=$(opam var coq-tactician:injection-wrappers)
+TACTICIANEXTRAFLAGS=$(opam var coq-tactician:injection-flags)
+TACTICIANFLAGS="-q -I $TACTICIANDIR -R $TACTICIANDIR Tactician -rifrom Tactician Ltac1.Record"
 
 link_binary() {
     ln -s $OPAMBIN/${1} $COQBIN/${1}
@@ -18,7 +26,7 @@ inject_bwrap () {
     chmod +x $COQC
     cat <<EOF > $COQC
 #!/bin/bash
-$TACTICIANLIB/coqc.real $TACTICIANFLAGS "\$@"
+$TACTICIANWRAP $TACTICIANLIB/coqc.real $TACTICIANFLAGS $TACTICIANEXTRAFLAGS "\$@"
 EOF
 
     bwrap --dev-bind / / --bind $OPAMBIN/coqc $TACTICIANLIB/coqc.real \
@@ -43,7 +51,7 @@ inject_path () {
 
     cat <<EOF > $COQBIN/coqc
 #!/bin/bash
-$OPAMBIN/coqc $TACTICIANFLAGS "\$@"
+$TACTICIANWRAP $OPAMBIN/coqc $TACTICIANFLAGS TACTICIANEXTRAFLAGS "\$@"
 EOF
     chmod +x $COQBIN/coqc
 

@@ -53,6 +53,11 @@ module type TacticianStructures = sig
     { confidence : float
     ; focus      : int
     ; tactic     : tactic }
+
+  type location =
+    | Dependency
+    | File
+    | Lemma
 end
 
 module type TacticianOnlineLearnerType =
@@ -60,8 +65,8 @@ module type TacticianOnlineLearnerType =
     open S
     type model
     val empty    : unit -> model
-    val learn    : model -> outcome list -> tactic -> model (* TODO: Add lemma dependencies *)
-    val predict  : model -> situation list -> prediction Stream.t (* TODO: Add global environment *)
+    val learn    : model -> location -> outcome list -> tactic -> model (* TODO: Add lemma dependencies *)
+    val predict  : model -> situation list -> prediction IStream.t (* TODO: Add global environment *)
     val evaluate : model -> outcome -> tactic -> float * model
   end
 
@@ -69,9 +74,9 @@ module type TacticianOfflineLearnerType =
   functor (S : TacticianStructures) -> sig
     open S
     type model
-    val add      : outcome list -> tactic -> unit (* TODO: Add lemma dependencies *)
+    val add      : location -> outcome list -> tactic -> unit (* TODO: Add lemma dependencies *)
     val train    : unit -> model
-    val predict  : model -> situation list -> prediction Stream.t (* TODO: Add global environment *)
+    val predict  : model -> situation list -> prediction IStream.t (* TODO: Add global environment *)
     val evaluate : model -> outcome -> tactic -> float
   end
 

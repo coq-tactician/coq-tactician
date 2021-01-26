@@ -1,13 +1,12 @@
-open Knn
+open Tactic_learner
+open Learner_helper
 
-(*
- * Uses Minhash metric for similarity.
- * Creates a LSH Forest.
- *)
-module MakeLSHForestKnn (T : FeatureType): (KnnType with type feature = T.feature and type obj = T.obj) = struct
+module OrigLSHF : TacticianOnlineLearnerType = functor (TS : TacticianStructures) -> struct
+  module LH = L(TS)
+  open TS
+  open LH
 
-    type feature = T.feature
-    type obj = T.obj
+    type obj = tactic
 
     type 'a trie =
         | Leaf of ('a * int list) option
@@ -17,7 +16,7 @@ module MakeLSHForestKnn (T : FeatureType): (KnnType with type feature = T.featur
     type db_entry =
         { signature : int list;
           trie_prefixes : int list list;
-          features : T.feature list;
+          features : int list;
           obj      : obj;
           hashed : int
         }
@@ -30,15 +29,16 @@ module MakeLSHForestKnn (T : FeatureType): (KnnType with type feature = T.featur
 
 
     type database =
-        { mutable entries : db_entry list;
-        mutable length  : int;
+        { entries : db_entry list;
+        length  : int;
         minhashFunctions : (int -> int) list;
         signatureLength : int;
-        mutable forest : db_entry trie list;
+        forest : db_entry trie list;
         tree_count : int;
         max_depth : int }
 
     type t = database
+    type model = t
 
     exception TrieError of string
 
@@ -149,7 +149,7 @@ module MakeLSHForestKnn (T : FeatureType): (KnnType with type feature = T.featur
         creator_rec n
 
     let generateSignature db fl =
-        let initialHashedList = (List.map T.hash fl) in
+        let initialHashedList = (List.map Hashtbl.hash fl) in
         List.map (fun hash ->
             (*let hashedList = (List.map hash initialHashedList) in*)
             List.fold_left (fun min cur ->
@@ -180,19 +180,19 @@ module MakeLSHForestKnn (T : FeatureType): (KnnType with type feature = T.featur
                 features = fl;
                 obj = obj;
                 hashed = (Hashtbl.hash_param (db.signatureLength + 1) 100 (obj, signatur))
-            } in
-        db.forest <- add_to_forest db combined;
-        db.entries <- combined :: db.entries;
-        db.length <- db.length + 1
+              } in
+        { db with forest = add_to_forest db combined
+        ; entries = combined :: db.entries
+        ; length = db.length + 1 }
 
     (* rewinds the database to n-th state,
      * 0 being empty db
      * NOT IMPLEMENTED!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
      *)
-    let rec backto db n = if n < db.length then
-        db.entries <- List.tl db.entries;
-        db.length <- db.length - 1;
-        backto db n
+    (* let rec backto db n = if n < db.length then
+     *     db.entries <- List.tl db.entries;
+     *     db.length <- db.length - 1;
+     *     backto db n *)
 
     let create () =
         let tree_count = 11 in
@@ -209,6 +209,7 @@ module MakeLSHForestKnn (T : FeatureType): (KnnType with type feature = T.featur
             max_depth = tree_max_depth
         }
 
+    let empty () = create ()
 
     [@@@ocaml.warning "-8"]
     let collect_neighbors db prefixes m =
@@ -251,26 +252,24 @@ module MakeLSHForestKnn (T : FeatureType): (KnnType with type feature = T.featur
                          neighbors
         in
         (*let (jaccards, _) = take 100 jaccards in*)
-        let jaccards = List.map (fun (float, obj) -> (float, [], obj)) jaccards in
-        List.sort (fun (x, _, _) (y, _, _) -> Float.compare y x) jaccards
+        let jaccards = List.map (fun (float, obj) -> (float, obj)) jaccards in
+        List.sort (fun (x, _) (y, _) -> Float.compare y x) jaccards
+
+    let predict db f =
+      if f = [] then IStream.empty else
+        let feats = proof_state_to_ints (List.hd f).state in
+        let preds = knn db feats in
+        let out = List.map (fun (a, c) -> { confidence = a; focus = 0; tactic = c }) preds in
+        IStream.of_list out
 
     let tolist db = List.map (fun ent -> (ent.features, ent.obj)) db.entries
 
     let count db = db.length
 
+    let learn db _loc outcomes tac =
+      List.fold_left (fun db out -> add db (proof_state_to_ints out.before) tac) db outcomes
+
+    let evaluate db _ _ = 1., db
 end
 
-module StringLSHForestKnn = MakeLSHForestKnn (struct
-                                            type feature = string
-                                            type obj = string
-                                            let compare = String.compare
-                                            let equal = String.equal
-                                            let hash = Hashtbl.hash
-                                        end)
-module IntLSHForestKnn = MakeLSHForestKnn (struct
-                                          type feature = int
-                                          type obj = int
-                                          let compare = compare
-                                          let equal = (=)
-                                          let hash = Hashtbl.hash
-                                      end)
+(* let () = register_online_learner "orig-lshf" (module OrigLSHF) *)
