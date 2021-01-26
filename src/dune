@@ -36,6 +36,7 @@
    coq.plugins.ssreflect
    coq.plugins.firstorder
    coq.plugins.funind
+   coq-hammer-tactics.tactics
  )
 )
 (library

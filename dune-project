@@ -26,5 +26,6 @@ automation.")
     (opam-client (>= 2.1.0~beta2))
     cmdliner
     (coq (and (>= 8.12) (< 8.13~)))
+    (coq-hammer-tactics (= 1.3+8.12))
     conf-git
     (coq-tactician-dummy (and (= 1.0~beta1) :with-test))))

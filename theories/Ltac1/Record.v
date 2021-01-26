@@ -2,6 +2,7 @@ Declare ML Module "ltac_plugin".
 Declare ML Module "ground_plugin".
 Declare ML Module "extraction_plugin".
 Declare ML Module "recdef_plugin".
+Require Import Hammer.Tactics.Tactics.
 Declare ML Module "tactician_ltac1_record_plugin".
 Export Set Default Proof Mode "Tactician Ltac1".
 

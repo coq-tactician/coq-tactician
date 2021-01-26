@@ -2,6 +2,8 @@ open Tactician_util
 open Search_strategy
 open Proofview
 open Notations
+open Hammer_tactics
+open Sauto
 
 let tclFoldPredictions max_reached tacs =
   let rec aux tacs depth i =
@@ -36,14 +38,14 @@ let tclSearchDiagonalDFS max_reached predict depth =
              predictions) >>= aux in
   aux depth >>= fun _ -> tclUNIT ()
 
-let rec tclSearchDiagonalIterative d max_reached predict : unit tactic =
-  (* (tclLIFT (NonLogical.print_info (Pp.str ("Iterative depth: " ^ string_of_int d)))) <*> *)
-  if max_reached () then Tacticals.New.tclZEROMSG (Pp.str "No more executions") else
-  tclOR
-    (tclSearchDiagonalDFS max_reached predict d)
-    (function
-      | (PredictionsEnd, _) ->
-        Tacticals.New.tclZEROMSG (Pp.str "Tactician failed: there are no more tactics left")
-      | _ -> tclSearchDiagonalIterative (d + 1) max_reached predict)
+let rec tclSearchDiagonalIterative d max_reached predict : unit tactic = sauto (default_s_opts ())
+  (* (\* (tclLIFT (NonLogical.print_info (Pp.str ("Iterative depth: " ^ string_of_int d)))) <*> *\)
+   * if max_reached () then Tacticals.New.tclZEROMSG (Pp.str "No more executions") else
+   * tclOR
+   *   (tclSearchDiagonalDFS max_reached predict d)
+   *   (function
+   *     | (PredictionsEnd, _) ->
+   *       Tacticals.New.tclZEROMSG (Pp.str "Tactician failed: there are no more tactics left")
+   *     | _ -> tclSearchDiagonalIterative (d + 1) max_reached predict) *)
 
 let () = register_search_strategy "diagonal iterative search" (tclSearchDiagonalIterative 10)

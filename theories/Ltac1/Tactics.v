@@ -1,5 +1,5 @@
+Declare ML Module "ltac_plugin".
 From Tactician Require Export Ltac1.Record.
-
 Declare ML Module "tactician_ltac1_tactics_plugin".
 
 (* These notations are on a higher level so that we can override the dummy module.
