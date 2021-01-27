@@ -136,26 +136,30 @@ let qs2s s =
   let s = Str.global_replace (Str.regexp_string "\"") "\\\"" s in
   Leaf ("\"" ^ s ^ "\"")
 
-let proof_state_to_sexpr ps =
+let proof_state_to_sexpr (hyps, goal) =
   let open TS in
-  let goal = proof_state_goal ps in
-  let hyps = proof_state_hypotheses ps in
-  let hyps = List.map (fun (id, term, typ) ->
-      Node (s2s (Id.to_string id) :: term_sexpr typ ::
-            Option.default [] (Option.map (fun t -> [term_sexpr t]) term))) hyps in
+  let hyps = List.map (function
+      | Context.Named.Declaration.LocalAssum (id, typ) ->
+        Node [s2s (Names.Id.to_string id.binder_name); term_sexpr typ]
+      | Context.Named.Declaration.LocalDef (id, term, typ) ->
+        Node [s2s (Names.Id.to_string id.binder_name); term_sexpr typ; term_sexpr term]) hyps in
   Node [s2s "State"; Node [s2s "Goal"; term_sexpr goal]; Node [s2s "Hypotheses"; Node hyps]]
 
-let proof_state_to_string ps env evar_map =
+let proof_state_to_string (hyps, goal) env evar_map =
   let open TS in
   let constr_str t = Pp.string_of_ppcmds (Sexpr.format_oneline (
       Printer.pr_constr_env env evar_map (term_repr t))) in
-  let goal = constr_str (proof_state_goal ps) in
-  let hyps = proof_state_hypotheses ps in
-  let hyps = List.map (fun (id, term, typ) ->
-      let id_str = Id.to_string id in
-      let term_str = Option.default "" (Option.map (fun t -> " := " ^ constr_str t) term) in
-      let typ_str = constr_str typ in
-      id_str ^ term_str ^ " : " ^ typ_str
+  let goal = constr_str goal in
+  let hyps = List.map (function
+      | Context.Named.Declaration.LocalAssum (id, typ) ->
+        let id_str = Names.Id.to_string id.binder_name in
+        let typ_str = constr_str typ in
+        id_str ^ " : " ^ typ_str
+      | Context.Named.Declaration.LocalDef (id, term, typ) ->
+        let id_str = Names.Id.to_string id.binder_name in
+        let term_str = " := " ^ constr_str term in
+        let typ_str = constr_str typ in
+        id_str ^ term_str ^ " : " ^ typ_str
     ) hyps in
   String.concat ", " hyps ^ " |- " ^ goal
 

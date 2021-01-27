@@ -4,8 +4,8 @@ open Constr
 open Context
 open Sexpr
 open Proofview
-
-module Id = Names.Id
+open Tactic_normalize
+open Names
 
 type id = Id.t
 
@@ -15,13 +15,16 @@ module IdMap = Map.Make(struct
   end)
 type id_map = Id.t IdMap.t
 
+let tactic_make tac = tac, Lazy.from_val (Hashtbl.hash_param 255 255 (tactic_normalize tac))
+
 module type TacticianStructures = sig
   type term
+  type named_context = (term, term) Named.pt
   val term_sexpr : term -> sexpr
   val term_repr  : term -> constr
 
   type proof_state
-  val proof_state_hypotheses  : proof_state -> (id * term option * term) list
+  val proof_state_hypotheses  : proof_state -> named_context
   val proof_state_goal        : proof_state -> term
   val proof_state_equal       : proof_state -> proof_state -> bool
   val proof_state_independent : proof_state -> bool
@@ -57,15 +60,21 @@ module type TacticianStructures = sig
     { confidence : float
     ; focus      : int
     ; tactic     : tactic }
+
+  type location =
+    | Dependency
+    | File
+    | Lemma
 end
 
 module TS = struct
 
   type term = constr
+  type named_context = Constr.named_context
   let term_sexpr t = constr2s t
   let term_repr t = t
 
-  type proof_state = (id * term option * term) list * term
+  type proof_state = named_context * term
 
   let proof_state_hypotheses ps = fst ps
 
@@ -74,12 +83,12 @@ module TS = struct
   let proof_state_equal ps1 ps2 = false
   let proof_state_independent ps = false
 
-  type tactic = glob_tactic_expr * int
+  type tactic = glob_tactic_expr * int Lazy.t
   let tactic_sexpr (tac, _) = s2s (Pp.string_of_ppcmds (Sexpr.format_oneline (
       Pptactic.pr_glob_tactic Environ.empty_env tac)))
   let tactic_repr (tac, _) = tac
-  let tactic_make tac = tac, Hashtbl.hash tac
-  let tactic_hash (_, hash) = hash
+  let tactic_make tac = tactic_make tac
+  let tactic_hash (_, hash) = Lazy.force hash
   let tactic_local_variables (tac, _) = []
   let tactic_substitute tac ls = tac
   let tactic_globally_equal tac1 tac2 = false
@@ -106,18 +115,18 @@ module TS = struct
     { confidence : float
     ; focus      : int
     ; tactic     : tactic }
+
+  type location =
+    | Dependency
+    | File
+    | Lemma
 end
 
 let goal_to_proof_state ps =
   let map = Goal.sigma ps in
   let to_term t = EConstr.to_constr ~abort_on_undefined_evars:false map t in
   let goal = to_term (Goal.concl ps) in
-  let hyps = List.map (function
-      | Context.Named.Declaration.LocalAssum (id, typ) ->
-        (id.binder_name, None, to_term typ)
-      | Context.Named.Declaration.LocalDef (id, term, typ) ->
-        (id.binder_name, Some (to_term term), to_term typ))
-      (Proofview.Goal.hyps ps) in
+  let hyps = EConstr.Unsafe.to_named_context (Proofview.Goal.hyps ps) in
   (hyps, goal)
 
 module type TacticianOnlineLearnerType =
@@ -125,39 +134,62 @@ module type TacticianOnlineLearnerType =
     open TS
     type model
     val empty    : unit -> model
-    val learn    : model -> outcome list -> tactic -> model (* TODO: Add lemma dependencies *)
-    val predict  : model -> situation list -> prediction Stream.t (* TODO: Add global environment *)
-    val evaluate : model -> outcome -> float * model
+    val learn    : model -> location -> outcome list -> tactic -> model (* TODO: Add lemma dependencies *)
+    val predict  : model -> situation list -> prediction IStream.t (* TODO: Add global environment *)
+    val evaluate : model -> outcome -> tactic -> float * model
   end
 
 module type TacticianOfflineLearnerType =
   functor (TS : TacticianStructures) -> sig
     open TS
     type model
-    val add      : outcome list -> tactic -> unit (* TODO: Add lemma dependencies *)
+    val add      : location -> outcome list -> tactic -> unit (* TODO: Add lemma dependencies *)
     val train    : unit -> model
-    val predict  : model -> situation list -> prediction Stream.t (* TODO: Add global environment *)
-    val evaluate : model -> outcome -> float
+    val predict  : model -> situation list -> prediction IStream.t (* TODO: Add global environment *)
+    val evaluate : model -> outcome -> tactic -> float
   end
 
 let new_database name (module Learner : TacticianOnlineLearnerType) =
   let module Learner = Learner(TS) in
-  let db = Summary.ref ~name:("tactician-db-" ^ name) (Learner.empty ()) in
-  ( (fun exes tac -> db := Learner.learn !db exes tac)
-  , (fun t -> Learner.predict !db t) )
+  (* Note: This is lazy to give people a chance to set GOptions before a learner gets initialized *)
+  let db = Summary.ref ~name:("tactician-db-" ^ name) (lazy (Learner.empty ())) in
+  ( (fun loc exes tac -> db := Lazy.from_val @@ Learner.learn (Lazy.force !db) loc exes tac)
+  , (fun t -> Learner.predict (Lazy.force !db) t)
+  , (fun outcome tac -> let f, db' = Learner.evaluate (Lazy.force !db) outcome tac in
+      db := Lazy.from_val db'; f))
 
 module NullLearner : TacticianOnlineLearnerType = functor (_ : TacticianStructures) -> struct
   type model = unit
   let empty () = ()
-  let learn  () _ _ = ()
-  let predict () _ = Stream.sempty
-  let evaluate () _ = 0., ()
+  let learn  () _ _ _ = ()
+  let predict () _ = IStream.empty
+  let evaluate () _ _ = 0., ()
 end
 
 let current_learner = ref (new_database "null" (module NullLearner : TacticianOnlineLearnerType))
 
-let learner_learn exes tac = fst !current_learner exes tac
-let learner_predict ps  = snd !current_learner ps
+let queue_enabled = Summary.ref ~name: "tactician-queue-enabled" true
+let queue = Summary.ref ~name:"tactician-queue" []
+
+let learner_learn p    = let x, _, _ = !current_learner in x p
+let learner_predict p  = let _, x, _ = !current_learner in x p
+let learner_evaluate p = let _, _, x = !current_learner in x p
+
+let process_queue () =
+  List.iter (fun (l, o, t) -> learner_learn l o t) !queue; queue := []
+
+let learner_predict s =
+  process_queue ();
+  learner_predict s
+
+let learner_learn l o t =
+  if !queue_enabled then
+    queue := (l, o, t)::!queue
+  else
+    learner_learn l o t
+
+let disable_queue () =
+  process_queue (); queue_enabled := false
 
 let register_online_learner name learner : unit =
   current_learner := new_database name learner

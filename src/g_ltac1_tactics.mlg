@@ -3,8 +3,16 @@ DECLARE PLUGIN "tactician_ltac1_tactics_plugin"
 {
 
 open Ltac_plugin
+open Tacarg
+
+let () = Tactician_ltac1_record_plugin.Tactic_learner_internal.disable_queue ()
 
 }
+
+TACTIC EXTEND tacticianignore
+| [ "ml_tactician_ignore" tactic3(t) ] ->
+  { Tactician_ltac1_record_plugin.Ltacrecord.tactician_ignore (Tacinterp.tactic_of_value ist t) }
+END
 
 TACTIC EXTEND search
 | [ "ml_search" ] ->   { Tactician_ltac1_record_plugin.Ltacrecord.userSearch }
@@ -12,6 +20,8 @@ END
 
 VERNAC COMMAND EXTEND TacticianSuggest CLASSIFIED AS QUERY STATE proof_query
 | [ "Suggest" ]
-  -> { fun ~pstate -> let _ = Proof.run_tactic (Global.env ())
-         Tactician_ltac1_record_plugin.Ltacrecord.userPredict (Proof_global.get_proof pstate) in () }
+  -> { fun ~pstate -> let _ =
+         Pfedit.solve (Goal_select.get_default_goal_selector ()) None
+                      Tactician_ltac1_record_plugin.Ltacrecord.userPredict
+                      (Proof_global.get_proof pstate) in () }
 END

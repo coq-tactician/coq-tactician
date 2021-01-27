@@ -51,7 +51,7 @@ let rec rename_glob_vars l c = force @@ DAst.map_with_loc (fun ?loc -> function
   (* Lazy strategy: we fail if a collision with renaming occurs, rather than renaming further *)
   | GCases (ci,po,tomatchl,cls) ->
       let test_pred_pat (na,ino) =
-        test_na l na; Option.iter (fun {v=(_,nal)} -> List.iter (test_na l) nal) ino in
+        test_na l na; Option.iter (fun {v=(_,nal); _} -> List.iter (test_na l) nal) ino in
       let test_clause idl = List.iter (test_id l) idl in
       let po = Option.map (rename_glob_vars l) po in
       let tomatchl = Util.List.map_left (fun (tm,x) -> test_pred_pat x; (rename_glob_vars l tm,x)) tomatchl in
@@ -235,7 +235,7 @@ let rec atomic_map (f : EConstr.named_context) (t : glob_atomic_tactic_expr) : g
 
 and tactic_constr_map (f : EConstr.named_context) (tac : glob_tactic_expr) : glob_tactic_expr =
   match tac with
-  | TacAtom { CAst.v= t } -> TacAtom (CAst.make @@ atomic_map f t)
+  | TacAtom { CAst.v= t ; _ } -> TacAtom (CAst.make @@ atomic_map f t)
   | TacFun (ids, t) -> TacFun (ids, tactic_constr_map f t)
   | TacLetIn (r, l, u) -> TacLetIn (r, List.map (fun (id, t) -> (id, t)) l, tactic_constr_map f u)
   | TacMatchGoal (lz, lr, lmr) -> TacMatchGoal (lz, lr, List.map (match_rule_map f (tactic_constr_map f)) lmr)

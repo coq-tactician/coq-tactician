@@ -1,0 +1,8 @@
+(coq.theory
+ (name TacticianTests)
+ (flags -q)
+ (theories Tactician))
+(alias
+ (name runtest)
+ (package coq-tactician)
+ (deps (glob_files *.vo)))

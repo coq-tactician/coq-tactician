@@ -1,16 +1,15 @@
-From Tactician Require Export Ltac1Dummy.
+From Tactician Require Export Ltac1.Record.
 
-Declare ML Module "ltac_plugin".
-Declare ML Module "ground_plugin".
-Declare ML Module "extraction_plugin".
-Declare ML Module "recdef_plugin".
-Declare ML Module "ssrmatching_plugin".
-Declare ML Module "ssreflect_plugin".
-Declare ML Module "tactician_ltac1_record_plugin".
 Declare ML Module "tactician_ltac1_tactics_plugin".
 
-Ltac searcher ::= idtac
+(* These notations are on a higher level so that we can override the dummy module.
+   Note that tactic redefinition does not work, because the dummy module might be loaded
+   again after this module. *)
+Tactic Notation (at level 5) "search" "with" "cache" tactic3(t) := solve [t] || (idtac
     "A previously synthesized proof script by Tactician has failed."
     "An attempt is being made to synthesize a new script.";
-    ml_search.
-Ltac search ::= ml_search.
+    ml_search).
+
+Tactic Notation (at level 5) "search" := ml_search.
+
+Tactic Notation (at level 5) "tactician" "ignore" tactic3(t) := ml_tactician_ignore t.

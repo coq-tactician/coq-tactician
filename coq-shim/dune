@@ -1,0 +1,18 @@
+(install
+ (files with-tactician tactician-patch)
+ (section libexec)
+ (package coq-tactician)
+)
+(install
+ (files coqc.real) ; mount point for the real coqc
+ (section lib)
+ (package coq-tactician)
+)
+(install
+ (files
+   coq-hott.patch
+   coq-hott.8.11.patch
+ )
+ (section share)
+ (package coq-tactician)
+)

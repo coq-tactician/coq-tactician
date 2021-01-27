@@ -18,7 +18,7 @@ let correct_kername id =
     return (ArgVar (kername_tolname id))
 
 let discharge_genarg_tactic s
-    ((GenArg (Glbwit wit, _)) as g : glevel generic_argument)
+    ((GenArg (Glbwit _, _)) as g : glevel generic_argument)
   : glevel generic_argument discharged =
   let rec aux ((GenArg (Glbwit wit, _)) as g) = match wit with
     | ListArg wit as witl ->
@@ -70,7 +70,7 @@ let cook s (tac : glob_tactic_expr) : glob_tactic_expr discharged =
     | Reference (ArgArg (_, id)) ->
       let* id = correct_kername id in
       return (Reference id)
-    | TacCall CAst.{v=(id, args)} ->
+    | TacCall CAst.{v=(id, args); _} ->
       let* id = match id with
         | Locus.ArgArg (_, id) -> correct_kername id
         | Locus.ArgVar _ -> return id in
@@ -87,7 +87,7 @@ let cook s (tac : glob_tactic_expr) : glob_tactic_expr discharged =
         | Pat (c, p, t) -> let+ t = cook t in Pat (c, p, t)) mats
   and cook (tac : glob_tactic_expr) : glob_tactic_expr discharged =
     match tac with
-    | TacAtom CAst.{v} ->
+    | TacAtom CAst.{v; _} ->
       let+ v = cook_atomic v in
       TacAtom (CAst.make v)
     | TacThen (t1, t2)  ->
@@ -183,19 +183,20 @@ let cook s (tac : glob_tactic_expr) : glob_tactic_expr discharged =
     | TacFun (args, t) ->
       let+ t = cook t in
       TacFun (args, t)
-    | TacArg CAst.{v} ->
+    | TacArg CAst.{v; _} ->
       let+ v = cook_arg v in
       TacArg (CAst.make v)
     | TacSelect (i, t) ->
       let+ t = cook t in
       TacSelect (i, t)
-    | TacML CAst.{v=(e, args)} ->
+    | TacML CAst.{v=(e, args); _} ->
       let+ args = cook_args args in
       TacML (CAst.make (e, args))
-    | TacAlias CAst.{v=(id, args)} ->
-      let+ args = cook_args args in
-      if Tacenv.check_alias id then TacAlias (CAst.make (id, args)) else
+    | TacAlias CAst.{v=(id, args); _} ->
+      let* args = cook_args args in
+      if Tacenv.check_alias id then return @@ TacAlias (CAst.make (id, args)) else
         let lid = CAst.make (Names.(Label.to_id (KerName.label id))) in
+        let+ () = log id in
         TacArg (CAst.make (TacCall (CAst.make (ArgVar lid, args))))
   in cook tac
 
@@ -226,7 +227,7 @@ let discharge env tac =
 
 let rebuild s tac =
   match tac with
-  | TacArg (CAst.{v = TacGeneric (GenArg _ as g)}) when has_type g (Glbwit wit_pr_arg) ->
+  | TacArg (CAst.{v = TacGeneric (GenArg _ as g); _}) when has_type g (Glbwit wit_pr_arg) ->
     let PrString str = out_gen (glbwit wit_pr_arg) g in
     (try
       let raw = Pcoq.parse_string Pltac.tactic str in

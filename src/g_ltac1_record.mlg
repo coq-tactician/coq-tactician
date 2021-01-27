@@ -130,7 +130,7 @@ END
 VERNAC COMMAND EXTEND VernacDeclareTacticDefinition
 | #[ deprecation; locality; ] [ "Ltac" ne_ltac_tacdef_body_list_sep(l, "with") ] => {
     VtSideff (List.map (function
-      | TacticDefinition ({CAst.v=r},_) -> r
+      | TacticDefinition (CAst.{v; _},_) -> v
       | TacticRedefinition (qid,_) -> qualid_basename qid) l, VtLater)
   } -> {
          Tacentries.register_ltac (Locality.make_module_locality locality) ?deprecation l;

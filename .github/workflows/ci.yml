@@ -1,0 +1,27 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - uses: coq-community/docker-coq-action@v1.2.3
+        with:
+          opam_file: 'coq-tactician.opam'
+          coq_version: '8.12'
+          ocaml_version: '4.10-flambda'
+          install: |
+            startGroup "Install dependencies"
+              opam repo add coq-extra-dev https://coq.inria.fr/opam/extra-dev
+              opam pin add -n -y -k path $PACKAGE $WORKDIR
+              opam update -y
+              opam install -y -j 2 -t $PACKAGE --deps-only
+            endGroup
+          script: |
+            startGroup "Build"
+              opam install -y -v -j 2 -t $PACKAGE
+              opam list
+            endGroup

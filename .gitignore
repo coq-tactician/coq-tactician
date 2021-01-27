@@ -54,6 +54,7 @@ Makefile.coq.conf
 
 # Dune generated files
 *.install
+_build/
 
 # Local OPAM switch
 _opam/

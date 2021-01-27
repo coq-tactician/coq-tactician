@@ -1,0 +1,24 @@
+(rule
+ (with-stdout-to tactician.1 (run %{bin:tactician} --help=groff)))
+(rule
+ (with-stdout-to tactician-enable.1 (run %{bin:tactician} enable --help=groff)))
+(rule
+ (with-stdout-to tactician-disable.1 (run %{bin:tactician} disable --help=groff)))
+(rule
+ (with-stdout-to tactician-inject.1 (run %{bin:tactician} inject --help=groff)))
+(rule
+ (with-stdout-to tactician-eject.1 (run %{bin:tactician} eject --help=groff)))
+(rule
+ (with-stdout-to tactician-recompile.1 (run %{bin:tactician} recompile --help=groff)))
+
+(install
+ (section man)
+ (package coq-tactician)
+ (files
+   tactician.1
+   tactician-enable.1
+   tactician-disable.1
+   tactician-inject.1
+   tactician-eject.1
+   tactician-recompile.1
+))
