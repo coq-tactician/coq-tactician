@@ -253,11 +253,15 @@ let aborted_logger () =
   );
   pre_info := None; ()
 
-let suggest_logger trace_getter db_size =
+let suggest_logger env preds trace_getter db_size =
   let open Notations in
+  let tac_pp env t = Sexpr.format_oneline (Pptactic.pr_glob_tactic env t) in
+  let preds = List.map (fun (c, t) ->
+      Node [s2s (string_of_float c); s2s (Pp.string_of_ppcmds @@ tac_pp env t)]) preds in
+  let preds = Node [Node ((s2s "predictions") :: preds)] in
   let log_type = Node [Node [s2s "logtype"; s2s "suggest"]] in
   common_info trace_getter db_size >>= fun full_info ->
-  append (unprocessed_file ()) (sexpr_to_string (sexpr_concat log_type full_info) ^ "\n");
+  append (unprocessed_file ()) (sexpr_to_string (sexpr_concat (sexpr_concat log_type full_info) preds) ^ "\n");
   upload_unprocessed ();
   tclUNIT ()
 

@@ -614,14 +614,14 @@ let userPredict =
   let debug = false in
   let open Proofview in
   let open Notations in
-  Logger.suggest_logger get_tactic_trace !db_size <*>
   tclENV >>= fun env -> predict >>=
   (if debug then (fun r -> tclUNIT (to_list 10 r)) else filterTactics 10 10000) >>= fun r ->
   let r = List.map (fun ({confidence; focus; tactic} : Tactic_learner_internal.TS.prediction) ->
       (confidence, focus, tactic)) r in
   let r = List.map (fun (x, _, (y, _)) -> (x, y)) r in
   (* Print predictions *)
-  (Proofview.tclLIFT (if List.is_empty r then
+  (Logger.suggest_logger env r get_tactic_trace !db_size <*>
+   Proofview.tclLIFT (if List.is_empty r then
                         NonLogical.print_info (Pp.str "Ran out of suggestions to give...") else
                         Proofview.NonLogical.print_info (print_rank debug env r)))
 
