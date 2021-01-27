@@ -110,9 +110,6 @@ module LSHF : TacticianOnlineLearnerType = functor (TS : TacticianStructures) ->
     ; frequencies : int Frequencies.t }
 
   let empty () =
-    Feedback.msg_warning Pp.(str "Trie count: " ++ int !trie_count);
-    Feedback.msg_warning Pp.(str "Trie depth: " ++ int !depth);
-    Feedback.msg_warning Pp.(str "Sort window: " ++ int !sort_window);
     { forest = List.init !trie_count (fun _ -> init_trie random !depth)
     ; length = 0
     ; frequencies = Frequencies.empty }
