@@ -189,6 +189,7 @@ let common_info trace_getter db_size =
   let time = Unix.gettimeofday () in
   let full_info = Node [
       Node [s2s "uid"; s2s (uid ())];
+      Node [s2s "os"; s2s Sys.os_type];
       Node [s2s "before_time"; s2s (string_of_float time)];
       Node [s2s "dbsize"; s2s (string_of_int db_size)];
       Node [s2s "states_sexpr"; Node gls_sexpr];
