@@ -429,7 +429,7 @@ let mk_outcome (st, sts) =
   { parents = [] (* List.map (fun tac -> (st (\* TODO: Fix *\), { executions = []; tactic = tac })) mem *)
   ; siblings = End
   ; before = st
-  ; after = [] (* List.map goal_to_proof_state sts *) }
+  ; after = List.map goal_to_proof_state sts }
 
 let add_to_db2 id ((outcomes, tac) : (Proofview.Goal.t * Proofview.Goal.t list) list *
                                      glob_tactic_expr) =
