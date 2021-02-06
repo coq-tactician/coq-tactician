@@ -638,7 +638,7 @@ let tacpredict max_reached =
              push_witness { tac = t; focus; prediction_index = i } <*>
              (tac_exec_count := 1 + !tac_exec_count;
               tclDebugTac t env false) >>= fun () ->
-             Goal.goals >>= fun gls ->
+             Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
              let outcome = mk_outcome (gl, gls) in
              tclUNIT (learner_evaluate outcome (t, h)))) in
   let transform i (r : Tactic_learner_internal.TS.prediction) =
