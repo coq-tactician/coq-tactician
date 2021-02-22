@@ -8,14 +8,18 @@
    ltacrecord
    diagonal_iterative_search
    naiveknn_learner
+   naiveknn_learner_back
    naiveknn_subst_learner
    knnLSHForest
+   knnLSHForest_back
    lshf_learner
+   lshf_learner_back
    knn
    tactic_substitute
    search_strategy
    search_strategy_internal
    learner_helper
+   learner_helper_back
    tactic_learner
    tactic_learner_internal
    tactic_normalize

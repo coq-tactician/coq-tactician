@@ -116,96 +116,7 @@ module L (TS: TacticianStructures) = struct
       wrap_partness 
         (List.fold_left (fun struct_feats curr_term -> struct_feats @ aux_struct curr_term (depth + 1)) 
       [binder] term_list)
-    in (*  
-    let not_atom_node term =
-      match term with
-      | Node (Leaf nt :: _) when is_atom nt ->
-        false
-      |  _ -> 
-        true
-    in 
-    let are_all_atoms terms =
-      if List.exists (fun term -> (not_atom_node term) ==  true) terms then
-        false 
-      else true in
-    let curr_depth_horiz_feat term =
-      match term with
-      | Node (Leaf nt :: ls) when is_atom nt ->
-        (atom_to_string nt ls)
-      | Node (Leaf node :: _)  -> 
-        if is_correct_node node then "NonAtom" else "Error"
-      | _ -> "Error"    
-    in
-    let rec horiz_feats_in_depth terms depth =
-      let curr_depth = "Depth" ^ (Stdlib.string_of_int depth) in
-      let curr_depth_feats = 
-        if are_all_atoms terms then
-          curr_depth :: (List.map (fun term -> curr_depth_horiz_feat term) terms) 
-        else []  
-      in
-      let deeper_level_feats = List.fold_left (fun acc term -> acc @ aux_horiz term (depth + 1)) [] terms in
-      curr_depth_feats :: deeper_level_feats 
-    and aux_horiz term depth =
-      if depth >= max_depth then []
-      else 
-        match term with
-        (* Interesting leafs *)
-        | Node (Leaf nt :: _) when is_atom nt ->
-         (* identifiers have already existed in semantic features *) 
-         []
-        (* Uninteresting leafs *)
-        | Node (Leaf "Sort" :: _)
-        | Node (Leaf "Meta" :: _) -> []
-        | Node [Leaf "LetIn"; _; _; body1; typ; body2] ->
-          horiz_feats_in_depth [body1; typ; body2] depth
-        | Node (Leaf "Case" :: _ :: term :: typ :: cases) ->
-          horiz_feats_in_depth (term::typ::cases) depth
-        | Node [Leaf "Fix"; _; Node types; Node terms] ->
-          horiz_feats_in_depth (types@terms) depth 
-        | Node [Leaf "CoFix"; _ ; Node types; Node terms] ->
-          horiz_feats_in_depth (types@terms) depth 
-        | Node [Leaf "Prod"  ; _; _; typ; body] ->
-          horiz_feats_in_depth [typ;body] depth 
-        | Node [Leaf "Lambda"; _; _; typ; body] -> 
-          horiz_feats_in_depth [typ;body] depth 
-        | Node [Leaf "Proj"; p; term] -> 
-          horiz_feats_in_depth [p; term] depth 
-        | Node (Leaf "App" :: head :: args) ->
-          horiz_feats_in_depth (head :: args) depth 
-        | Node [Leaf "Cast"; term; _; typ] ->
-          horiz_feats_in_depth [term; typ] depth 
-        (* Hope and pray *)
-        | _ -> [["Error"]] 
-    in 
-    let rec top_atom term =
-      match term with
-      (* Interesting leafs *)
-      | Node (Leaf nt :: _) when is_atom nt ->
-       (* identifiers have already existed in semantic features *) 
-       []
-      (* Uninteresting leafs *)
-      | Node (Leaf "Sort" :: _)
-      | Node (Leaf "Meta" :: _) -> []
-      | Node [Leaf "LetIn"; _; _; body1; _; _] ->
-        top_atom body1
-      | Node (Leaf "Case" :: _ :: term :: _) ->
-        top_atom term
-      | Node [Leaf "Fix"; _; Node types; _]
-      | Node [Leaf "CoFix"; _ ; Node types; _] ->
-        top_atom (List.hd (types))
-      | Node [Leaf "Prod"  ; _; _; typ; _] ->
-        top_atom typ
-      | Node [Leaf "Lambda"; _; _; typ; _] -> 
-        top_atom typ
-      | Node [Leaf "Proj"; p; _] -> 
-        top_atom p
-      | Node (Leaf "App" :: head :: _) ->
-        top_atom head 
-      | Node [Leaf "Cast"; term; _; _] ->
-        top_atom term
-      (* Hope and pray *)
-      | _ -> [["Error"]] 
-    in    *)   
+    in   
     (* for a tuple `(interm, acc)`:
        - `interm` is an intermediate list of list of features that are still being assembled
          invariant: `forall i ls, 0<i<=maxlength -> In ls (List.nth (i - 1)) -> List.length ls = i`
@@ -242,7 +153,6 @@ module L (TS: TacticianStructures) = struct
         aux_vert f' term     
     and vert_next_level_fold f terms roles = 
     List.fold_left (fun f' (term, role) -> vert_next_level f' term role) f (List.combine terms roles) 
-    (*TODO remove role of vertical features, especially the last role *)
     and aux_vert f term = 
     match term with
       (* Interesting leafs *)
@@ -316,14 +226,14 @@ module L (TS: TacticianStructures) = struct
         let roles = (rep_elem (List.length terms) "CoFixTerm") 
           @ (rep_elem (List.length types) "CoFixType") in
         aux_seman_reset_fold f (terms @ types) roles 
-      (* TODO: Handle implication separately *)
+        (* TODO: Handle implication separately *)
       | Node [Leaf "Prod"  ; _; _; typ; body] ->
         (* let f' = aux_seman f typ "ProdType" in
         aux_seman f' body "ProdBody" *)
         aux_seman_reset_fold f [typ; body] ["ProdType"; "ProdBody"] 
       | Node [Leaf "Lambda"; _; _; typ; body] -> 
         aux_seman_reset_fold f [typ; body] ["LambdaType"; "LambdaBody"] 
-      (* The golden path *)
+        (* The golden path *)
       | Node [Leaf "Proj"; p; term] -> 
         aux_seman (add_atom "Const" [p] f "Proj") term "Proj"  (* ??? Proj ??? *)
       | Node (Leaf "App" :: head :: args) ->
@@ -342,8 +252,6 @@ module L (TS: TacticianStructures) = struct
     let struct_feats = Struct, "Struct" :: (aux_struct term 0) in
     let _, seman_feats = (aux_seman (start, []) term "Init_Constr") in
     let seman_feats = List.map (fun feat -> Seman, "Seman" :: feat) seman_feats in
-    (* let horiz_feats = List.map (fun feat -> "Horiz"::feat) 
-    (remove_ident (aux_horiz term 0)) in *)
     List.map (fun (feat_kind, feats) -> feat_kind, String.concat "-" feats) ((struct_feats::vert_feats) @ seman_feats)
 
   let proof_state_to_features max_length ps =
@@ -360,29 +268,6 @@ module L (TS: TacticianStructures) = struct
     let goal_feats = mkfeats goal in
     (* seperate the goal from the local context *)  
     (disting_hyps_goal goal_feats "GOAL-") @ (disting_hyps_goal (List.flatten hyp_feats) "HYPS-")
-
-  let context_map f g =
-    List.map (function
-        | Named.Declaration.LocalAssum (id, typ) ->
-          Named.Declaration.LocalAssum (id, f typ)
-        | Named.Declaration.LocalDef (id, term, typ) ->
-          Named.Declaration.LocalDef (id, g term, f typ))
-
-  let context_features max_length ctx =
-    (* hyps id is used to remove features occurred in hypothese fom goals; thus it is [] here *)
-    let mkfeats t = term_sexpr_to_features max_length (term_sexpr t) in
-    context_map mkfeats mkfeats ctx
-
-  let context_map f g =
-    List.map (function
-        | Named.Declaration.LocalAssum (id, typ) ->
-          Named.Declaration.LocalAssum (id, f typ)
-        | Named.Declaration.LocalDef (id, term, typ) ->
-          Named.Declaration.LocalDef (id, g term, f typ))
-      
-  let context_features max_length ctx =
-    let mkfeats t = term_sexpr_to_features max_length (term_sexpr t) in
-    context_map mkfeats mkfeats ctx
 
   let context_map f g =
     List.map (function
