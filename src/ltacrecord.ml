@@ -297,12 +297,16 @@ let load_plugins () =
       declare_ml_modules false [target] in
   List.iter load plugins
 
+let cache_type n =
+  let dirp = Global.current_dirpath () in
+  if Libnames.is_dirpath_prefix_of dirp (fst @@ Libnames.repr_path @@ fst n) then File else Dependency
+
 let in_db : data_in -> Libobject.obj =
   Libobject.(declare_object { (default_object "LTACRECORD") with
-                              cache_function = (fun (_,((outcomes, tac) : data_in)) ->
-                                  learner_learn File outcomes tac)
-                            ; load_function = (fun i (_, (outcomes, tac)) ->
-                                  if !global_record then learner_learn Dependency outcomes tac else ())
+                              cache_function = (fun (n,((outcomes, tac) : data_in)) ->
+                                  learner_learn (cache_type n) outcomes tac)
+                            ; load_function = (fun i (n, (outcomes, tac)) ->
+                                  if !global_record then learner_learn (cache_type n) outcomes tac else ())
                             ; open_function = (fun i (_, (execs, tac)) -> ())
                             ; classify_function = (fun data -> Libobject.Substitute data)
                             ; subst_function = (fun x ->
