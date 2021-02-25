@@ -1,12 +1,13 @@
 open Tactic_learner
 open Context
 
+type feat_kind = Struct | Seman | Verti 
+
 module L (TS: TacticianStructures) = struct
   open TS
 
   type proof_state_part = Goal | Hyps
   (* int means the depth of the beginning of the semantic features *)
-  type feat_kind = Struct | Seman | Verti 
 
   let max_depth = 1000
 
