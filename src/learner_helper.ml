@@ -235,7 +235,7 @@ module L (TS: TacticianStructures) = struct
         aux_seman_reset_fold f [typ; body] ["LambdaType"; "LambdaBody"] 
         (* The golden path *)
       | Node [Leaf "Proj"; p; term] -> 
-        aux_seman (add_atom "Const" [p] f "Proj") term "Proj"  (* ??? Proj ??? *)
+        aux_seman (add_atom "Const" [p] f "Proj") term "Proj"  
       | Node (Leaf "App" :: head :: args) ->
         let interm', _ as f' = aux_seman f head "AppFun" in
         (* We reset back to `interm'` for every arg *)
