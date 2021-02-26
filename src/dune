@@ -5,6 +5,13 @@
  (flags :standard -rectypes -w -27 -warn-error -A)
  (modules (
    "g_ltac1_record"
+   forest_online_learner
+   tree_online
+   sparse
+   impurity
+   forest_online
+   data
+   utils
    ltacrecord
    diagonal_iterative_search
    naiveknn_learner
