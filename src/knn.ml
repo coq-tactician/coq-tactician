@@ -6,8 +6,6 @@ module type FeatureType = sig
     val hash : feature -> int
 end
 
-(*comment to remove*)
-
 module type KnnType = sig
     type feature
     type obj
