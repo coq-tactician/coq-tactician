@@ -3,17 +3,18 @@ module type DATA_CONCRETE = sig
     type example_features
     type indices = int list
     type features = example_features array
+    type 'a labels = 'a array
     type 'a example = {features : example_features; label : 'a option}
     type 'a examples = {
         indices : indices;
         features : features;
-        labels : 'a array option}
+        labels : 'a labels option}
     val labels : 'a examples -> 'a list
-(*     val load_labels : string -> labels *)
-(*     val load_features : string -> features *)
-(*     val print_example : examples -> int -> unit *)
-(*     val print_example_2 : example -> unit *)
-(*     val print_label : label -> unit *)
+    type 'a rule = 'a example -> bool
+    type 'a split_rule = 'a examples -> 'a examples * 'a examples
+    val labels : 'a examples -> 'a list
+    val random_rule : 'a examples -> 'a rule
+    val gini_rule : ?m:int -> 'a examples -> 'a rule
 end;;
 
 module Make = functor (D : DATA_CONCRETE) -> struct

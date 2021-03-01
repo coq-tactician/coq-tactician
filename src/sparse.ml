@@ -1,13 +1,19 @@
 module ISet = Set.Make(Int)
 
 type indices = int list
+type 'a labels = 'a array
 type example_features = ISet.t
 type features = example_features array
 type 'a example = {features : example_features; label : 'a option}
 type 'a examples = {
     indices : indices;
     features : features;
-    labels : 'a array option}
+    labels : 'a labels option}
+type 'a rule = 'a example -> bool
+type 'a split_rule = 'a examples -> 'a examples * 'a examples
+
+let label_of_string = int_of_string
+let feature_of_string = int_of_string
 
 let labels {indices; features; labels} =
     match labels with

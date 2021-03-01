@@ -7,26 +7,23 @@ module type DATA = sig
     val indices : 'a examples -> indices
     val is_empty : 'a examples -> bool
     val random_label : 'a examples -> 'a
-    val random_subset : 'a examples -> 'a examples
     val split : 'a rule -> 'a split_rule
-    val split_rev : split_rule -> rule
-    val gini_rule : ?m:int -> examples -> rule
-    val length : examples -> int
-    val label : example -> 'a option
-    val examples_of_1 : example -> examples
-    val add : examples -> example -> examples
-    val random_example : examples -> example
-    val fold_left : ('a -> example -> 'a) -> 'a -> examples -> 'a
-(*     val print : examples -> unit *)
-(*     val print_example_2 : example -> unit *)
-    val labels : examples -> 'a list
+    val split_rev : 'a split_rule -> 'a rule
+    val gini_rule : ?m:int -> 'a examples -> 'a rule
+    val length : 'a examples -> int
+    val label : 'a example -> 'a option
+    val examples_of_1 : 'a example -> 'a examples
+    val add : 'a examples -> 'a example -> 'a examples
+    val random_example : 'a examples -> 'a example
+    val fold_left : ('a -> 'b example -> 'a) -> 'a -> 'b examples -> 'a
+    val labels : 'a examples -> 'a list
 end
 
 module Make = functor (Data : DATA) -> struct
 
     type 'a tree =
-        | Node of Data.split_rule * tree * tree
-        | Leaf of 'a * Data.examples
+        | Node of 'a Data.split_rule * 'a tree * 'a tree
+        | Leaf of 'a * 'a Data.examples
 
     let leaf example =
         let l = match Data.label example with
