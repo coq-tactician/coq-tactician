@@ -1,38 +1,23 @@
 
 module type DATA_CONCRETE = sig
     type example_features
-    type label
     type indices = int list
     type features = example_features array
-    type labels = label array
-    type example = {features : example_features; label : label option}
-    type examples = {
+    type 'a labels = 'a array
+    type 'a example = {features : example_features; label : 'a option}
+    type 'a examples = {
         indices : indices;
         features : features;
-        labels : labels option}
-    type rule = example -> bool
-    type split_rule = examples -> examples * examples
-    val labels : examples -> label list
-    val load_labels : string -> labels
-    val load_features : string -> features
-    val print_example : examples -> int -> unit
-(*     val print_example_2 : example -> unit *)
-    val print_label : label -> unit
-    val random_rule : examples -> rule
-    val gini_rule : ?m:int -> examples -> rule
+        labels : 'a labels option}
+    type 'a rule = 'a example -> bool
+    type 'a split_rule = 'a examples -> 'a examples * 'a examples
+    val labels : 'a examples -> 'a list
+    val random_rule : 'a examples -> 'a rule
+    val gini_rule : ?m:int -> 'a examples -> 'a rule
 end;;
 
 module Make = functor (D : DATA_CONCRETE) -> struct
     include D
-
-    let load ?labels features =
-        let features = D.load_features features
-        and labels = match labels with
-        | None -> None
-        | Some labels -> Some (D.load_labels labels) in
-        let n = Array.length features in
-        let indices = List.init n (fun x -> x) in
-        {D.indices; D.features; D.labels}
 
     let indices {D.indices; D.features; _} =
         indices
@@ -47,10 +32,6 @@ module Make = functor (D : DATA_CONCRETE) -> struct
         | None -> None
         | Some ls -> Some ls.(i) in
         {D.features = examples.features.(i); D.label = label}
-
-    let print examples =
-        let inds = indices examples in
-        List.iter (D.print_example examples) inds
 
     let is_empty {D.indices; D.features; D.labels} =
         indices = []
@@ -95,7 +76,7 @@ module Make = functor (D : DATA_CONCRETE) -> struct
         ({D.indices = inds_l; D.features; D.labels},
          {D.indices = inds_r; D.features; D.labels})
 
-    let examples_of_1 (example : example) =
+    let examples_of_1 example =
         let label = match example.label with
         | None -> None
         | Some l -> Some [|l|] in
@@ -105,7 +86,7 @@ module Make = functor (D : DATA_CONCRETE) -> struct
             D.labels=label
         }
 
-    let split_rev (split_rule : split_rule) =
+    let split_rev split_rule =
         function example ->
             let example = examples_of_1 example in
             let l, r = split_rule example in

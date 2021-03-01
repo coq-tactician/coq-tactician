@@ -3,33 +3,19 @@ open Printf
 module ISet = Set.Make(Int)
 
 type indices = int list
-type label = int
-type labels = label array
+type 'a labels = 'a array
 type example_features = ISet.t
 type features = example_features array
-type example = {features : example_features; label : label option}
-type examples = {
+type 'a example = {features : example_features; label : 'a option}
+type 'a examples = {
     indices : indices;
     features : features;
-    labels : labels option}
-type rule = example -> bool
-type split_rule = examples -> examples * examples
+    labels : 'a labels option}
+type 'a rule = 'a example -> bool
+type 'a split_rule = 'a examples -> 'a examples * 'a examples
 
 let label_of_string = int_of_string
 let feature_of_string = int_of_string
-
-let load_features file =
-    let lines = Utils.read_lines file in
-    let split = Str.split_delim (Str.regexp " ") in
-    let rec loop split_lines = function
-        | [] -> List.rev split_lines
-        | h :: t ->
-            let features_list = List.map feature_of_string (split h) in
-            ISet.of_list features_list :: (loop split_lines t) in
-    Array.of_list (loop [] lines)
-
-let load_labels file =
-    Array.of_list (List.map label_of_string (Utils.read_lines file))
 
 let labels {indices; features; labels} =
     match labels with
