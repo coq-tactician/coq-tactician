@@ -1,35 +1,13 @@
-open Printf
-
 module ISet = Set.Make(Int)
 
 type indices = int list
-type label = int
-type labels = label array
 type example_features = ISet.t
 type features = example_features array
-type example = {features : example_features; label : label option}
-type examples = {
+type 'a example = {features : example_features; label : 'a option}
+type 'a examples = {
     indices : indices;
     features : features;
-    labels : labels option}
-type rule = example -> bool
-type split_rule = examples -> examples * examples
-
-let label_of_string = int_of_string
-let feature_of_string = int_of_string
-
-let load_features file =
-    let lines = Utils.read_lines file in
-    let split = Str.split_delim (Str.regexp " ") in
-    let rec loop split_lines = function
-        | [] -> List.rev split_lines
-        | h :: t ->
-            let features_list = List.map feature_of_string (split h) in
-            ISet.of_list features_list :: (loop split_lines t) in
-    Array.of_list (loop [] lines)
-
-let load_labels file =
-    Array.of_list (List.map label_of_string (Utils.read_lines file))
+    labels : 'a array option}
 
 let labels {indices; features; labels} =
     match labels with
@@ -46,24 +24,6 @@ let all_features {indices; features; _} =
 
 let n_features examples =
     List.length (all_features examples)
-
-let print_example {indices; features; labels} n =
-    ISet.iter (fun f -> printf "%n %!" f) features.(n);
-    match labels with
-        | None -> ()
-        | Some labels -> printf "# %n\n%!" labels.(n)
-
-let print_example_2 {features; label} =
-    ISet.iter (fun f -> printf "%n %!" f) features;
-    match label with
-        | None -> ()
-        | Some l -> printf "# %n\n%!" l
-
-(*
-let random_feature {indices; features; _} =
-    let random_example = features.(Utils.choose_random indices) in
-    Utils.choose_random (ISet.elements random_example)
-*)
 
 let random_feature {indices; features; _} =
     let random_example_1 = features.(Utils.choose_random indices) in
@@ -121,5 +81,3 @@ let gini_rule ?m:(m=0) examples =
         | [] -> raise Empty_list
         | (f, _) :: _ -> f in
     fun {features; label} -> ISet.mem best_fea features
-
-let print_label l = l |> printf "%n\n"

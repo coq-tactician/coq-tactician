@@ -1,6 +1,3 @@
-
-
-
 module Make = functor (Data : Tree_online.DATA) -> struct
     module Tree = Tree_online.Make(Data)
 
@@ -16,12 +13,6 @@ module Make = functor (Data : Tree_online.DATA) -> struct
     let forest examples =
         let forest = empty () in
         Data.fold_left add forest examples
-
-(*
-    let forest tree n examples =
-        let initseg = List.init n (fun i -> i) in
-        List.map (fun _ -> tree (Data.random_subset examples)) initseg
-*)
 
     let vote votes =
         let tbl = Hashtbl.create 100 in

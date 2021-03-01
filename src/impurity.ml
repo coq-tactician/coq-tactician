@@ -1,4 +1,3 @@
-
 let gini_impur x =
     let len = Float.of_int (List.length x) in
     let tbl = Hashtbl.create 10 in (* about 10 classes assumed *)
@@ -11,16 +10,15 @@ let gini_impur x =
     List.iter update x;
     1. -. Hashtbl.fold (fun _ x s -> s +. (Float.of_int x /. len) ** 2.) tbl 0.;;
 
-
 (* compute impurity given an impurity function, *sorted* pairs (value, label)
  * and a threshold *)
 (* TODO assert sorted *)
+(*
 let split_impur impur x_labels thr =
     let append (left, right) (x, l) =
         if x < thr then (l :: left, right) else (left, l :: right) in
     let left, right = List.fold_left append ([], []) x_labels in
     ((impur left) +. (impur right)) /. 2.
-
 
 let best_split impur x labels =
     let x_l = List.combine x labels in
@@ -36,3 +34,4 @@ let best_split impur x labels =
             else
                 loop ((x2, l2) :: t) best_thr best_impur
     in loop x_l 0. 1.
+*)

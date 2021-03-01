@@ -3,19 +3,16 @@ open Learner_helper
 open Forest_online
 
 module OnlineForest : TacticianOnlineLearnerType = functor (TS : TacticianStructures) -> struct
-  module LH = L(TS)
-  open TS
-  open LH
-
+    module LH = L(TS)
+    open TS
+    open LH
     module Data = Data.Make(Sparse)
     open Forest_online.Make(Data)
     open Data
 
-
     type model = Tree.tree list
 
     let empty () = []
-
 
     let add db b obj =
       let feats = proof_state_to_ints b in
