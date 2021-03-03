@@ -267,7 +267,7 @@ module OrigLSHF : TacticianOnlineLearnerType = functor (TS : TacticianStructures
     let count db = db.length
 
     let learn db _loc outcomes tac =
-      List.fold_left (fun db out -> add db (proof_state_to_ints out.before) tac) db outcomes
+      List.fold_left (fun db out -> add db (remove_feat_kind (proof_state_to_ints out.before)) tac) db outcomes
 
     let evaluate db _ _ = 1., db
 end
