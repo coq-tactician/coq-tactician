@@ -76,6 +76,7 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
     let recname = CAst.make @@ Names.Id.of_string "rec" in
     let recname' = CAst.make @@ Names.Name.mk_name recname.v in
     let reccall = TacArg (CAst.make (Reference (ArgVar recname))) in
+    (* TODO: Why can't we use the 'do' and 'repeat' tactics here again? *)
     let repeat tac = TacLetIn (true, [(recname', Tacexp (TacTry (tacthenfirst tac reccall)))], reccall) in
     let rec don n tac = if n > 0 then tacthenfirst tac (don (n-1) tac) else TacId [] in
     let onerewrite = TacRewrite (flg, [(b, Precisely 1, trm)], inc, by) in
@@ -122,7 +123,7 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
     | TacReduce _ -> router Reduce at
     | TacChange _ -> router Change at
     | TacRewrite (flg1, ts, i, d) ->
-      let at = if inner_record Rewrite then decompose_rewrite a.loc flg1 i ts (Option.map annotate d) d else at in
+      let at = if inner_record Rewrite then decompose_rewrite a.loc flg1 i ts (Option.map annotate d) d else at in (* TODO: Normalize rewrite .. by t to rewrite ..; [| t] (or similar) *)
       router Rewrite at
     | TacInversion _ -> router Inversion at
   and annotate_arg x = match x with
@@ -163,7 +164,7 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
                                                                                rinner IfThenCatch t2,
                                                                                rinner IfThenCatch t3))
     | TacOrelse (t1, t2) ->                router Orelse (TacOrelse (rinner Orelse t1, rinner Orelse t2))
-    | TacDo (n, t) ->                      router Do (TacDo (n, rinner Do t))
+    | TacDo (n, t) ->                      router Do (TacDo (n, rinner Do t)) (* TODO: Perform decomposition when n is a number *)
     | TacTimeout (n, t)      ->            router Timeout (TacTimeout (n, rinner Timeout t))
     | TacTime (s, t)         ->            TacTime (s, annotate t) (* No need to record try *)
     | TacRepeat t       ->                 router Repeat (TacRepeat (rinner Repeat t))

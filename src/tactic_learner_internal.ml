@@ -60,6 +60,11 @@ module type TacticianStructures = sig
     { confidence : float
     ; focus      : int
     ; tactic     : tactic }
+
+  type location =
+    | Dependency
+    | File
+    | Lemma
 end
 
 module TS = struct
@@ -110,6 +115,11 @@ module TS = struct
     { confidence : float
     ; focus      : int
     ; tactic     : tactic }
+
+  type location =
+    | Dependency
+    | File
+    | Lemma
 end
 
 let goal_to_proof_state ps =
@@ -124,8 +134,8 @@ module type TacticianOnlineLearnerType =
     open TS
     type model
     val empty    : unit -> model
-    val learn    : model -> outcome list -> tactic -> model (* TODO: Add lemma dependencies *)
-    val predict  : model -> situation list -> prediction Stream.t (* TODO: Add global environment *)
+    val learn    : model -> location -> outcome list -> tactic -> model (* TODO: Add lemma dependencies *)
+    val predict  : model -> situation list -> prediction IStream.t (* TODO: Add global environment *)
     val evaluate : model -> outcome -> tactic -> float * model
   end
 
@@ -133,25 +143,26 @@ module type TacticianOfflineLearnerType =
   functor (TS : TacticianStructures) -> sig
     open TS
     type model
-    val add      : outcome list -> tactic -> unit (* TODO: Add lemma dependencies *)
+    val add      : location -> outcome list -> tactic -> unit (* TODO: Add lemma dependencies *)
     val train    : unit -> model
-    val predict  : model -> situation list -> prediction Stream.t (* TODO: Add global environment *)
+    val predict  : model -> situation list -> prediction IStream.t (* TODO: Add global environment *)
     val evaluate : model -> outcome -> tactic -> float
   end
 
 let new_database name (module Learner : TacticianOnlineLearnerType) =
   let module Learner = Learner(TS) in
-  let db = Summary.ref ~name:("tactician-db-" ^ name) (Learner.empty ()) in
-  ( (fun exes tac -> db := Learner.learn !db exes tac)
-  , (fun t -> Learner.predict !db t)
-  , (fun outcome tac -> let f, db' = Learner.evaluate !db outcome tac in
-    db := db'; f))
+  (* Note: This is lazy to give people a chance to set GOptions before a learner gets initialized *)
+  let db = Summary.ref ~name:("tactician-db-" ^ name) (lazy (Learner.empty ())) in
+  ( (fun loc exes tac -> db := Lazy.from_val @@ Learner.learn (Lazy.force !db) loc exes tac)
+  , (fun t -> Learner.predict (Lazy.force !db) t)
+  , (fun outcome tac -> let f, db' = Learner.evaluate (Lazy.force !db) outcome tac in
+      db := Lazy.from_val db'; f))
 
 module NullLearner : TacticianOnlineLearnerType = functor (_ : TacticianStructures) -> struct
   type model = unit
   let empty () = ()
-  let learn  () _ _ = ()
-  let predict () _ = Stream.sempty
+  let learn  () _ _ _ = ()
+  let predict () _ = IStream.empty
   let evaluate () _ _ = 0., ()
 end
 
@@ -165,17 +176,17 @@ let learner_predict p  = let _, x, _ = !current_learner in x p
 let learner_evaluate p = let _, _, x = !current_learner in x p
 
 let process_queue () =
-  List.iter (fun (o, t) -> learner_learn o t) !queue; queue := []
+  List.iter (fun (l, o, t) -> learner_learn l o t) !queue; queue := []
 
 let learner_predict s =
   process_queue ();
   learner_predict s
 
-let learner_learn o t =
+let learner_learn l o t =
   if !queue_enabled then
-    queue := (o, t)::!queue
+    queue := (l, o, t)::!queue
   else
-    learner_learn o t
+    learner_learn l o t
 
 let disable_queue () =
   process_queue (); queue_enabled := false
