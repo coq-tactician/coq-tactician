@@ -136,9 +136,9 @@ let featureoptions = Goptions.{optdepr = false;
                                                 benchmarking := None
                                               | Some _ -> ignore (feat_file ())))}
 
-let _ = Goptions.declare_int_option benchoptions
-let _ = Goptions.declare_bool_option deterministicoptions
-let _ = Goptions.declare_bool_option featureoptions
+let () = Goptions.declare_int_option benchoptions
+let () = Goptions.declare_bool_option deterministicoptions
+let () = Goptions.declare_bool_option featureoptions
 
 let global_record = ref true
 let recordoptions = Goptions.{optdepr = false;
@@ -189,14 +189,14 @@ let in_section_ltac_defs : (Names.KerName.t * glob_tactic_expr) list -> Libobjec
                                ~cache:(fun (obj, p) -> tmp_ltac_defs := p::!tmp_ltac_defs)
                                ~discharge:(fun (obj, p) -> Some p)))
 
-let with_let_prefix tac =
+let rec with_let_prefix ltac_defs tac =
   let names = List.fold_right Names.KNset.add
-      (List.concat (List.map (List.map fst) !tmp_ltac_defs)) Names.KNset.empty in
+      (List.concat (List.map (List.map fst) ltac_defs)) Names.KNset.empty in
   let tac, all, ids = rebuild names tac in
   let kername_tolname id = CAst.make (Names.(Name.mk_name (Label.to_id (KerName.label id)))) in
-  let ltac_to_let ltacset int =
+  let ltac_to_let rem_defs ltacset int =
     TacLetIn (true,
-              List.map (fun (id, tac) -> (kername_tolname id, Tacexp tac)) ltacset,
+              List.map (fun (id, tac) -> (kername_tolname id, Tacexp (with_let_prefix rem_defs tac))) ltacset,
               int) in
   let rec prefix acc = function
     | [] -> acc
@@ -204,12 +204,12 @@ let with_let_prefix tac =
       let set_occurs = all || List.fold_right (fun (id, _) b ->
           b || Names.KNset.mem id ids) ltacset false in
       if set_occurs then
-        prefix (ltac_to_let ltacset acc) rem else
+        prefix (ltac_to_let rem ltacset acc) rem else
         prefix acc rem in
-  prefix tac !tmp_ltac_defs
+  prefix tac ltac_defs
 
 let rebuild_outcomes (outcomes, tac) =
-  let rebuild_tac tac = tactic_make (with_let_prefix (tactic_repr tac)) in
+  let rebuild_tac tac = tactic_make (with_let_prefix !tmp_ltac_defs (tactic_repr tac)) in
   let rec rebuild_pd = function
     | End -> End
     | Step ps -> Step (rebuild_ps ps)
@@ -232,7 +232,7 @@ let discharge_outcomes env (outcomes, tac) =
       | Step ps -> Step (genarg_print_ps ps)
     and genarg_print_ps {executions; tactic} =
       { executions = List.map (fun (ps, pd) -> ps, genarg_print_pd pd) executions
-      ; tactic = genarg_print_tac tactic } in 
+      ; tactic = genarg_print_tac tactic } in
     let outcomes = List.map (fun {parents; siblings; before; after} ->
         { parents = List.map (fun (psa, pse) -> (psa, genarg_print_ps pse)) parents
         ; siblings = genarg_print_pd siblings
@@ -293,12 +293,16 @@ let load_plugins () =
       declare_ml_modules false [target] in
   List.iter load plugins
 
+let cache_type n =
+  let dirp = Global.current_dirpath () in
+  if Libnames.is_dirpath_prefix_of dirp (fst @@ Libnames.repr_path @@ fst n) then File else Dependency
+
 let in_db : data_in -> Libobject.obj =
   Libobject.(declare_object { (default_object "LTACRECORD") with
-                              cache_function = (fun (_,((outcomes, tac) : data_in)) ->
-                                  learner_learn outcomes tac)
-                            ; load_function = (fun i (_, (outcomes, tac)) ->
-                                  if !global_record then learner_learn outcomes tac else ())
+                              cache_function = (fun (n,((outcomes, tac) : data_in)) ->
+                                  learner_learn (cache_type n) outcomes tac)
+                            ; load_function = (fun i (n, (outcomes, tac)) ->
+                                  if !global_record then learner_learn (cache_type n) outcomes tac else ())
                             ; open_function = (fun _ _ (_, (execs, tac)) -> ())
                             ; classify_function = (fun data -> Libobject.Substitute data)
                             ; subst_function = (fun x ->
@@ -583,13 +587,13 @@ let predict =
      on goal zero will focus in the first goal of the reversed `situation` *)
   tclUNIT (learner_predict (List.rev situation))
 
-let filterTactics p q (tacs : Tactic_learner_internal.TS.prediction Stream.t) =
+let filterTactics p q (tacs : Tactic_learner_internal.TS.prediction IStream.t) =
   let exception SuccessException of bool in
   let open Proofview in
   let open Notations in
-  let rec aux n m tacs solve progress = match n = 0 || m = 0, Stream.peek tacs with
-    | true, _ | _, None -> tclUNIT (firstn p (List.rev (if List.is_empty solve then progress else solve)))
-    | false, Some (Tactic_learner_internal.TS.{ tactic; _} as p) -> Stream.junk tacs;
+  let rec aux n m tacs solve progress = match n = 0 || m = 0, IStream.peek tacs with
+    | true, _ | _, IStream.Nil -> tclUNIT (firstn p (List.rev (if List.is_empty solve then progress else solve)))
+    | false, IStream.Cons (Tactic_learner_internal.TS.{ tactic; _} as p, tacs) ->
       let tactic = parse_tac (tactic_repr tactic) in
       tclOR (
         tclPROGRESS (tclTIMEOUT 1 tactic) <*>
@@ -611,7 +615,7 @@ let userPredict =
   let open Proofview in
   let open Notations in
   tclENV >>= fun env -> predict >>=
-  (if debug then (fun r -> tclUNIT (Stream.npeek 10 r)) else filterTactics 10 10000) >>= fun r ->
+  (if debug then (fun r -> tclUNIT (to_list 10 r)) else filterTactics 10 10000) >>= fun r ->
   let r = List.map (fun ({confidence; focus; tactic} : Tactic_learner_internal.TS.prediction) ->
       (confidence, focus, tactic)) r in
   let r = List.map (fun (x, _, (y, _)) -> (x, y)) r in
@@ -639,7 +643,7 @@ let tacpredict max_reached =
              tclUNIT (learner_evaluate outcome (t, h)))) in
   let transform i (r : Tactic_learner_internal.TS.prediction) =
     { confidence = r.confidence; focus = r.focus; tactic = taceval i r.focus r.tactic } in
-  tclUNIT (stream_mapi (fun i p -> transform i p) predictions)
+  tclUNIT (mapi (fun i p -> transform i p) predictions)
 
 let tclTIMEOUT2 n t =
   Proofview.tclOR

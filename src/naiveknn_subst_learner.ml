@@ -112,7 +112,7 @@ module NaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStructures
       let l = if db.length >= max then db.length else db.length + 1 in
       {entries = comb::purgedentries; length = l; frequencies = newfreq}
 
-    let learn db outcomes tac =
+    let learn db _loc outcomes tac =
       List.fold_left (fun db out -> add db out.before tac) db outcomes
 
     (* TODO: This doesn't work on multisets *)
@@ -159,16 +159,8 @@ module NaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStructures
       in
       List.map (fun (_hash, (score, tac)) -> (score, tac)) (IntMap.bindings ranking_map)
 
-    let stream_append s1 (s2 : 'a Stream.t) =
-      let next _ =
-        try Some (Stream.next s1)
-        with Stream.Failure ->
-        try Some (Stream.next s2)
-        with Stream.Failure -> None in
-      Stream.from next
-
     let predict db f =
-      if f = [] then Stream.of_list [] else
+      if f = [] then IStream.empty else
         let ps = (List.hd f).state in
         let ctx = context_to_ints (proof_state_hypotheses ps) in
         let feats = proof_state_to_ints ps in
@@ -194,18 +186,17 @@ module NaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStructures
             let tactic = tactic_make (Tactic_substitute.tactic_substitute subst (tactic_repr obj)) in
             {confidence = Float.neg_infinity; focus = 0; tactic} in
         let out = List.map (fun (a, entry) -> { confidence = a; focus = 0; tactic = entry.obj }) sorted in
-        let open Tactician_util in
-        let subst_stream = stream_mapi
-            (fun _ (s, p) ->
+        let subst_stream = IStream.map
+            (fun (s, p) ->
                let ts = subst (s, p) in
                if (tactic_hash p.obj) = (tactic_hash ts.tactic) then
                  {confidence = Float.neg_infinity; focus = 0; tactic = tactic_make (TacId []) } else ts
             )
-            (Stream.of_list sorted) in
-        stream_append (Stream.of_list out) subst_stream
+            (IStream.of_list sorted) in
+        IStream.app (IStream.of_list out) subst_stream
 
     let evaluate db _ _ = 1., db
 
 end
 
-let () = register_online_learner "naive-knn" (module NaiveKnn)
+(* let () = register_online_learner "naive-knn" (module NaiveKnn) *)

@@ -1,6 +1,6 @@
 (install
  (files with-tactician tactician-patch)
- (section bin)
+ (section libexec)
  (package coq-tactician)
 )
 (install

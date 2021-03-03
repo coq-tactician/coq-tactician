@@ -151,12 +151,17 @@ let config_add_remove gt ?st name value =
   let st = set_opt_switch gt ?st name (`Remove value) in
   set_opt_switch gt ?st name (`Add value)
 
-let wrap_command = "[\"with-tactician\"] {coq-tactician:installed}"
-let pre_build_command = "[\"tactician-patch\" name version] {coq-tactician:installed}"
+(* TODO: Remove old commands once enough time has elapsed *)
+let old_wrap_command = "[\"with-tactician\"] {coq-tactician:installed}"
+let old_pre_build_command = "[\"tactician-patch\" name version] {coq-tactician:installed}"
+let wrap_command = "[\"%{coq-tactician:lib}%/with-tactician\"] {coq-tactician:installed}"
+let pre_build_command = "[\"%{coq-tactician:lib}%/tactician-patch\" name version] {coq-tactician:installed}"
 
 let inject () =
   opam_init_no_lock @@ fun gt ->
-  let st = config_add_remove gt "wrap-build-commands" wrap_command in
+  let st = set_opt_switch gt "wrap-build-commands" (`Remove old_wrap_command) in
+  let st = set_opt_switch gt ?st "pre-build-commands" (`Remove old_pre_build_command) in
+  let st = config_add_remove gt ?st "wrap-build-commands" wrap_command in
   let _ = config_add_remove gt ?st "pre-build-commands" pre_build_command in
   print_endline "\nTactician will now instrument Coq packages installed through opam.";
   print_endline "Run tactician eject to reverse this command.";
@@ -168,7 +173,9 @@ let inject () =
 let eject () =
   OpamClientConfig.opam_init ();
   OpamGlobalState.with_ `Lock_none @@ fun gt ->
-  let st = set_opt_switch gt "wrap-build-commands" (`Remove wrap_command) in
+  let st = set_opt_switch gt "wrap-build-commands" (`Remove old_wrap_command) in
+  let st = set_opt_switch gt ?st "pre-build-commands" (`Remove old_pre_build_command) in
+  let st = set_opt_switch gt ?st "wrap-build-commands" (`Remove wrap_command) in
   let _ = set_opt_switch gt ?st "pre-build-commands" (`Remove pre_build_command) in
   print_endline "\nTactician will no longer instrument packages installed through opam.";
   print_endline "Run tactician inject to re-inject.";
@@ -194,6 +201,12 @@ let stdlib () =
     "The following relevant Coq packages are installed:"
     "Would you like to reinstall them?";
   `Ok ()
+
+let exec_command cmd args =
+  (* TODO: Use internal opam API to retrieve this *)
+  let lib = String.trim @@ syscall ("opam var coq-tactician:lib") in
+  let wt = Filename.concat lib "with-tactician" in
+  Unix.execv wt (Array.of_list (wt::cmd::args))
 
 (* Command line interface *)
 
@@ -253,6 +266,27 @@ let recompile =
   Term.(ret (const stdlib $ const ())),
   Term.info "recompile" ~doc ~man
 
+let command =
+  let doc = "The command to execute" in
+  Arg.(required & pos 0 (some string) None & info [] ~docv:"cmd" ~doc)
+
+let args =
+  let doc = "Arguments of the command to execute" in
+  Arg.(value & pos_right 0 string [] & info [] ~docv:"arg" ~doc)
+
+let exec =
+  let doc = "Run a command in an environment where Tactician is injected into Coq. Useful for executing \
+             build commands." in
+  let man = [ `P "Executes the specified command, with optional parameters, within an environment where \
+                  Tactician is injected into calls to coqc. This is useful when working on Coq developments \
+                  were tactician is used. The standard usage is for the command to build the entire project."
+            ; `S Manpage.s_examples
+            ; `Pre ("tactician exec make")
+            ; `Pre ("tactician exec dune build")
+            ] in
+  Term.(ret (const exec_command $ command $ args)),
+  Term.info "exec" ~doc ~man
+
 let default_cmd =
   let doc = "Management utilities for the Tactician tactic learner and prover." in
   let sdocs = Manpage.s_common_options in
@@ -260,5 +294,5 @@ let default_cmd =
   Term.(ret (const (`Help (`Pager, None)))),
   Term.info "tactician" ~doc ~sdocs ~man_xrefs
 
-let cmds = [enable; disable; inject; eject; recompile]
+let cmds = [enable; disable; inject; eject; recompile; exec]
 let () = Term.(exit @@ eval_choice default_cmd cmds)

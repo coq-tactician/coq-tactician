@@ -15,7 +15,7 @@ jobs:
           repository: 'coq-tactician/coq-tactician-stdlib'
           ref: 'coqdev'
           path: 'coq-tactician-stdlib'
-      - uses: coq-community/docker-coq-action@v1.2.3
+      - uses: LasseBlaauwbroek/docker-coq-action@v1.2.5
         with:
           opam_file: 'coq-tactician.opam'
           coq_version: 'dev'
