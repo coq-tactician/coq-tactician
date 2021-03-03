@@ -968,7 +968,9 @@ module MakeMapper (M: MapDef) = struct
        and+ p3 = constr_pattern_map p3 in
        PIf (p1, p2, p3)
      | PCase (ci, p1, p2, ps) -> (* TODO: Probably some implicit de Bruijn indices here *)
-       let+ p1 = constr_pattern_map p1
+       let+ p1 = option_map (fun (nms, p) ->
+           let+ p = constr_pattern_map p in
+           (nms, p)) p1
        and+ p2 = constr_pattern_map p2
        and+ ps = List.map (fun (i, bs, p) ->
            let+ p = constr_pattern_map p in
