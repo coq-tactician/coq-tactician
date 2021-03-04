@@ -4,11 +4,12 @@ module Make = functor (Data : Tree_online.DATA) -> struct
     let empty () = []
 
     let add forest example =
-        let new_tree = Tree.leaf example in
         let updated_trees =
-            List.map (fun tree -> Tree.add tree example) forest
-        in
-        new_tree :: updated_trees
+            List.map (fun tree -> Tree.add tree example) forest in
+        let n_trees = List.length forest in
+        let add_new_tree = (n_trees = 0) || (Random.int n_trees = 0) in
+        if add_new_tree then (Tree.leaf example) :: updated_trees
+        else updated_trees
 
     let forest examples =
         let forest = empty () in
