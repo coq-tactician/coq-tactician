@@ -1,34 +1,56 @@
 module type DATA = sig
     type indices = int list
+    type 'a example
     type 'a examples
-    type example_features
-    type rule = example_features -> bool
+    type 'a rule = 'a example -> bool
     type 'a split_rule = 'a examples -> 'a examples * 'a examples
-    val uniform_labels : 'a examples -> bool
     val indices : 'a examples -> indices
-    val empty : 'a examples
     val is_empty : 'a examples -> bool
-    val append : 'a examples -> 'a examples -> 'a examples
     val random_label : 'a examples -> 'a
-    val first_label : 'a examples -> 'a
+<<<<<<< HEAD
     val random_subset : 'a examples -> 'a examples
-    val split : rule -> 'a split_rule
-    val gini_rule : ?m:int -> 'a examples -> rule
+    val split : 'a rule -> 'a split_rule
+    val split_rev : split_rule -> rule
+    val gini_rule : ?m:int -> examples -> rule
+    val length : examples -> int
+    val label : example -> 'a option
+    val examples_of_1 : example -> examples
+    val add : examples -> example -> examples
+    val random_example : examples -> example
+    val fold_left : ('a -> example -> 'a) -> 'a -> examples -> 'a
+(*     val print : examples -> unit *)
+(*     val print_example_2 : example -> unit *)
+    val labels : examples -> 'a list
+=======
+    val split : 'a rule -> 'a split_rule
+    val split_rev : 'a split_rule -> 'a rule
+    val gini_rule : ?m:int -> 'a examples -> 'a rule
     val length : 'a examples -> int
-    val random_example : 'a examples -> 'a examples
-    val fold_left : ('a -> 'a examples -> 'a) -> 'a -> 'a examples -> 'a
+    val label : 'a example -> 'a option
+    val examples_of_1 : 'a example -> 'a examples
+    val add : 'a examples -> 'a example -> 'a examples
+    val random_example : 'a examples -> 'a example
+    val fold_left : ('a -> 'b example -> 'a) -> 'a -> 'b examples -> 'a
     val labels : 'a examples -> 'a list
-    val examples_1 : example_features -> 'a examples
+>>>>>>> tmp
 end
 
 module Make = functor (Data : DATA) -> struct
 
     type 'a tree =
+<<<<<<< HEAD
+        | Node of Data.split_rule * tree * tree
+        | Leaf of 'a * Data.examples
+=======
         | Node of 'a Data.split_rule * 'a tree * 'a tree
         | Leaf of 'a * 'a Data.examples
+>>>>>>> tmp
 
     let leaf example =
-        Leaf (Data.first_label example, example)
+        let l = match Data.label example with
+        | None -> failwith "label required"
+        | Some l -> l in
+        Leaf (l, Data.examples_of_1 example)
 
     (* returns Node(split_rule, Leaf (label1, stats1), Leaf(label2, stats2)) *)
     let make_new_node examples =
@@ -55,24 +77,18 @@ module Make = functor (Data : DATA) -> struct
 
     (* pass the example to a leaf; if a condition is satisfied, extend the tree *)
     let add tree example =
-        let () = Printf.printf "aaaaaaa%!" in
         let rec loop = function
             | Node (split_rule, left_tree, right_tree) ->
-(*                 let rule = Data.split_rev split_rule in *)
-(*                 (match rule example with *)
-                let examples_l, examples_r = split_rule example in
-                (match Data.is_empty examples_l, Data.is_empty examples_r with
-                | false, true -> Node(split_rule, loop left_tree, right_tree)
-                | true, false  -> Node(split_rule, left_tree, loop right_tree)
-                | _, _ -> failwith "single example goes either left or right")
+                let rule = Data.split_rev split_rule in
+                (match rule example with
+                | true -> Node(split_rule, loop left_tree, right_tree)
+                | false -> Node(split_rule, left_tree, loop right_tree))
             | Leaf (label, examples) ->
-                let examples = Data.append examples example in
+                let examples = Data.add examples example in
                 if extend examples then make_new_node examples
                 else Leaf (label, examples)
         in
         loop tree
-
-(*     let add = Utils.time add *)
 
     let tree examples =
         let example = Data.random_example examples in

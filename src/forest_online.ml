@@ -1,22 +1,31 @@
 module Make = functor (Data : Tree_online.DATA) -> struct
     module Tree = Tree_online.Make(Data)
 
-    let empty () = []
+    let empty = []
 
     let add forest example =
         let updated_trees =
             List.map (fun tree -> Tree.add tree example) forest in
+(*
+            let parmap_forest = Parmap.L forest in
+            Parmap.parmap (fun tree -> Tree.add tree example) parmap_forest in
+*)
         let n_trees = List.length forest in
         let add_new_tree = (n_trees = 0) || (Random.int n_trees = 0) in
-        if add_new_tree then (Tree.leaf example) :: updated_trees
+        if add_new_tree then Tree.leaf example :: updated_trees
         else updated_trees
 
     let forest examples =
-        let forest = empty () in
-        Data.fold_left add forest examples
+        Data.fold_left add empty examples
+
+(*
+    let forest tree n examples =
+        let initseg = List.init n (fun i -> i) in
+        List.map (fun _ -> tree (Data.random_subset examples)) initseg
+*)
 
     let vote votes =
-        let tbl = Hashtbl.create 100 in
+        let tbl = Hashtbl.create 10 in (* about 10 classes assumed *)
         let update cl =
             if Hashtbl.mem tbl cl then
                 Hashtbl.replace tbl cl ((Hashtbl.find tbl cl) + 1)
@@ -32,9 +41,17 @@ module Make = functor (Data : Tree_online.DATA) -> struct
             | _  -> failwith "Illegal value of compare." in
         let max_freq_cls = Hashtbl.fold update_max_cl tbl ([], 1) in
         match max_freq_cls with
-        | ([], _) -> failwith "At least one class needs to have maximal frequency."
+        | ([], _) ->
+            failwith "At least one class needs to have maximal frequency."
         | ([x], _) -> x
         | (l, _) -> Utils.choose_random l
+
+    let classify forest examples =
+    let votes = List.map (Tree.classify examples) forest in
+(*         let votes = Parmap.parmap (Tree.classify examples) (Parmap.L forest)
+    in *)
+        let inds = Data.indices examples in
+        List.map (fun i -> vote (List.map (fun x -> List.nth x i) votes)) inds
 
     let freqs votes =
         let tbl = Hashtbl.create 10 in
@@ -51,15 +68,9 @@ module Make = functor (Data : Tree_online.DATA) -> struct
         List.map
             (fun cl -> ((float_of_int (Hashtbl.find tbl cl)) /. sum, cl)) keys
 
-    let classify forest examples =
-        let votes = List.map (Tree.classify examples) forest in
-        let inds = Data.indices examples in
-        List.map (fun i -> vote (List.map (fun x -> List.nth x i) votes)) inds
-
-    let classify_1 forest example =
-        let example = Data.examples_of_1 example in
+    let classify_1 forest features =
+        let example = Data.examples_1 features in
         let votes = List.map (Tree.classify example) forest in
         let votes = List.map List.hd votes in
         freqs votes
-
 end

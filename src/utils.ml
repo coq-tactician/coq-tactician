@@ -52,5 +52,5 @@ let read_lines file : string list =
 let time f x =
     let t = Sys.time() in
     let fx = f x in
-    Printf.printf "Execution time: %f s\n" (Sys.time() -. t);
+    Printf.printf "Execution time: %f s\n%!" (Sys.time() -. t);
     fx

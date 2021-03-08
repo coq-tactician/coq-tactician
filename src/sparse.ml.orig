@@ -1,20 +1,26 @@
-open Printf
-
 module ISet = Set.Make(Int)
 
 type indices = int list
+<<<<<<< HEAD
+=======
 type 'a labels = 'a array
+>>>>>>> tmp
 type example_features = ISet.t
 type features = example_features array
+type 'a example = {features : example_features; label : 'a option}
 type 'a examples = {
     indices : indices;
     features : features;
+<<<<<<< HEAD
+    labels : 'a array option}
+=======
     labels : 'a labels option}
-type rule = example_features -> bool
+type 'a rule = 'a example -> bool
 type 'a split_rule = 'a examples -> 'a examples * 'a examples
 
 let label_of_string = int_of_string
 let feature_of_string = int_of_string
+>>>>>>> tmp
 
 let labels {indices; features; labels} =
     match labels with
@@ -48,7 +54,7 @@ let random_features examples n =
     loop [] n
 
 let random_rule examples =
-    ISet.mem (random_feature examples)
+    fun {features; label} -> ISet.mem (random_feature examples) features
 
 let split_impur impur rule {indices; features; labels} =
     let labels =
@@ -87,6 +93,4 @@ let gini_rule ?m:(m=0) examples =
         match feas_impurs_sorted with
         | [] -> raise Empty_list
         | (f, _) :: _ -> f in
-    fun example -> ISet.mem best_fea example
-
-let print_label l = l |> printf "%n\n"
+    fun {features; label} -> ISet.mem best_fea features
