@@ -47,7 +47,8 @@ module type TacticianStructures = sig
     { parents  : (proof_state * proof_step) list
     ; siblings : proof_dag
     ; before   : proof_state
-    ; after    : proof_state list }
+    ; after    : proof_state list
+    ; preds    : (tactic * proof_state list option) list }
 
   type prediction =
     { confidence : float

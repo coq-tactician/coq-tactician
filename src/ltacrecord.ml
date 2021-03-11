@@ -180,11 +180,12 @@ let subst_outcomes (s, (outcomes, tac)) =
   and subst_ps {executions; tactic} =
     { executions = List.map (fun (ps, pd) -> subst_pf ps, subst_pd pd) executions
     ; tactic = subst_tac tactic } in 
-  let outcomes = List.map (fun {parents; siblings; before; after} ->
+  let outcomes = List.map (fun {parents; siblings; before; after; preds} ->
       { parents = List.map (fun (psa, pse) -> (subst_pf psa, subst_ps pse)) parents
       ; siblings = subst_pd siblings
       ; before = subst_pf before
-      ; after = List.map subst_pf after }) outcomes in
+      ; after = List.map subst_pf after
+      ; preds = List.map (fun (t, ps) -> subst_tac t, Option.map (List.map subst_pf) ps) preds}) outcomes in
   (outcomes, subst_tac tac)
 
 let tmp_ltac_defs = Summary.ref ~name:"TACTICIANTMPSECTION" []
@@ -220,10 +221,11 @@ let rebuild_outcomes (outcomes, tac) =
   and rebuild_ps {executions; tactic} =
     { executions = List.map (fun (ps, pd) -> ps, rebuild_pd pd) executions
     ; tactic = rebuild_tac tactic } in 
-  let outcomes = List.map (fun {parents; siblings; before; after} ->
+  let outcomes = List.map (fun {parents; siblings; before; after; preds} ->
       { parents = List.map (fun (psa, pse) -> (psa, rebuild_ps pse)) parents
       ; siblings = rebuild_pd siblings
-      ; before; after }) outcomes in
+      ; before; after
+      ; preds = List.map (fun (t, ps) -> rebuild_tac t, ps) preds}) outcomes in
   (outcomes, rebuild_tac tac)
 
 let discharge_outcomes env (outcomes, tac) =
@@ -237,10 +239,11 @@ let discharge_outcomes env (outcomes, tac) =
     and genarg_print_ps {executions; tactic} =
       { executions = List.map (fun (ps, pd) -> ps, genarg_print_pd pd) executions
       ; tactic = genarg_print_tac tactic } in
-    let outcomes = List.map (fun {parents; siblings; before; after} ->
+    let outcomes = List.map (fun {parents; siblings; before; after; preds} ->
         { parents = List.map (fun (psa, pse) -> (psa, genarg_print_ps pse)) parents
         ; siblings = genarg_print_pd siblings
-        ; before; after }) outcomes in
+        ; before; after
+        ; preds = List.map (fun (t, ps) -> genarg_print_tac tac, ps) preds}) outcomes in
     (outcomes, genarg_print_tac tac)
 
 let section_ltac_helper bodies =
@@ -323,14 +326,16 @@ let add_to_db (x : data_in) =
   Lib.add_anonymous_leaf (in_db x)
 
 (* Types and accessors for state in the proof monad *)
-type localdb = ((Proofview.Goal.t * Proofview.Goal.t list) list * glob_tactic_expr) list
+type localdb = ((Proofview.Goal.t * Proofview.Goal.t list * (tactic * Proofview.Goal.t list option) list) list * glob_tactic_expr) list
 type goal_stack = Proofview.Goal.t list list
+type prediction_stack = (tactic * Proofview.Goal.t list option) list list
 type tactic_trace = glob_tactic_expr list
 type state_id_stack = int list
 
 let record_field : bool Evd.Store.field = Evd.Store.field ()
 let localdb_field : localdb Evd.Store.field = Evd.Store.field ()
 let goal_stack_field : goal_stack Evd.Store.field = Evd.Store.field ()
+let prediction_stack_field : prediction_stack Evd.Store.field = Evd.Store.field ()
 let tactic_trace_field : tactic_trace Proofview_monad.StateStore.field = Proofview_monad.StateStore.field ()
 let state_id_stack_field : state_id_stack Proofview_monad.StateStore.field = Proofview_monad.StateStore.field ()
 
@@ -394,6 +399,15 @@ let push_goal_stack gls =
 let pop_goal_stack () =
   modify_field goal_stack_field (fun st -> List.tl st, List.hd st) (fun () -> assert false)
 
+let push_prediction_stack gls =
+  let open Proofview in
+  let open Notations in
+  modify_field prediction_stack_field (fun st -> gls::st, ()) (fun () -> []) >>=
+  fun _ -> tclUNIT ()
+
+let pop_prediction_stack () =
+  modify_field prediction_stack_field (fun st -> List.tl st, List.hd st) (fun () -> assert false)
+
 let push_state_id_stack () =
   let open Proofview in
   let open Notations in
@@ -427,15 +441,16 @@ let push_tactic_trace tac =
 let get_tactic_trace gl =
   get_field_goal2 tactic_trace_field gl (fun _ -> [])
 
-let mk_outcome (st, sts) =
+let mk_outcome (st, sts, preds) =
   (* let mem = (List.map TS.tactic_make (get_tactic_trace st)) in *)
   let st : proof_state = goal_to_proof_state st in
   { parents = [] (* List.map (fun tac -> (st (\* TODO: Fix *\), { executions = []; tactic = tac })) mem *)
   ; siblings = End
   ; before = st
-  ; after = List.map goal_to_proof_state sts }
+  ; after = List.map goal_to_proof_state sts
+  ; preds = List.map (fun (t, sts) -> t, Option.map (List.map goal_to_proof_state) sts) preds}
 
-let add_to_db2 id ((outcomes, tac) : (Proofview.Goal.t * Proofview.Goal.t list) list *
+let add_to_db2 id ((outcomes, tac) : (Proofview.Goal.t * Proofview.Goal.t list * (tactic * Proofview.Goal.t list option) list) list *
                                      glob_tactic_expr) =
   let tac = TS.tactic_make tac in
   let outcomes = List.map mk_outcome outcomes in
@@ -643,7 +658,7 @@ let tacpredict max_reached =
              (tac_exec_count := 1 + !tac_exec_count;
               tclDebugTac t env false) >>= fun () ->
              Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
-             let outcome = mk_outcome (gl, gls) in
+             let outcome = mk_outcome (gl, gls, []) in
              tclUNIT (learner_evaluate outcome (t, h)))) in
   let transform i (r : Tactic_learner_internal.TS.prediction) =
     { confidence = r.confidence; focus = r.focus; tactic = taceval i r.focus r.tactic } in
@@ -824,27 +839,57 @@ let wit_glbtactic : (Empty.t, glob_tactic_expr, glob_tactic_expr) Genarg.genarg_
 let should_record b =
   b && !global_record
 
+let runTactics n (tacs : Tactic_learner_internal.TS.prediction IStream.t) =
+  let open Proofview in
+  let open Notations in
+  let exception StateException of Goal.t list in
+  let rec aux n tacs glsacc = match n = 0, IStream.peek tacs with
+    | true, _ | _, IStream.Nil -> tclUNIT glsacc
+    | false, IStream.Cons (Tactic_learner_internal.TS.{ tactic; _ }, tacs) ->
+      Feedback.msg_warning (Pptactic.pr_glob_tactic (Environ.empty_env) (tactic_repr tactic));
+      let tactic' = parse_tac (tactic_repr tactic) in
+      tclOR
+        (tclTIMEOUT 1 tactic' <*> Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
+         tclZERO (StateException gls))
+        (function
+          | (StateException gls, _) -> aux (n - 1) tacs ((tactic, Some gls)::glsacc)
+          | (e, _) -> aux (n - 1) tacs ((tactic, None)::glsacc))
+  in aux n tacs []
+
+let run_predictions () =
+  let open Proofview in
+  let open Notations in
+  predict >>= runTactics 100 >>= push_prediction_stack
+
 let push_state_tac () =
   let open Proofview in
   let open Notations in
   get_record () >>= fun b -> if not (should_record b) then tclUNIT () else
     push_state_id_stack () <*> Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
-    push_goal_stack gls
+    push_goal_stack gls <*> run_predictions ()
 
 let record_tac (tac2 : glob_tactic_expr) : unit Proofview.tactic =
   let open Proofview in
   let open Notations in
-  let collect_states before_gls after_gls =
+  let collect_states before_gls after_gls prediction_after_gls =
     List.map (fun gl_before ->
         let i = get_state_id_goal_top gl_before in
-        (gl_before, List.filter_map (fun (j, gl_after) ->
-             if i = j then Some gl_after else None) after_gls)) before_gls in
+        let after_gls = List.filter_map (fun (j, gl_after) ->
+            if i = j then Some gl_after else None) after_gls in
+        let prediction_after_gls = List.map (fun (tac, gls) ->
+            tac, Option.map (List.filter_map (fun (j, gl_after) ->
+                if i = j then Some gl_after else None)) gls) prediction_after_gls in
+        (gl_before, after_gls, prediction_after_gls)) before_gls  in
   get_record () >>= fun b -> if not (should_record b) then tclUNIT () else
     tclENV >>= fun env ->
     pop_goal_stack () >>= fun before_gls ->
+    pop_prediction_stack () >>= fun prediction_after_goals ->
+    let prediction_after_goals =
+      List.map (fun (tac, gls) ->
+          tac, Option.map (List.map (fun gl -> get_state_id_goal_top gl, gl)) gls) prediction_after_goals in
     Goal.goals >>= record_map (fun x -> x) >>= (fun after_gls ->
         let after_gls = List.map (fun gl -> get_state_id_goal_top gl, gl) after_gls in
-        push_localdb (collect_states before_gls after_gls, tac2)
+        push_localdb (collect_states before_gls after_gls prediction_after_goals, tac2)
       ) >>= (fun () -> pop_state_id_stack () <*> (* TODO: This is a strange way of doing things, see todo above. *)
                        push_tactic_trace tac2)
 
