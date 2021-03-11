@@ -1,8 +1,8 @@
 open Tactic_learner
-open Learner_helper
+open Learner_helper_dup
 open Util
 
-type features =  int list
+type features = int list
 type 'a trie =
   | Leaf of ('a * features) list
   | Node of 'a trie * 'a trie
@@ -115,7 +115,7 @@ module LSHF : TacticianOnlineLearnerType = functor (TS : TacticianStructures) ->
     ; frequencies = Frequencies.empty }
 
   let add db b obj =
-    let feats = remove_feat_kind (proof_state_to_ints b) in
+    let feats = proof_state_to_ints b in
     let frequencies = List.fold_left
         (fun freq f ->
            Frequencies.update f (fun y -> Some ((default 0 y) + 1)) freq)
@@ -132,7 +132,7 @@ module LSHF : TacticianOnlineLearnerType = functor (TS : TacticianStructures) ->
   let predict db f =
     if f = [] then IStream.of_list [] else
       let feats = proof_state_to_ints (List.hd f).state in
-      let candidates, _ = query db.forest (remove_feat_kind feats) !sort_window in
+      let candidates, _ = query db.forest feats !sort_window in
       let tdidfs = List.map
           (fun (o, f) -> let x = tfidf db.length db.frequencies feats f in (x, o))
           candidates in
@@ -144,4 +144,4 @@ module LSHF : TacticianOnlineLearnerType = functor (TS : TacticianStructures) ->
 
 end
 
-let () = register_online_learner "LSHF" (module LSHF) 
+(* let () = register_online_learner "LSHF" (module LSHF) *)
