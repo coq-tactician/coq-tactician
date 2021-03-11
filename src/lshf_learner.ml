@@ -144,4 +144,4 @@ module LSHF : TacticianOnlineLearnerType = functor (TS : TacticianStructures) ->
 
 end
 
-let () = register_online_learner "LSHF" (module LSHF) 
+(* let () = register_online_learner "LSHF" (module LSHF)  *)

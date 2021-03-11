@@ -10,12 +10,14 @@
    naiveknn_learner
    naiveknn_subst_learner
    knnLSHForest
-   lshf_learner
+   lshf_learner_dup
+   forest_data_generator
    knn
    tactic_substitute
    search_strategy
    search_strategy_internal
    learner_helper
+   learner_helper_dup
    tactic_learner
    tactic_learner_internal
    tactic_normalize
@@ -36,7 +38,9 @@
    coq.plugins.ssreflect
    coq.plugins.firstorder
    coq.plugins.funind
+   coq-serapi.serlib.ltac
  )
+ (preprocess (staged_pps ppx_import ppx_sexp_conv ppx_deriving_yojson))
 )
 (library
  (name tactician_ssreflect_plugin)
