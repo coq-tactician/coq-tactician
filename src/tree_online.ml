@@ -1,12 +1,12 @@
 module type DATA = sig
     type indices = int list
     type 'a examples
-    type example_features
-    type rule = example_features -> bool
+    type features
+    type rule = features -> bool
     type 'a split_rule = 'a examples -> 'a examples * 'a examples
     val uniform_labels : 'a examples -> bool
     val indices : 'a examples -> indices
-    val empty : 'a examples
+(*     val empty : 'a examples *)
     val is_empty : 'a examples -> bool
     val append : 'a examples -> 'a examples -> 'a examples
     val random_label : 'a examples -> 'a
@@ -18,7 +18,7 @@ module type DATA = sig
     val random_example : 'a examples -> 'a examples
     val fold_left : ('a -> 'a examples -> 'a) -> 'a -> 'a examples -> 'a
     val labels : 'a examples -> 'a list
-    val examples_1 : example_features -> 'a examples
+(*     val examples_1 : features -> 'a examples *)
 end
 
 module Make = functor (Data : DATA) -> struct
@@ -55,7 +55,6 @@ module Make = functor (Data : DATA) -> struct
 
     (* pass the example to a leaf; if a condition is satisfied, extend the tree *)
     let add tree example =
-        let () = Printf.printf "aaaaaaa%!" in
         let rec loop = function
             | Node (split_rule, left_tree, right_tree) ->
 (*                 let rule = Data.split_rev split_rule in *)
@@ -91,6 +90,7 @@ module Make = functor (Data : DATA) -> struct
         let inds_labels = loop tree examples in
         let inds = Data.indices examples in
         List.map (fun i -> List.assoc i inds_labels) inds
+
 end
 
 
