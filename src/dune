@@ -7,7 +7,6 @@
    "g_ltac1_record"
    forest_online_learner
    tree_online
-   sparse
    impurity
    forest_online
    data
