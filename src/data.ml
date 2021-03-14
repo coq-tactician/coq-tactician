@@ -1,10 +1,11 @@
+open Printf
 module ISet = Set.Make(Int)
 
 type features = ISet.t
 type 'a example = (features * ('a option))
-type 'a examples = ('a example) list
-type rule = features -> bool
-type 'a split_rule = 'a examples -> 'a examples * 'a examples
+type 'a examples = 'a example list
+type direction = Left | Right
+type rule = features -> direction
 
 let label (features, label) =
     match label with
@@ -13,6 +14,12 @@ let label (features, label) =
 
 let labels examples =
     List.map label examples
+
+let unlabeled features =
+    (ISet.of_list features, None)
+
+let labeled (features, label) =
+    (ISet.of_list features, Some label)
 
 let features (features, label) =
     features
@@ -26,6 +33,12 @@ let all_features examples =
 
 let n_features examples =
     List.length (all_features examples)
+
+(*
+let random_feature {indices; features; _} =
+    let random_example = features.(Utils.choose_random indices) in
+    Utils.choose_random (ISet.elements random_example)
+*)
 
 let random_feature examples =
     let random_example_1 = features (Utils.choose_random examples) in
@@ -41,8 +54,6 @@ let random_features examples n =
         | 0 -> acc
         | n -> loop ((random_feature examples) :: acc) (n - 1) in
     loop [] n
-
-let empty = []
 
 let is_empty examples =
     examples = []
@@ -81,8 +92,8 @@ let split rule examples =
         | [] -> (examples_l, examples_r)
         | e :: t ->
             match rule (features e) with
-            | true -> loop (e :: examples_l) examples_r t
-            | false -> loop examples_l (e :: examples_r) t in
+            | Left -> loop (e :: examples_l) examples_r t
+            | Right -> loop examples_l (e :: examples_r) t in
     loop [] [] examples
 
 let length examples =
@@ -94,17 +105,14 @@ let random_example examples =
 let add examples example =
     example :: examples
 
-let get examples i =
-    List.nth examples i
-
 let fold_left f s examples =
     List.fold_left f s examples
 
-let unlabeled features =
-    (features, None)
-
 let random_rule examples =
-    ISet.mem (random_feature examples)
+    fun example ->
+        match ISet.mem (random_feature examples) example with
+        | true -> Left
+        | false -> Right
 
 let split_impur impur rule examples =
     let append (left, right) e =
@@ -138,4 +146,7 @@ let gini_rule ?m:(m=0) examples =
         match feas_impurs_sorted with
         | [] -> raise Empty_list
         | (f, _) :: _ -> f in
-    fun example -> ISet.mem best_fea example
+    fun example ->
+        match ISet.mem best_fea example with
+        | true -> Left
+        | false -> Right

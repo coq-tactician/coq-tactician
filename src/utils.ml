@@ -54,3 +54,17 @@ let time f x =
     let fx = f x in
     Printf.printf "Execution time: %f s\n%!" (Sys.time() -. t);
     fx
+
+let load_features file =
+    let lines = read_lines file in
+    let split = Str.split_delim (Str.regexp " ") in
+    let rec loop split_lines = function
+        | [] -> List.rev split_lines
+        | h :: t ->
+            let features_list = List.map int_of_string (split h) in
+            features_list :: (loop split_lines t) in
+    loop [] lines
+
+let load_labels file =
+    List.map int_of_string (read_lines file)
+
