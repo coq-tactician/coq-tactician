@@ -68,3 +68,8 @@ let load_features file =
 let load_labels file =
     List.map int_of_string (read_lines file)
 
+let rec remove_last l =
+    match l with
+    | [] -> []
+    | [h] -> []
+    | h :: t -> h :: (remove_last t)

@@ -4,12 +4,15 @@ module Make = functor (Data : Tree_online.DATA) -> struct
     let empty = []
 
     let add forest example =
+        let n_trees = List.length forest in
+        let () = Printf.eprintf "%n\n%!" n_trees in
+        let add_new_tree = (n_trees = 0) || (Random.int n_trees = 0) in
+        let remove_old_tree = (n_trees > 0) && (Random.int n_trees) > 100 in
+        let forest =
+            if remove_old_tree then Utils.remove_last forest else forest in
         let updated_trees =
             List.map (fun tree -> Tree.add tree example) forest in
-        let n_trees = List.length forest in
-        let add_new_tree = (n_trees = 0) || (Random.int n_trees = 0) in
-        if add_new_tree then Tree.leaf example :: updated_trees
-        else updated_trees
+        if add_new_tree then Tree.leaf example :: updated_trees else updated_trees
 
     let forest examples =
         Data.fold_left add empty examples
