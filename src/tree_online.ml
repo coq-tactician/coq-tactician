@@ -43,17 +43,18 @@ module Make = functor (Data : DATA) -> struct
 
     (* pass the example to a leaf; if a condition is satisfied, extend the tree *)
     let add (tree : 'a tree) (example : 'a Data.example) : 'a tree =
-        let rec loop = function
+        let rec loop depth = function
             | Node (rule, tree_l, tree_r) ->
                 (match rule (Data.features example) with
-                | Left  -> Node(rule, loop tree_l, tree_r)
-                | Right -> Node(rule, tree_l, loop tree_r))
+                | Left  -> Node(rule, loop (depth + 1) tree_l, tree_r)
+                | Right -> Node(rule, tree_l, loop (depth + 1) tree_r))
             | Leaf (label, examples) ->
+(*                 Printf.eprintf "depth: %n\n" !depth; *)
                 let examples = Data.add examples example in
-                if extend examples then make_new_node examples
+                if extend examples && depth < 100 then make_new_node examples
                 else Leaf (label, examples)
         in
-        loop tree
+        loop 0 tree
 
     let tree examples =
         let example = Data.random_example examples in
