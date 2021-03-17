@@ -8,7 +8,7 @@ module type DATA = sig
     val add : 'a examples -> 'a example -> 'a examples
     val features : 'a example -> features
     val split : rule -> 'a examples -> 'a examples * 'a examples
-    val gini_rule : ?m:int -> 'a examples -> rule
+    val gini_rule : 'a examples -> rule
     val random_label : 'a examples -> 'a
     val random_example : 'a examples -> 'a example
     val fold_left : ('a -> 'b example -> 'a) -> 'a -> 'b examples -> 'a

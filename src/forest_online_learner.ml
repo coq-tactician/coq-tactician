@@ -10,8 +10,6 @@ module OnlineForest : TacticianOnlineLearnerType = functor (TS : TacticianStruct
 
     type model = (TS.tactic Tree.tree) list
 
-(*     let empty () = {forest = []; examples = Data.empty} *)
-
     let empty () = []
 
     let add forest b obj =
