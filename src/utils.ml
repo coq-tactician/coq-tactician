@@ -68,8 +68,32 @@ let load_features file =
 let load_labels file =
     List.map int_of_string (read_lines file)
 
+let print_label label =
+    Printf.printf "%n\n" label
+
 let rec remove_last l =
     match l with
     | [] -> []
     | [h] -> []
     | h :: t -> h :: (remove_last t)
+
+let freqs l =
+    let sorted = List.sort compare l in
+    let rec loop occ sorted =
+        match sorted, occ with
+        | [], _ -> occ
+        | h :: t, [] -> loop [(h, 1)] t
+        | h :: t, (e, c) :: t2 ->
+            if h = e then loop ((e, c + 1) :: t2) t
+            else loop ((h, 1) :: (e, c) :: t2) t in
+    let occurs = loop [] sorted in
+    let len = float_of_int (List.length l) in
+    List.map (fun (e, c) -> (e, (float_of_int c) /. len)) occurs
+
+let uniq l =
+    let rec aux u l =
+        match l with
+        | [] -> u
+        | h :: t -> if List.mem h u then aux u t else aux (h :: u) t
+    in aux [] l
+
