@@ -38,7 +38,7 @@ module Make = functor (Data : DATA) -> struct
     let extend examples =
         let labels = Data.labels examples in
         let imp = Impurity.gini_impur labels in
-        imp > 0.5
+        imp > 0.4
     (* TODO more sophisticated condition needed *)
 
     (* pass the example to a leaf; if a condition is satisfied, extend the tree *)
