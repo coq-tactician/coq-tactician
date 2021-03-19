@@ -53,7 +53,7 @@ module Make = functor (Data : DATA) -> struct
 (*            Printf.eprintf "depth: %n\n" depth; *)
 (*            Printf.eprintf "#examples: %n\n%!" (List.length examples) ; *)
                 let examples = Data.add examples example in
-                if extend examples && depth < 1000 then make_new_node examples
+                if extend examples && depth < 200 then make_new_node examples
                 else Leaf (label, examples)
         in
         loop 0 tree
