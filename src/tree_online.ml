@@ -27,6 +27,7 @@ module Make = functor (Data : DATA) -> struct
 
     (* returns Node(split_rule, Leaf (label1, stats1), Leaf(label2, stats2)) *)
     let make_new_node examples =
+(*         let () = Printf.printf "make_new_node\n" in *)
         let rule = Data.gini_rule examples in
         let examples_l, examples_r = Data.split rule examples in
         if Data.is_empty examples_l || Data.is_empty examples_r
@@ -38,20 +39,19 @@ module Make = functor (Data : DATA) -> struct
     let extend examples =
         let labels = Data.labels examples in
         let imp = Impurity.gini_impur labels in
-        imp > 0.4
+        imp > 0.3
     (* TODO more sophisticated condition needed *)
 
     (* pass the example to a leaf; if a condition is satisfied, extend the tree *)
-    let add (tree : 'a tree) (example : 'a Data.example) : 'a tree =
+    let add tree example =
         let rec loop depth = function
             | Node (rule, tree_l, tree_r) ->
                 (match rule (Data.features example) with
                 | Left  -> Node(rule, loop (depth + 1) tree_l, tree_r)
                 | Right -> Node(rule, tree_l, loop (depth + 1) tree_r))
             | Leaf (label, examples) ->
-(*                 Printf.eprintf "depth: %n\n" !depth; *)
                 let examples = Data.add examples example in
-                if extend examples && depth < 100 then make_new_node examples
+                if extend examples && depth < 1000 then make_new_node examples
                 else Leaf (label, examples)
         in
         loop 0 tree
@@ -68,6 +68,20 @@ module Make = functor (Data : DATA) -> struct
                 (match rule (Data.features example) with
                 | Left  -> loop tree_l
                 | Right -> loop tree_r)
+        in loop tree
+
+    let depth tree =
+        let rec loop d t =
+            match t with
+            | Node(_, tl, tr) -> max (loop (d+1) tl) (loop (d+1) tr)
+            | Leaf(_) -> d
+        in loop 0 tree
+
+    let max_node tree =
+        let rec loop t =
+            match t with
+            | Node(_, tl, tr) -> max (loop tl) (loop tr)
+            | Leaf(_, es) -> List.length es
         in loop tree
 
 end

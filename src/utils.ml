@@ -90,6 +90,17 @@ let freqs l =
     let len = float_of_int (List.length l) in
     List.map (fun (e, c) -> (e, (float_of_int c) /. len)) occurs
 
+let sum_scores l =
+    let sorted = List.sort (fun (x, _) (y, _) -> compare x y) l in
+    let rec loop sco sorted =
+        match sorted, sco with
+        | [], _ -> sco
+        | (l, s) :: t, [] -> loop [(l, s)] t
+        | (l, s) :: t, (e, c) :: t2 ->
+            if l = e then loop ((e, c +. s) :: t2) t
+            else loop ((l, s) :: (e, c) :: t2) t in
+    loop [] sorted
+
 let uniq l =
     let rec aux u l =
         match l with

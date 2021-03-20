@@ -8,11 +8,10 @@ module OnlineForest : TacticianOnlineLearnerType = functor (TS : TacticianStruct
     module Tree = Tree_online.Make(Data)
     module Forest = Forest_online.Make(Data)
 
-    type model = (TS.tactic Tree.tree) list
+    type model = TS.tactic Forest.forest
+(*         {trees : (TS.tactic Tree.tree) list; perf : float list; n : float} *)
 
-(*     let empty () = {forest = []; examples = Data.empty} *)
-
-    let empty () = []
+    let empty () = {Forest.trees=[]; Forest.perf=[]; Forest.n=0.}
 
     let add forest b obj =
       let feats = proof_state_to_ints b in
@@ -26,6 +25,7 @@ module OnlineForest : TacticianOnlineLearnerType = functor (TS : TacticianStruct
       let feats = proof_state_to_ints (List.hd f).state in
       let example = Data.unlabeled feats in
       let out = Forest.score forest example in
+      let out = List.map (fun (x, y) -> (y, x)) out in
       let out = remove_dups_and_sort out in
       let out = List.map (fun (a, c) -> { confidence = a; focus = 0; tactic = c }) out in
       IStream.of_list out

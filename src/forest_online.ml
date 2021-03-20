@@ -1,46 +1,59 @@
 module Make = functor (Data : Tree_online.DATA) -> struct
     module Tree = Tree_online.Make(Data)
 
-    let empty = []
+    type 'a forest = {trees : ('a Tree.tree) list; perf : float list; n : float}
+
+    let empty = {trees = []; perf = []; n = 0.}
 
     let add forest example =
-        let n_trees = List.length forest in
+        let () = List.iter (fun s -> Printf.printf "%f " s) forest.perf in
+        let () = Printf.printf "\n\n" in
+        let trees = forest.trees in
+        let n_trees = List.length trees in
         let add_new_tree = (n_trees = 0) || (Random.int n_trees = 0) in
-        let remove_old_tree = (n_trees > 0) && (Random.int n_trees) > 300 in
-        let forest =
-            if remove_old_tree then Utils.remove_last forest else forest in
-        let updated_trees =
-            List.map (fun tree -> Tree.add tree example) forest in
-        if add_new_tree then Tree.leaf example :: updated_trees else updated_trees
+        let preds = List.map (Tree.classify example) trees in
+        let corr = List.map (( = ) (Data.label example)) preds in
+        let n = forest.n in
+        let update_perf (p, c) = match c with
+            | true -> p +. (1. /. (n +. 1.)) *. (1. -. p)
+            | false -> p *. (n /. (n +. 1.)) in
+        let perf_corr = List.combine forest.perf corr in
+        let updated_perf = List.map update_perf perf_corr in
+        let updated_trees = List.map (fun tree -> Tree.add tree example) trees in
+        let updated_trees, updated_perf = if add_new_tree
+            then ((Tree.leaf example :: updated_trees), 1. :: updated_perf)
+            else updated_trees, updated_perf in
+        {trees=updated_trees; perf=updated_perf; n=n +. 1.}
+
 
     let forest examples =
         Data.fold_left add empty examples
 
     let vote votes =
-        let sorted = List.sort compare votes in
-        let rec loop occ sorted =
-            match sorted, occ with
-            | [], _ -> occ
-            | h :: t, [] -> loop [(h, 1)] t
-            | h :: t, (e, c) :: t2 ->
-                if h = e
-                then loop ((e, c + 1) :: t2) t
-                else loop ((h, 1) :: (e, c) :: t2) t
-        in
-        let occurs = loop [] sorted in
-        let sum = float_of_int (List.length votes) in
-        let freqs =
-            List.map (fun (e, c) -> (e, (float_of_int c) /. sum)) occurs in
+        let freqs = Utils.freqs votes in
         List.sort (fun (_, c1) (_, c2) -> compare c2 c1) freqs
 
+    let score forest example =
+        let votes = List.map (Tree.classify example) forest.trees in
+        let votes_weights = List.combine votes forest.perf in
+        Utils.sum_scores votes_weights
+
     let classify forest example =
-        let votes = List.map (Tree.classify example) forest in
-        match vote votes with
+        let scores = score forest example in
+        let scores = List.sort (fun (_, c1) (_, c2) -> compare c2 c1) scores in
+        match scores with
         | (e, _) :: _ -> e
         | [] -> failwith "empty list of voting scores"
 
-    let score forest unlabeled_example =
-        let votes = List.map (Tree.classify unlabeled_example) forest in
-        List.map (fun (a, b) -> (b, a) ) (vote votes)
+    let stats forest =
+        let forest = forest.trees in
+        let l = List.length forest in
+        let ds_sum = List.fold_left (fun s t -> s + Tree.depth t) 0 forest in
+        let ds_avg = (float_of_int ds_sum) /. (float_of_int l) in
+        let ns_sum = List.fold_left (fun s t -> s + Tree.max_node t) 0 forest in
+        let ns_avg = (float_of_int ns_sum) /. (float_of_int l) in
+        let () = Printf.printf "\nNumber of trees: %n\n" l in
+        let () = Printf.printf "Avg depth of trees: %f\n" ds_avg in
+        let () = Printf.printf "Avg largest node of trees: %f\n" ns_avg in ()
 
 end
