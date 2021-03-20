@@ -1,28 +1,21 @@
 module Make = functor (Data : Tree_online.DATA) -> struct
     module Tree = Tree_online.Make(Data)
 
-    type 'a forest = {trees : ('a Tree.tree) list; perf : float list; n : float}
+    type 'a forest = {trees : 'a Tree.tree list; weights : float list}
 
-    let empty = {trees = []; perf = []; n = 0.}
+    let empty = {trees = []; weights = []}
 
-    let add forest example =
+   let add forest example =
         let trees = forest.trees in
         let n_trees = List.length trees in
         let add_new_tree = (n_trees = 0) || (Random.int n_trees = 0) in
-        let preds = List.map (Tree.classify example) trees in
-        let corr = List.map (( = ) (Data.label example)) preds in
-        let n = forest.n in
-        let update_perf (p, c) = match c with
-            | true -> p +. (1. /. (n +. 1.)) *. (1. -. p)
-            | false -> p *. (n /. (n +. 1.)) in
-        let perf_corr = List.combine forest.perf corr in
-        let updated_perf = List.map update_perf perf_corr in
         let updated_trees = List.map (fun tree -> Tree.add tree example) trees in
-        let updated_trees, updated_perf = if add_new_tree
-            then ((Tree.leaf example :: updated_trees), 1. :: updated_perf)
-            else updated_trees, updated_perf in
-        {trees=updated_trees; perf=updated_perf; n=n +. 1.}
-
+        let updated_trees, updated_weights = if add_new_tree
+            then
+                ((Tree.leaf example :: updated_trees),
+                  1. :: List.map (( *. ) 0.99) forest.weights)
+            else updated_trees, forest.weights in
+        {trees=updated_trees; weights=updated_weights}
 
     let forest examples =
         Data.fold_left add empty examples
@@ -33,7 +26,7 @@ module Make = functor (Data : Tree_online.DATA) -> struct
 
     let score forest example =
         let votes = List.map (Tree.classify example) forest.trees in
-        let votes_weights = List.combine votes forest.perf in
+        let votes_weights = List.combine votes forest.weights in
         Utils.sum_scores votes_weights
 
     let classify forest example =

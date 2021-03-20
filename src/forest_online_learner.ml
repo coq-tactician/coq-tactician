@@ -11,7 +11,8 @@ module OnlineForest : TacticianOnlineLearnerType = functor (TS : TacticianStruct
     type model = TS.tactic Forest.forest
 (*         {trees : (TS.tactic Tree.tree) list; perf : float list; n : float} *)
 
-    let empty () = {Forest.trees=[]; Forest.perf=[]; Forest.n=0.}
+(*     let empty () = {Forest.trees=[]; Forest.perf=[]; Forest.n=0.} *)
+    let empty () = Forest.empty
 
     let add forest b obj =
       let feats = proof_state_to_ints b in
