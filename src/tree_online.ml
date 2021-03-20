@@ -39,7 +39,7 @@ module Make = functor (Data : DATA) -> struct
     let extend examples =
         let labels = Data.labels examples in
         let imp = Impurity.gini_impur labels in
-        imp > 0.3
+        imp > 0.4
     (* TODO more sophisticated condition needed *)
 
     (* pass the example to a leaf; if a condition is satisfied, extend the tree *)
@@ -51,7 +51,7 @@ module Make = functor (Data : DATA) -> struct
                 | Right -> Node(rule, tree_l, loop (depth + 1) tree_r))
             | Leaf (label, examples) ->
                 let examples = Data.add examples example in
-                if extend examples && depth < 1000 then make_new_node examples
+                if extend examples && depth < 100 then make_new_node examples
                 else Leaf (label, examples)
         in
         loop 0 tree
