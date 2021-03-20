@@ -6,8 +6,6 @@ module Make = functor (Data : Tree_online.DATA) -> struct
     let empty = {trees = []; perf = []; n = 0.}
 
     let add forest example =
-        let () = List.iter (fun s -> Printf.printf "%f " s) forest.perf in
-        let () = Printf.printf "\n\n" in
         let trees = forest.trees in
         let n_trees = List.length trees in
         let add_new_tree = (n_trees = 0) || (Random.int n_trees = 0) in
