@@ -1,16 +1,7 @@
 
 let gini_impur x =
-    let len = Float.of_int (List.length x) in
-    let tbl = Hashtbl.create 10 in (* about 10 classes assumed *)
-    let update cl =
-        if Hashtbl.mem tbl cl then
-            Hashtbl.replace tbl cl ((Hashtbl.find tbl cl) + 1)
-        else
-            Hashtbl.add tbl cl 1
-    in
-    List.iter update x;
-    1. -. Hashtbl.fold (fun _ x s -> s +. (Float.of_int x /. len) ** 2.) tbl 0.;;
-
+    let freqs = Utils.freqs x in
+    1. -. List.fold_left (fun s (_, f) -> s +. f ** 2.) 0. freqs
 
 (* compute impurity given an impurity function, *sorted* pairs (value, label)
  * and a threshold *)

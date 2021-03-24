@@ -8,7 +8,7 @@ module OnlineForest : TacticianOnlineLearnerType = functor (TS : TacticianStruct
     module Tree = Tree_online.Make(Data)
     module Forest = Forest_online.Make(Data)
 
-    type model = TS.tactic Forest.forest
+    type model = (TS.tactic Tree.tree) list
 (*         {trees : (TS.tactic Tree.tree) list; perf : float list; n : float} *)
 
 (*     let empty () = {Forest.trees=[]; Forest.perf=[]; Forest.n=0.} *)

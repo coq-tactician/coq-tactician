@@ -1,4 +1,3 @@
-module IntMap = Map.Make(Int)
 
 let min_list = function
     | [] -> failwith "Empty list"
@@ -39,6 +38,19 @@ let sample l n =
 
 let choose_random l =
     List.nth l (Random.int (List.length l))
+
+let shuffle l =
+    let l = List.map (fun c -> (Random.bits (), c)) l in
+    let sl = List.sort compare l in
+    List.map snd sl
+
+let rec init_seg l n =
+    match l with
+    | [] -> failwith "init_seg"
+    | h :: t -> if n = 1 then [h] else h :: init_seg t (n-1)
+
+let choose_randoms l n =
+    init_seg (shuffle l) n
 
 let read_lines file : string list =
   let ic = open_in file in
@@ -90,17 +102,6 @@ let freqs l =
     let len = float_of_int (List.length l) in
     List.map (fun (e, c) -> (e, (float_of_int c) /. len)) occurs
 
-let sum_scores l =
-    let sorted = List.sort (fun (x, _) (y, _) -> compare x y) l in
-    let rec loop sco sorted =
-        match sorted, sco with
-        | [], _ -> sco
-        | (l, s) :: t, [] -> loop [(l, s)] t
-        | (l, s) :: t, (e, c) :: t2 ->
-            if l = e then loop ((e, c +. s) :: t2) t
-            else loop ((l, s) :: (e, c) :: t2) t in
-    loop [] sorted
-
 let uniq l =
     let rec aux u l =
         match l with
@@ -108,3 +109,10 @@ let uniq l =
         | h :: t -> if List.mem h u then aux u t else aux (h :: u) t
     in aux [] l
 
+let rec min_list = function
+    | [] -> invalid_arg "empty list"
+    | h :: t -> List.fold_left min h t
+
+let rec max_list = function
+    | [] -> invalid_arg "empty list"
+    | h :: t -> List.fold_left max h t
