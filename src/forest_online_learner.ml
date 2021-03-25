@@ -17,7 +17,7 @@ module OnlineForest : TacticianOnlineLearnerType = functor (TS : TacticianStruct
     let add forest b obj =
       let feats = proof_state_to_ints b in
       Forest.add
-      ~n_feas:1
+      ~n_feas:10
       ~max_depth:200
       ~min_impur:0.5
       ~n_trees:100
