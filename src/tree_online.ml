@@ -1,15 +1,17 @@
 module type DATA = sig
+    type feature
     type features
     type 'a example = features * ('a option)
     type 'a examples = 'a example list
     type direction = Left | Right
     type rule = features -> direction
     exception Rule_not_found
+    val rule_of_fea : feature -> rule
     val is_empty : 'a examples -> bool
     val add : 'a examples -> 'a example -> 'a examples
     val features : 'a example -> features
-    val split : rule -> 'a examples -> 'a examples * 'a examples
-    val gini_rule : ?n_feas:int -> 'a examples -> rule
+    val split : feature -> 'a examples -> 'a examples * 'a examples
+    val gini_rule : ?n_feas:int -> 'a examples -> feature
     val random_label : 'a examples -> 'a
     val random_example : 'a examples -> 'a example
     val fold_left : ('a -> 'b example -> 'a) -> 'a -> 'b examples -> 'a
@@ -20,7 +22,7 @@ end
 module Make = functor (Data : DATA) -> struct
 
     type 'a tree =
-        | Node of Data.rule * ('a tree) * ('a tree)
+        | Node of Data.feature * ('a tree) * ('a tree)
         | Leaf of 'a * ('a Data.examples)
 
     let leaf example =
@@ -31,11 +33,11 @@ module Make = functor (Data : DATA) -> struct
         try
             let n_labels = List.length (Utils.uniq (Data.labels examples)) in
             let n_examples = List.length examples in
-            let rule = if n_labels = n_examples
+            let fea = if n_labels = n_examples
                 then Data.gini_rule ~n_feas:1 examples
                 else Data.gini_rule ~n_feas:n_feas examples in
-            let examples_l, examples_r = Data.split rule examples in
-            Node(rule,
+            let examples_l, examples_r = Data.split fea examples in
+            Node(fea,
                 Leaf(Data.random_label examples_l, examples_l),
                 Leaf(Data.random_label examples_r, examples_r))
         with Data.Rule_not_found ->
@@ -49,10 +51,10 @@ module Make = functor (Data : DATA) -> struct
     (* pass the example to a leaf; if a condition is satisfied, extend the tree *)
     let add ?(n_feas=1) ?(min_impur=0.5) ?(max_depth=100) tree example =
         let rec loop depth = function
-            | Node (rule, tree_l, tree_r) ->
-                (match rule (Data.features example) with
-                | Left  -> Node(rule, loop (depth + 1) tree_l, tree_r)
-                | Right -> Node(rule, tree_l, loop (depth + 1) tree_r))
+            | Node (fea, tree_l, tree_r) ->
+                (match (Data.rule_of_fea fea) (Data.features example) with
+                | Left  -> Node(fea, loop (depth + 1) tree_l, tree_r)
+                | Right -> Node(fea, tree_l, loop (depth + 1) tree_r))
             | Leaf (label, examples) ->
                 let examples = Data.add examples example in
                 if init_cond ~min_impur ~max_depth examples depth
@@ -69,8 +71,8 @@ module Make = functor (Data : DATA) -> struct
         let rec loop tree =
             match tree with
             | Leaf (cls, _) -> cls
-            | Node (rule, tree_l, tree_r) ->
-                (match rule (Data.features example) with
+            | Node (fea, tree_l, tree_r) ->
+                (match (Data.rule_of_fea fea) (Data.features example) with
                 | Left  -> loop tree_l
                 | Right -> loop tree_r)
         in loop tree
@@ -81,6 +83,13 @@ module Make = functor (Data : DATA) -> struct
             | Node(_, tl, tr) -> max (loop (d+1) tl) (loop (d+1) tr)
             | Leaf(_) -> d
         in loop 0 tree
+
+    let n_nodes tree =
+        let rec loop t =
+            match t with
+            | Node(_, tl, tr) -> 1 + (loop tl) + (loop tr)
+            | Leaf(_) -> 1
+        in loop tree
 
     let max_node tree =
         let rec loop t =

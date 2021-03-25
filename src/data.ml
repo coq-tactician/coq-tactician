@@ -1,6 +1,7 @@
 open Printf
 module ISet = Set.Make(Int)
 
+type feature = int
 type features = ISet.t
 type 'a example = (features * ('a option))
 type 'a examples = 'a example list
@@ -76,7 +77,11 @@ let uniform_labels examples =
             if h1 = h2 then uniform (h2 :: t) else false in
     uniform labels
 
-let split rule examples =
+let rule_of_fea f =
+    fun e -> match ISet.mem f e with true -> Left | false -> Right
+
+let split fea examples =
+    let rule = rule_of_fea fea in
     let rec loop examples_l examples_r = function
         | [] -> (examples_l, examples_r)
         | e :: t ->
@@ -97,12 +102,15 @@ let fold_left f s examples =
 let random_example examples =
     Utils.choose_random examples
 
+
 exception Rule_not_found
 
-let split_impur impur rule examples =
+let split_impur impur fea examples =
+    let rule = rule_of_fea fea in
     let append (left, right) e =
-        if rule (features e) then
-            (label e :: left, right) else (left, label e :: right) in
+    match rule (features e) with
+    | Left -> (label e :: left, right)
+    | Right -> (left, label e :: right) in
     let left, right = List.fold_left append ([], []) examples in
     let el = float_of_int (List.length left) in
     let er = float_of_int (List.length right) in
@@ -114,18 +122,14 @@ let split_impur impur rule examples =
 (* m -- numbers of random features to choose from *)
 let gini_rule ?(n_feas=1) examples =
     let random_feas = random_features examples n_feas in
-    let best_fea = match random_feas with
+    match random_feas with
     | [] -> raise Rule_not_found
-    | [f] -> f
+    | [fea] -> fea
     | _ ->
         let impur_from_fea f =
-            split_impur Impurity.gini_impur (ISet.mem f) examples in
+            split_impur Impurity.gini_impur f examples in
         let impurs = List.map impur_from_fea random_feas in
         let impurs_feas = List.combine impurs random_feas in
         let best_impur, best_fea = Utils.min_list impurs_feas in
-        best_fea in
-    fun example ->
-        match ISet.mem best_fea example with
-        | true -> Left
-        | false -> Right
+        best_fea
 
