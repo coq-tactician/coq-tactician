@@ -243,7 +243,7 @@ let discharge_outcomes env (outcomes, tac) =
         { parents = List.map (fun (psa, pse) -> (psa, genarg_print_ps pse)) parents
         ; siblings = genarg_print_pd siblings
         ; before; after
-        ; preds = List.map (fun (t, ps) -> genarg_print_tac tac, ps) preds}) outcomes in
+        ; preds = List.map (fun (t, ps) -> genarg_print_tac t, ps) preds}) outcomes in
     (outcomes, genarg_print_tac tac)
 
 let section_ltac_helper bodies =
