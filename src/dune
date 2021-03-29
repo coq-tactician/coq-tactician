@@ -7,15 +7,13 @@
    "g_ltac1_record"
    ltacrecord
    diagonal_iterative_search
-   naiveknn_learner
-   naiveknn_subst_learner
-   knnLSHForest
-   lshf_learner
+   naiveknn_learner_dup
+   lshf_learner_dup
    knn
    tactic_substitute
    search_strategy
    search_strategy_internal
-   learner_helper
+   learner_helper_dup
    tactic_learner
    tactic_learner_internal
    tactic_normalize
