@@ -84,7 +84,7 @@ let declare_option name var d =
         | Some i -> var := i)
   }
 
-let depth_default = 9
+let depth_default = 15
 let depth = ref depth_default
 let () = declare_option ["Tactician"; "LSHF"; "Depth"] depth depth_default
 
