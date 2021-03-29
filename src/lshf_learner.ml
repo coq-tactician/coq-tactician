@@ -92,7 +92,7 @@ let trie_count_default = 11
 let trie_count = ref trie_count_default
 let () = declare_option ["Tactician"; "LSHF"; "Trie"; "Count"] trie_count trie_count_default
 
-let sort_window_default = 1000
+let sort_window_default = 600
 let sort_window = ref sort_window_default
 let () = declare_option ["Tactician"; "LSHF"; "Sort"; "Window"] sort_window sort_window_default
 
@@ -144,4 +144,4 @@ module LSHF : TacticianOnlineLearnerType = functor (TS : TacticianStructures) ->
 
 end
 
-(* let () = register_online_learner "LSHF" (module LSHF)  *)
+let () = register_online_learner "LSHF" (module LSHF)
