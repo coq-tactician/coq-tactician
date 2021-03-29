@@ -88,7 +88,7 @@ let depth_default = 9
 let depth = ref depth_default
 let () = declare_option ["Tactician"; "LSHF"; "Depth"] depth depth_default
 
-let trie_count_default = 8
+let trie_count_default = 15
 let trie_count = ref trie_count_default
 let () = declare_option ["Tactician"; "LSHF"; "Trie"; "Count"] trie_count trie_count_default
 
