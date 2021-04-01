@@ -12,6 +12,7 @@
    knnLSHForest
    lshf_learner
    knn
+   find_tactic_syntax
    tactic_substitute
    search_strategy
    search_strategy_internal
