@@ -149,8 +149,8 @@ module F (TS: TacticianStructures) = struct
         match term with
         | Node (Leaf nt :: _) when is_atom nt -> ["X"]
         | Node (Leaf node :: _)  ->
-          if is_correct_node node then ["X"] else ["Error"]
-        | _ -> ["Error"]
+          if is_correct_node node then ["X"] else (warn term; ["Error"])
+        | _ -> warn term; ["Error"]
       else
         match term with
         (* Interesting leafs *)
@@ -185,7 +185,7 @@ module F (TS: TacticianStructures) = struct
         | Node [Leaf "Cast"; term; _; typ] ->
           struct_feat_fold "Cast" [term; typ] depth
         (* Hope and pray *)
-        | _ -> ["Error"]
+        | _ -> warn term; ["Error"]
     and struct_feat_fold binder term_list depth =
       wrap_partness
         (List.fold_left (fun struct_feats curr_term -> struct_feats @ aux_struct curr_term (depth + 1))
