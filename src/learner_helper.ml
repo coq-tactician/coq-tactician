@@ -19,9 +19,6 @@ module L (TS: TacticianStructures) = struct
     | Leaf str -> str
     | Node ls -> "(" ^ (String.concat " " (List.map sexpr_to_string ls)) ^ ")"
 
-  let warn term = Feedback.msg_warning (Pp.str ("Tactician did not know how to handle something. Please report."
-                                                ^ sexpr_to_string term))
-
   let replicate x n =
     let rec aux n ls =
       if n <= 0 then ls else aux (n - 1) (x::ls) in

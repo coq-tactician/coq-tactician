@@ -11,7 +11,11 @@ module F (TS: TacticianStructures) = struct
   open LH
   open TS
 
-  let term_sexpr_to_simple_features maxlength term =
+  let warn lterm oterm =
+    Feedback.msg_warning (Pp.str ("Tactician did not know how to handle something. Please report. "
+                                  ^ sexpr_to_string lterm ^ " : " ^sexpr_to_string oterm))
+
+  let term_sexpr_to_simple_features maxlength oterm =
     let atomtypes = ["Evar"; "Rel"; "Construct"; "Ind"; "Const"; "Var"; "Int"; "Float"] in
     let is_atom nodetype = List.exists (String.equal nodetype) atomtypes in
     let atom_to_string atomtype content = match atomtype, content with
@@ -23,7 +27,7 @@ module F (TS: TacticianStructures) = struct
       | "Const", Leaf c :: _ -> c
       | "Int", Leaf c :: _ -> "i" ^ c
       | "Float", Leaf c :: _ -> "f" ^ c
-      | _, _ -> warn (Leaf "KAK"); "*"
+      | _, _ -> warn (Leaf "KAK") oterm; "*"
     in
 
     (* for a tuple `(interm, acc)`:
@@ -74,9 +78,9 @@ module F (TS: TacticianStructures) = struct
         aux (set_interm (aux (reset_interm f) typ) interm) term
 
       (* Hope and pray *)
-      | term -> warn term; f
+      | term -> warn term oterm; f
     in
-    let _, res = aux (start, []) term in
+    let _, res = aux (start, []) oterm in
     List.map (String.concat "-") res
 
   let disting_hyps_goal ls symbol =
@@ -124,7 +128,7 @@ module F (TS: TacticianStructures) = struct
 
 (*TODO: Every variable is renamed to a textual representation of its type*)
 
-  let term_sexpr_to_complex_features maxlength term =
+  let term_sexpr_to_complex_features maxlength oterm =
     let atomtypes = ["Evar"; "Rel"; "Construct"; "Ind"; "Const"; "Var"; "Int"; "Float"] in
     let is_atom nodetype = List.exists (String.equal nodetype) atomtypes in
     let atom_to_string atomtype content = match atomtype, content with
@@ -136,7 +140,7 @@ module F (TS: TacticianStructures) = struct
       | "Const", Leaf c :: _ -> c
       | "Int", Leaf c :: _ -> "i" ^ c
       | "Float", Leaf c :: _ -> "f" ^ c
-      | _, _ -> warn (Leaf "KAK"); "*"
+      | _, _ -> warn (Leaf "KAK") oterm; "*"
     in
     let wrap_partness str_list = ["("] @ str_list @ [")"] in
     let node_type = ["Sort"; "Meta"; "LetIn"; "Case"; "Fix"; "CoFix";"Prod"; "Lambda"; "Proj"; "App";"Cast"] in
@@ -149,8 +153,8 @@ module F (TS: TacticianStructures) = struct
         match term with
         | Node (Leaf nt :: _) when is_atom nt -> ["X"]
         | Node (Leaf node :: _)  ->
-          if is_correct_node node then ["X"] else (warn term; ["Error"])
-        | _ -> warn term; ["Error"]
+          if is_correct_node node then ["X"] else (warn term oterm; ["Error"])
+        | _ -> warn term oterm; ["Error"]
       else
         match term with
         (* Interesting leafs *)
@@ -185,7 +189,7 @@ module F (TS: TacticianStructures) = struct
         | Node [Leaf "Cast"; term; _; typ] ->
           struct_feat_fold "Cast" [term; typ] depth
         (* Hope and pray *)
-        | _ -> warn term; ["Error"]
+        | _ -> warn term oterm; ["Error"]
     and struct_feat_fold binder term_list depth =
       wrap_partness
         (List.fold_left (fun struct_feats curr_term -> struct_feats @ aux_struct curr_term (depth + 1))
@@ -267,7 +271,7 @@ module F (TS: TacticianStructures) = struct
         let roles = ["CastTerm"; "CastType"] in
         vert_next_level_fold f [term; typ] roles
       (* Hope and pray *)
-      | term -> warn term; f
+      | term -> warn term oterm; f
     in
     let remove_ident seman_feats =
       List.fold_left (fun acc feat -> if List.length feat < 2 then acc else
@@ -319,12 +323,12 @@ module F (TS: TacticianStructures) = struct
         (* We probably want to have the type of the cast, but isolated *)
         aux_seman (set_interm (aux_seman (reset_interm f) typ "CastType") interm) term "CastTerm"
       (* Hope and pray *)
-      | term -> warn term; f
+      | term -> warn term oterm; f
     in
-    let _, vert_feats = aux_vert ([], []) term  in
+    let _, vert_feats = aux_vert ([], []) oterm  in
     let vert_feats = List.map (fun feat -> Verti, "Verti" :: feat) (remove_ident vert_feats) in
-    let struct_feats = Struct, "Struct" :: (aux_struct term 0) in
-    let _, seman_feats = (aux_seman (start, []) term "Init_Constr") in
+    let struct_feats = Struct, "Struct" :: (aux_struct oterm 0) in
+    let _, seman_feats = (aux_seman (start, []) oterm "Init_Constr") in
     let seman_feats = List.map (fun feat -> Seman, "Seman" :: feat) seman_feats in
     List.map (fun (feat_kind, feats) -> feat_kind, String.concat "-" feats) ((struct_feats::vert_feats) @ seman_feats)
 
