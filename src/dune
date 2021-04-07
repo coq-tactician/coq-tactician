@@ -9,7 +9,6 @@
    diagonal_iterative_search
    naiveknn_learner
    naiveknn_subst_learner
-   knnLSHForest
    lshf_learner
    knn
    find_tactic_syntax
