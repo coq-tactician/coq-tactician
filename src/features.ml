@@ -261,9 +261,9 @@ module F (TS: TacticianStructures) = struct
       | Node [Leaf "Lambda"; _; _; typ; body] ->
         vert_next_level_fold f [typ; body] ["LambdaType"; "LambdaBody"]
       (* The golden path *)
-      | Node [Leaf "Proj"; p; term] ->
-        let roles = ["ProjConst"; "ProjTerm"] in
-        vert_next_level_fold f [p; term] roles
+      | Node [Leaf "Proj"; _; term] ->
+        let roles = ["ProjTerm"] in
+        vert_next_level_fold f [term] roles
       | Node (Leaf "App" :: head :: args) ->
         let roles = "AppFun" :: (rep_elem (List.length args) "AppArg") in
         vert_next_level_fold f (head::args) roles
