@@ -175,8 +175,8 @@ module F (TS: TacticianStructures) = struct
           struct_feat_fold "Prod" [typ;body] depth
         | Node [Leaf "Lambda"; _; _; typ; body] ->
           struct_feat_fold "Lambda" [typ;body] depth
-        | Node [Leaf "Proj"; p; term] ->
-          struct_feat_fold "Proj" [p; term] depth
+        | Node [Leaf "Proj"; _; term] ->
+          struct_feat_fold "Proj" [term] depth
         | Node (Leaf "App" :: head :: args) ->
           (* List.length args in let *)
           let arg_num = List.length args in
