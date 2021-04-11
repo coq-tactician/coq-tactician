@@ -9,15 +9,14 @@
    diagonal_iterative_search
    naiveknn_learner
    naiveknn_subst_learner
-   knnLSHForest
-   lshf_learner_dup
    forest_data_generator
    knn
+   find_tactic_syntax
    tactic_substitute
    search_strategy
    search_strategy_internal
    learner_helper
-   learner_helper_dup
+   features
    tactic_learner
    tactic_learner_internal
    tactic_normalize
