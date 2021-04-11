@@ -81,10 +81,12 @@ module F (TS: TacticianStructures) = struct
       | term -> warn term oterm; f
     in
     let _, res = aux (start, []) oterm in
-    List.map (String.concat "-") res
+    (* We use tail-recursive rev_map instead of map to avoid stack overflows on large proof states *)
+    List.rev_map (String.concat "-") res
 
   let disting_hyps_goal ls symbol =
-    List.map (fun (feat_kind, feat) -> feat_kind, symbol ^ feat) ls
+    (* We use tail-recursive rev_map instead of map to avoid stack overflows on large proof states *)
+    List.rev_map (fun (feat_kind, feat) -> feat_kind, symbol ^ feat) ls
 
   let get_top_interm interm =
     let flat_interm = List.flatten interm in
@@ -102,7 +104,9 @@ module F (TS: TacticianStructures) = struct
   let proof_state_to_simple_features max_length ps =
     let hyps = proof_state_hypotheses ps in
     let goal = proof_state_goal ps in
-    let mkfeats t = term_sexpr_to_simple_features max_length (term_sexpr t) in
+    let mkfeats t =
+      let x = term_sexpr t in
+      term_sexpr_to_simple_features max_length (x) in
     (* TODO: distinquish goal features from hyp features *)
     let hyp_feats = List.map (function
         | Named.Declaration.LocalAssum (_, typ) ->
@@ -110,7 +114,8 @@ module F (TS: TacticianStructures) = struct
         | Named.Declaration.LocalDef (_, term, typ) ->
           mkfeats typ @ mkfeats term)
         hyps in
-    mkfeats goal @ List.flatten hyp_feats
+    let x = mkfeats goal in
+    x @ List.flatten hyp_feats
 
   let context_simple_features max_length ctx =
     let mkfeats t = term_sexpr_to_simple_features max_length (term_sexpr t) in
@@ -121,7 +126,7 @@ module F (TS: TacticianStructures) = struct
     (* print_endline (String.concat ", " feats); *)
 
     (* Tail recursive version of map, because these lists can get very large. *)
-    let feats = List.rev (List.rev_map Hashtbl.hash feats) in
+    let feats = List.rev_map Hashtbl.hash feats in
     List.sort_uniq Int.compare feats
 
 
@@ -330,7 +335,8 @@ module F (TS: TacticianStructures) = struct
     let struct_feats = Struct, "Struct" :: (aux_struct oterm 0) in
     let _, seman_feats = (aux_seman (start, []) oterm "Init_Constr") in
     let seman_feats = List.map (fun feat -> Seman, "Seman" :: feat) seman_feats in
-    List.map (fun (feat_kind, feats) -> feat_kind, String.concat "-" feats) ((struct_feats::vert_feats) @ seman_feats)
+    (* We use tail-recursive rev_map instead of map to avoid stack overflows on large proof states *)
+    List.rev_map (fun (feat_kind, feats) -> feat_kind, String.concat "-" feats) ((struct_feats::vert_feats) @ seman_feats)
 
   let proof_state_to_complex_features max_length ps =
     let hyps = proof_state_hypotheses ps in
@@ -363,11 +369,12 @@ module F (TS: TacticianStructures) = struct
   let proof_state_to_complex_ints ps =
     let feats = proof_state_to_complex_features 3 ps in
     let feats_with_count_pair = count_dup feats in
-    let feats_with_count = List.map (fun ((feat_kind, feat), count) -> feat_kind, feat ^ "-" ^ (Stdlib.string_of_int count))
+    (* Tail recursive version of map, because these lists can get very large. *)
+    let feats_with_count = List.rev_map (fun ((feat_kind, feat), count) -> feat_kind, feat ^ "-" ^ (Stdlib.string_of_int count))
         feats_with_count_pair in
     (* print_endline (String.concat ", "  (List.map Stdlib.snd feats_with_count)); *)
     (* Tail recursive version of map, because these lists can get very large. *)
-    let feats = List.rev (List.rev_map (fun (feat_kind, feat) -> feat_kind, Hashtbl.hash feat) feats_with_count) in
+    let feats = List.rev_map (fun (feat_kind, feat) -> feat_kind, Hashtbl.hash feat) feats_with_count in
     List.sort_uniq (fun (_, feat1) (_, feat2) -> Int.compare feat1 feat2) feats
 
   let tfidf size freqs ls1 ls2 =
