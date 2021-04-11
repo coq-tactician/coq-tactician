@@ -13,7 +13,7 @@ TACTICIANDIR=$(opam var coq:lib)/user-contrib/Tactician
 
 TACTICIANWRAP=$(opam var coq-tactician:injection-wrappers)
 TACTICIANEXTRAFLAGS=$(opam var coq-tactician:injection-flags)
-TACTICIANFLAGS="-q -debug -I $TACTICIANDIR -R $TACTICIANDIR Tactician -rifrom Tactician Ltac1.Record"
+TACTICIANFLAGS="-q -I $TACTICIANDIR -R $TACTICIANDIR Tactician -rifrom Tactician Ltac1.Record"
 
 link_binary() {
     ln -s $OPAMBIN/${1} $COQBIN/${1}
