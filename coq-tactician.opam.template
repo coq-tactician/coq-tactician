@@ -13,3 +13,6 @@ tags: [
   "category:Miscellaneous/Coq Extensions"
   "logpath:Tactician"
 ]
+substs: [
+  "includes"
+]

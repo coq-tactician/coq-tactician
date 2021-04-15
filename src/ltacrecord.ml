@@ -866,7 +866,7 @@ let runTactics n (tacs : Tactic_learner_internal.TS.prediction IStream.t) =
 let run_predictions () =
   let open Proofview in
   let open Notations in
-  predict >>= runTactics 100 >>= push_prediction_stack
+  predict >>= fun p -> Feedback.msg_warning (Pp.str "running predictions"); runTactics 100 p >>= push_prediction_stack
 
 let push_state_tac () =
   let open Proofview in
