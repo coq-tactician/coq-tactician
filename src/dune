@@ -8,6 +8,7 @@
    ltacrecord
    diagonal_iterative_search
    naiveknn_learner
+   lshf_learner
    naiveknn_subst_learner
    forest_data_generator
    knn

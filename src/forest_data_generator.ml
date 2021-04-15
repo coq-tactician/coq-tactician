@@ -2,6 +2,8 @@ open Tactic_learner
 open Serlib
 open Sexplib
 open Ltac_plugin
+open Learner_helper
+open Features
 
 let data_file =
   let file = ref None in
@@ -16,11 +18,13 @@ let data_file =
 
 module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : TacticianStructures) -> struct
   module LH = Learner_helper.L(TS)
+  module FH = Features.F(TS)
   open TS
   open LH
-  module LSHF = Lshf_learner_dup.LSHF(TS)
+  open FH
+  module LSHF = Lshf_learner.SimpleLSHF(TS)
   (* features of a proof state, positive tactic, possible tactics, disappear features, appear features *)
-  type ownmodel = (proof_state * tactic * (tactic * feature list * feature list) list * feature list * feature list) list
+  type ownmodel = (proof_state * tactic * (tactic * proof_state list option) list * proof_state list) list
   type model = {database : ownmodel; lshf : LSHF.model}
 
   module IntSet = Set.Make(struct type t = feature let compare = compare end)
@@ -29,34 +33,34 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
 
   let empty () = {database = []; lshf = LSHF.empty ()}
 
-  let term_equal term1 term2 = 
-    Constr.equal (term_repr term1) (term_repr term2)  
+  let term_equal term1 term2 =
+    Constr.equal (term_repr term1) (term_repr term2)
 
-  let hyp_equal hyp1 hyp2 = Context.Named.Declaration.equal 
-    (fun hyp_1 hyp_2 -> term_equal hyp_1 hyp_2) hyp1 hyp2 
-  
-  let mkfeats t = remove_feat_kind (term_sexpr_to_features 3 (term_sexpr t)) 
+  let hyp_equal hyp1 hyp2 = Context.Named.Declaration.equal
+    (fun hyp_1 hyp_2 -> term_equal hyp_1 hyp_2) hyp1 hyp2
+
+  let mkfeats t = term_sexpr_to_simple_features 3 (term_sexpr t)
 
   let list_to_set l =
     List.fold_left (fun int_set elm -> IntSet.add elm int_set) IntSet.empty l
-    
+
   let rec hyps_feats_disappear hyps hyps' feat_set =
-    let get_hyp_feats hyp = 
+    let get_hyp_feats hyp =
     match hyp with
     | Context.Named.Declaration.LocalAssum (_, typ) ->
       mkfeats typ
     | Context.Named.Declaration.LocalDef (_, term, typ) ->
-      mkfeats typ @ mkfeats term 
+      mkfeats typ @ mkfeats term
     in
     match hyps with
     | [] -> feat_set
-    | hyp :: target_tl -> 
-      if List.exists (fun hyp' -> hyp_equal hyp hyp') hyps' 
-      then hyps_feats_disappear target_tl hyps' feat_set 
-      else 
-        let hyp_feat_set =  list_to_set (List.rev (List.rev_map Hashtbl.hash (get_hyp_feats hyp))) in 
-        let new_feat_set = IntSet.union feat_set hyp_feat_set in 
-        hyps_feats_disappear target_tl hyps' new_feat_set 
+    | hyp :: target_tl ->
+      if List.exists (fun hyp' -> hyp_equal hyp hyp') hyps'
+      then hyps_feats_disappear target_tl hyps' feat_set
+      else
+        let hyp_feat_set =  list_to_set (List.rev (List.rev_map Hashtbl.hash (get_hyp_feats hyp))) in
+        let new_feat_set = IntSet.union feat_set hyp_feat_set in
+        hyps_feats_disappear target_tl hyps' new_feat_set
 
   (* get features in state not in state' *)
   let state_diff state state'=
@@ -64,26 +68,26 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
     let goal = proof_state_goal state in
     let hyps' = proof_state_hypotheses state' in
     let goal' = proof_state_goal state' in
-    let goal_diff = 
+    let goal_diff =
       if term_equal goal goal' then []
-      else List.rev (List.rev_map Hashtbl.hash (mkfeats goal)) in  
+      else List.rev (List.rev_map Hashtbl.hash (mkfeats goal)) in
     hyps_feats_disappear hyps hyps' (list_to_set goal_diff)
 
   let feat_disappear before_state after_states =
-    if after_states == [] then 
-      remove_feat_kind (proof_state_to_ints before_state) 
+    if after_states == [] then
+      proof_state_to_simple_ints before_state
     else
       let disappear_feat_set =
       List.fold_left (
-        fun feat_set after_state ->          
+        fun feat_set after_state ->
           IntSet.union feat_set (state_diff before_state after_state)
         ) IntSet.empty after_states in
       IntSet.elements disappear_feat_set
-        
-  let feat_appear before_state after_states = 
+
+  let feat_appear before_state after_states =
     let appear_feat_set =
       List.fold_left (fun feat_set after_state ->
-        (IntSet.union feat_set (state_diff after_state before_state))       
+        (IntSet.union feat_set (state_diff after_state before_state))
       ) IntSet.empty after_states in
     IntSet.elements appear_feat_set
 
@@ -92,13 +96,7 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
     match loc with
     | File | Lemma ->
       let newdb = List.map (fun outcome ->
-          let neg = List.map (fun (tactic, ps) ->
-              let disappear_feats = Option.default [-1] @@ Option.map (feat_disappear outcome.before) ps in
-              let appear_feats = Option.default [-1] @@ Option.map (feat_appear outcome.before) ps in
-              tactic, disappear_feats, appear_feats) outcome.preds in
-          let disappear_feats = feat_disappear outcome.before outcome.after in
-          let appear_feats = feat_appear outcome.before outcome.after in
-          outcome.before, tac, neg, disappear_feats, appear_feats) outcomes @ db.database in
+          outcome.before, tac, outcome.preds, outcome.after) outcomes @ db.database in
       last_model := newdb; {database = newdb; lshf = lshfnew}
     | Dependency -> {database = db.database; lshf = lshfnew}
   let predict db situations = LSHF.predict db.lshf situations
@@ -115,19 +113,20 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
     let line = Sexplib.Pre_sexp.List [proof_state_to_sexpr ps; Std.sexp_of_int (tactic_hash tac)] in
     output_string (data_file ()) (Sexp.to_string line ^ "\n")
 
-  let proof_state_to_ints ps =
-    let feats = proof_state_to_features 2 ps in
-    let feats = List.rev (List.rev_map Hashtbl.hash feats) in
-    List.sort_uniq Int.compare feats
-
   let syntactic_feats tac =
     let str = Pp.string_of_ppcmds @@ Sexpr.format_oneline @@
       Pptactic.pr_glob_tactic (Global.env ()) (tactic_repr tac) in
     let split = String.split_on_char ' ' str in
     List.map Hashtbl.hash split
 
-  let output_feats (ps, tac, neg, disappear_feats, appear_feats) =
-    let ps = proof_state_to_ints ps in
+  let output_feats (before, tac, neg, after) =
+    let ps = proof_state_to_simple_ints before in
+    let neg = List.map (fun (tactic, after) ->
+        let disappear_feats = Option.default [-1] @@ Option.map (feat_disappear before) after in
+        let appear_feats = Option.default [-1] @@ Option.map (feat_appear before) after in
+        (tactic, disappear_feats, appear_feats)) neg in
+    let disappear_feats = feat_disappear before after in
+    let appear_feats = feat_appear before after in
     let neg = List.map (fun (tac, df, af) ->
         Sexplib.Pre_sexp.List [Std.sexp_of_int @@ tactic_hash tac;
                                Std.sexp_of_list Std.sexp_of_int df;
