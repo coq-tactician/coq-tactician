@@ -34,7 +34,14 @@ Tactician Record Do Keep.
 Tactician Record Timeout Keep.
 Tactician Record Repeat Keep.
 Tactician Record Progress Keep.
-Tactician Record Abstract Keep.
+
+(* Keeping 'abstract' is not desirable for several reasons:
+ a) It does not add proving power (it is only useful for advanced things, way beyond Tactician).
+ b) The 'abstract' tactic is very error-prone, making Tactician crash. See https://github.com/coq/coq/issues/9146
+    Note that setting this to 'Decompose' will not keep Tactician from using 'abstract' ever, because it could be
+    part of a more complex expression (or inside of an ltac definition). This is better than nothing though.
+ *)
+Tactician Record Abstract Decompose.
 Tactician Record LetIn Keep.
 Tactician Record Match Keep.
 Tactician Record MatchGoal Keep.
