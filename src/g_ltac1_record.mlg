@@ -79,6 +79,7 @@ let vernac_solve ~pstate n info tcom b id =
             try
               Pfedit.solve n info (hide_interp_t global tcom None id name) ?with_end_tac p
             with e -> (* We intentionally catch critical exceptions here *)
+              ignore (Unix.setitimer ITIMER_REAL {it_interval = 0.; it_value = 0.}); (* Reset possible dangling timer *)
               Feedback.msg_warning (Pp.str ("Critical error encountered\n" ^ Printexc.to_string e));
               (* In case of problems, simply solve without Tactician *)
               Pfedit.solve n info (Tacinterp.hide_interp global tcom None) ?with_end_tac p
