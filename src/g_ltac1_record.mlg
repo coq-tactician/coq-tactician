@@ -76,7 +76,12 @@ let vernac_solve ~pstate n info tcom b id =
           let info = Option.append info !print_info_trace in
           let name = Proof_global.get_proof_name pstate in
           let (p,status) =
+            try
               Pfedit.solve n info (hide_interp_t global tcom None id name) ?with_end_tac p
+            with e -> (* We intentionally catch critical exceptions here *)
+              Feedback.msg_warning (Pp.str ("Critical error encountered\n" ^ Printexc.to_string e));
+              (* In case of problems, simply solve without Tactician *)
+              Pfedit.solve n info (Tacinterp.hide_interp global tcom None) ?with_end_tac p
           in
           (* in case a strict subtree was completed,
              go back to the top of the prooftree *)
