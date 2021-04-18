@@ -168,4 +168,4 @@ module ComplexLSHF : TacticianOnlineLearnerType =
   end
 
 (* let () = register_online_learner "SimpleLSHF" (module SimpleLSHF) *)
-let () = register_online_learner "ComplexLSHF" (module ComplexLSHF)
+(* let () = register_online_learner "ComplexLSHF" (module ComplexLSHF) *)
