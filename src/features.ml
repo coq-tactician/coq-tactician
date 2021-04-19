@@ -124,7 +124,7 @@ module F (TS: TacticianStructures) = struct
         hyps in
     let x = mkfeats goal in
     (* Must be tail recursive flatten because of large lists *)
-    x @ rev_flatten hyp_feats
+    List.rev_append x @@ rev_flatten hyp_feats
 
   let context_simple_features max_length ctx =
     let mkfeats t = term_sexpr_to_simple_features max_length (term_sexpr t) in
@@ -361,7 +361,7 @@ module F (TS: TacticianStructures) = struct
     let goal_feats = mkfeats goal in
     (* seperate the goal from the local context *)
     (* Flatten must be tail recursive due to large lists *)
-    (disting_hyps_goal goal_feats "GOAL-") @ (disting_hyps_goal (rev_flatten hyp_feats) "HYPS-")
+    List.rev_append (disting_hyps_goal goal_feats "GOAL-") (disting_hyps_goal (rev_flatten hyp_feats) "HYPS-")
 
   let context_features_complex max_length ctx =
     let mkfeats t = term_sexpr_to_complex_features max_length (term_sexpr t) in
