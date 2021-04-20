@@ -81,5 +81,5 @@ module ComplexNaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStr
 
 end
 
-let () = register_online_learner "simple-naive-knn" (module SimpleNaiveKnn)
+(* let () = register_online_learner "simple-naive-knn" (module SimpleNaiveKnn) *)
 (* let () = register_online_learner "complex-naive-knn" (module ComplexNaiveKnn) *)
