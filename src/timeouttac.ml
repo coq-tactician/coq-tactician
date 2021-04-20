@@ -111,8 +111,8 @@ let windows_timeout n f x =
     if not !exited then begin killed := true; raise Sys.Break end
     else None
   | e ->
+    let e = Exninfo.capture e in
     let () = killed := true in
-    let e = Backtrace.add_backtrace e in
     Exninfo.iraise e
 
 let unix_timeout n f x e =
