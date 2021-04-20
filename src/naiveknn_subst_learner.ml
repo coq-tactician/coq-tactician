@@ -1,5 +1,6 @@
 open Tactic_learner
 open Learner_helper
+open Features
 open Context
 open Names
 
@@ -21,14 +22,16 @@ let proof_state_feats_to_feats {hypotheses = hyps; goal = goal} =
 
 module NaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStructures) -> struct
   module LH = L(TS)
+  module FH = F(TS)
   open TS
   open LH
+  open FH
 
   module IntMap = Stdlib.Map.Make(struct type t = int
       let compare = Int.compare end)
 
   let proof_state_to_ints ps =
-    let feats = proof_state_to_features 2 ps in
+    let feats = proof_state_to_complex_features 2 ps in
     (* print_endline (String.concat ", " feats); *)
 
     (* Tail recursive version of map, because these lists can get very large. *)
@@ -36,7 +39,7 @@ module NaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStructures
     List.sort_uniq Int.compare feats
 
   let context_to_ints ctx =
-    let ctx = context_features 2 ctx in
+    let ctx = context_features_complex 2 ctx in
     let to_ints feats = List.sort_uniq Int.compare (List.rev_map Hashtbl.hash feats) in
     context_map to_ints to_ints ctx
 
