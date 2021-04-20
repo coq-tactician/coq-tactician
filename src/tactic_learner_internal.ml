@@ -176,7 +176,7 @@ let learner_predict p  = let _, x, _ = !current_learner in x p
 let learner_evaluate p = let _, _, x = !current_learner in x p
 
 let process_queue () =
-  List.iter (fun (l, o, t) -> learner_learn l o t) !queue; queue := []
+  List.iter (fun (l, o, t) -> learner_learn l o t) (List.rev !queue); queue := []
 
 let learner_predict s =
   process_queue ();

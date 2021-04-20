@@ -1,4 +1,4 @@
-name: Bench
+name: Stdlib
 
 on: [push, pull_request]
 
@@ -15,7 +15,7 @@ jobs:
           repository: 'coq-tactician/coq-tactician-stdlib'
           ref: 'coq8.12'
           path: 'coq-tactician-stdlib'
-      - uses: LasseBlaauwbroek/docker-coq-action@v1.2.5
+      - uses: coq-community/docker-coq-action@v1.2.3
         with:
           opam_file: 'coq-tactician.opam'
           coq_version: '8.12'
@@ -30,7 +30,7 @@ jobs:
           script: |
             startGroup "Build"
               sudo chmod -R 777 .
-              opam exec -- make -C coq-tactician-stdlib -j2 BENCHMARK=2
+              opam exec -- make -C coq-tactician-stdlib -j2
             endGroup
           uninstall: |
             startGroup "Uninstallation test"
