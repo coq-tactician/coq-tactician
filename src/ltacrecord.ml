@@ -367,8 +367,6 @@ let get_field_goal2 fi gl d =
   | None -> d ()
   | Some x -> x
 
-let warn () = Feedback.msg_warning (Pp.str ("Tactician has uncovered a bug. Please report. "))
-
 let set_record b =
   modify_field record_field (fun _ -> b, ()) (fun i -> true)
 
@@ -396,13 +394,23 @@ let push_state_id_stack () =
   modify_field_goals state_id_stack_field (fun i st -> i::st, ()) (fun i -> []) >>=
   fun _ -> tclUNIT ()
 
-let pop_state_id_stack () =
+let warn tac =
+  let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic (Global.env ()) t) in
+  (* The unshelve tactic is the only tactic known to generate goals that do not inherit state from their
+     parents (because those goals were on the shelf). We filter tactics expressions that contain this
+     tactic out of the warning. *)
+  let unshelve_ml = Tacexpr.{ mltac_name = { mltac_plugin = "ltac_plugin"; mltac_tactic = "unshelve" }
+                            ; mltac_index = 0 } in
+  if not (Find_tactic_syntax.contains_ml_tactic unshelve_ml tac) then
+    Feedback.msg_warning Pp.(str "Tactician has uncovered a bug in a tactic. Please report. " ++ tac_pp tac)
+
+let pop_state_id_stack tac2 =
   let open Proofview in
   let open Notations in
   (* Sometimes, a new goal does not inherit its id from its parent, and thus the id stack
      is too short. This happens for example when using `unshelve`. In that case, we assign 0 *)
   modify_field_goals state_id_stack_field (fun i st ->
-      match st with | [] -> warn (); [], 0 | x::xs -> xs, x)
+      match st with | [] -> warn tac2; [], 0 | x::xs -> xs, x)
     (fun _ -> []) >>=
   fun _ -> tclUNIT ()
 
@@ -840,7 +848,7 @@ let record_tac (tac2 : glob_tactic_expr) : unit Proofview.tactic =
     Goal.goals >>= record_map (fun x -> x) >>= (fun after_gls ->
         let after_gls = List.map (fun gl -> get_state_id_goal_top gl, gl) after_gls in
         push_localdb (collect_states before_gls after_gls, tac2)
-      ) >>= (fun () -> pop_state_id_stack () <*> (* TODO: This is a strange way of doing things, see todo above. *)
+      ) >>= (fun () -> pop_state_id_stack tac2 <*> (* TODO: This is a strange way of doing things, see todo above. *)
                        push_tactic_trace tac2)
 
         (* Make predictions *)

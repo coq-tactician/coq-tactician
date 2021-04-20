@@ -1,30 +1,7 @@
 open Map_all_the_things
 open Genarg
 open Names
-
-module ReaderMonad (R : sig type r end) = struct
-  open R
-  type 'a t = r -> 'a
-  let return x = fun _ -> x
-  let (>>=) x f = fun r -> f (x r) r
-  let (>>) x y = fun r -> let () = x r in y r
-  let map f x = fun r -> f (x r)
-
-  let ask x = x
-  let local f x = fun r -> x (f r)
-end
-
-module WriterMonad (R : sig type w val id : w val comb : w -> w -> w end) = struct
-  open R
-  type 'a t = w * 'a
-  let return x = (id, x)
-  let (>>=) (w, x) f = let (w', y) = f x in (comb w w', y)
-  let (>>) (w, ()) (w', x) = (comb w w', x)
-  let map f (w, x) = w, f x
-
-  let tell l = ([l], ())
-  let censor f (w, x) = (f w, x)
-end
+open Tactician_util
 
 module FreeVarsDef = struct
   include MapDefTemplate (WriterMonad
