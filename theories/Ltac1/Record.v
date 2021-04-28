@@ -23,13 +23,19 @@ Tactician Record Timeout Keep.
 Tactician Record Repeat Keep.
 Tactician Record Progress Keep.
 
-(* Keeping 'abstract' is not desirable for several reasons:
+(*
+ The abstract tactic is a difficult beast to deal with for several reasons:
  a) It does not add proving power (it is only useful for advanced things, way beyond Tactician).
- b) The 'abstract' tactic is very error-prone, making Tactician crash. See https://github.com/coq/coq/issues/9146
+    However, we cannot decompose it, because the inner tactic of abstract is executed in a different context
+    and therefore not recorded by Tactician. Hence, if we want to record something, this settings needs to
+    remain "Keep".
+ b) Abstract emits side-effects that need to either be inlined or otherwise dealt with in Tacticians recorded data.
+    It is unclear what the best approach for this would be.
+ c) The 'abstract' tactic is very error-prone, making Tactician crash. See https://github.com/coq/coq/issues/9146
     Note that setting this to 'Decompose' will not keep Tactician from using 'abstract' ever, because it could be
     part of a more complex expression (or inside of an ltac definition). This is better than nothing though.
  *)
-Tactician Record Abstract Decompose.
+Tactician Record Abstract Keep.
 Tactician Record LetIn Keep.
 Tactician Record Match Keep.
 Tactician Record MatchGoal Keep.
