@@ -798,7 +798,7 @@ let pre_vernac_solve pstate id =
   (* print_endline ("db_test: " ^ string_of_int (Predictor.count !db_test));
    * print_endline ("id: " ^ (Int64.to_string id)); *)
   match Hashtbl.find_opt int64_to_knn id with
-  | Some (db, exn) -> (List.iter add_to_db db; Hashtbl.remove int64_to_knn id;
+  | Some (db, exn) -> (List.iter add_to_db @@ List.rev db; Hashtbl.remove int64_to_knn id;
       match exn with
       | None -> true
       | Some exn -> raise exn)
