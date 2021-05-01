@@ -11,6 +11,7 @@
 
 (package
   (name coq-tactician)
+  (version 8.13.dev)
   (synopsis "Tactician: A Seamless, Interactive Tactic Learner and Prover for Coq")
   (description "Tactician is a tactic learner and prover for the Coq Proof Assistant.
 The system will help users make tactical proof decisions while they retain
