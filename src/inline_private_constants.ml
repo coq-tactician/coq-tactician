@@ -60,7 +60,7 @@ let inline env (outcomes, tactic) =
       if Environ.mem_constant const env then c else
         (* Total hack of course, because this is not typable. However, since Tactician generally does not
            store sigma contexts, evars are not typable anyway. When that changes, this should be fixed. *)
-        of_kind @@ Evar (Evar.unsafe_of_int 0, [||])
+        of_kind @@ Evar (Evar.unsafe_of_int 0, [])
     | _ -> Constr.map inline_constr c in
   let inline_proof_state (ctx, goal) =
     let ctx = List.map (Context.Named.Declaration.map_constr inline_constr) ctx in
