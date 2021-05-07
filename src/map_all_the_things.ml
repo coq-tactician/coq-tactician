@@ -311,7 +311,6 @@ module MakeMapper (M: MapDef) = struct
     | CastVM x ->
       let+ x = f x in
       CastConv x
-    | CastCoerce -> return CastCoerce
     | CastNative x ->
       let+ x = f x in
       CastNative x
