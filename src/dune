@@ -32,11 +32,11 @@
    tactician_util
  ))
  (libraries
-   coq.plugins.ltac
-   coq.plugins.ssrmatching
-   coq.plugins.ssreflect
-   coq.plugins.firstorder
-   coq.plugins.funind
+   coq-core.plugins.ltac
+   coq-core.plugins.ssrmatching
+   coq-core.plugins.ssreflect
+   coq-core.plugins.firstorder
+   coq-core.plugins.funind
  )
 )
 (library
@@ -48,9 +48,9 @@
    map_ssr_witnesses
  ))
  (libraries
-   coq.plugins.ltac
-   coq.plugins.ssrmatching
-   coq.plugins.ssreflect
+   coq-core.plugins.ltac
+   coq-core.plugins.ssrmatching
+   coq-core.plugins.ssreflect
    coq-tactician.record-plugin
  )
 )

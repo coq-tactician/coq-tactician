@@ -7,10 +7,10 @@ open Extraargs
 open Tacarg
 open Taccoerce
 open G_auto
-open Ground_plugin
+open Firstorder_plugin
 open G_ground
 open G_rewrite
-open Recdef_plugin
+open Funind_plugin
 open G_indfun
 
 module OList = List
