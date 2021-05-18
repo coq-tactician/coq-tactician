@@ -14,6 +14,11 @@
  (package coq-tactician)
 )
 (install
+ (files injection-flags)
+ (section etc)
+ (package coq-tactician)
+)
+(install
  (files
    coq-hott.patch
    coq-hott.8.11.patch

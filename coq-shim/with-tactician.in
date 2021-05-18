@@ -11,7 +11,7 @@ OPAMBIN=%{bin}%
 TACTICIANLIB=%{coq-tactician:lib}%
 TACTICIANDIR=%{coq:lib}%/user-contrib/Tactician
 
-TACTICIANEXTRAFLAGS=$(opam var coq-tactician:injection-flags)
+TACTICIANEXTRAFLAGS=$(cat %{coq-tactician:etc}%/injection-flags)
 TACTICIANFLAGS="-q -I $TACTICIANDIR -R $TACTICIANDIR Tactician -rifrom Tactician Ltac1.Record"
 
 link_binary() {
