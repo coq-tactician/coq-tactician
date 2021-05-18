@@ -7,9 +7,9 @@ then
     exit 1
 fi
 
-OPAMBIN=$(opam var bin)
-TACTICIANLIB=$(opam var coq-tactician:lib)
-TACTICIANDIR=$(opam var coq:lib)/user-contrib/Tactician
+OPAMBIN=%{bin}%
+TACTICIANLIB=%{coq-tactician:lib}%
+TACTICIANDIR=%{coq:lib}%/user-contrib/Tactician
 
 TACTICIANEXTRAFLAGS=$(opam var coq-tactician:injection-flags)
 TACTICIANFLAGS="-q -I $TACTICIANDIR -R $TACTICIANDIR Tactician -rifrom Tactician Ltac1.Record"

@@ -1,3 +1,8 @@
+(rule
+ (targets with-tactician tactician-patch)
+ (deps with-tactician.in tactician-patch.in)
+ (action (run opam config subst %{targets})))
+
 (install
  (files with-tactician tactician-patch)
  (section libexec)
