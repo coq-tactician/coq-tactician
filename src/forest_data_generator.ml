@@ -125,7 +125,7 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
 
   let output_feats curr_name (before, new_name, tac, neg, after) =
     if not (Libnames.eq_full_path curr_name new_name) then
-      output_string (data_file ()) "#lemma";
+      output_string (data_file ()) "#lemma\n";
     let ps = proof_state_to_simple_ints before in
     let neg = List.map (fun (tactic, after) ->
         let disappear_feats = Option.default [-1] @@ Option.map (feat_disappear before) after in
