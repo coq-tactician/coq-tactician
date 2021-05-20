@@ -6,8 +6,11 @@
  (modules (
    "g_ltac1_record"
    ltacrecord
+   inline_private_constants
    diagonal_iterative_search
    naiveknn_learner
+   naiveknn_subst_learner
+   trivial_learners
    lshf_learner
    naiveknn_subst_learner
    forest_data_generator

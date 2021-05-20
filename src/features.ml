@@ -2,6 +2,14 @@ open Tactic_learner
 open Context
 open Learner_helper
 
+(* Tail recursive version of List.flatten *)
+let rev_flatten ll =
+  let rec go acc = function
+    | [] -> acc
+    | l :: r -> go (List.rev_append l acc) r
+  in
+  go [] ll
+
 type feat_kind = Struct | Seman | Verti
 type proof_state_part = Goal | Hyps
 (* int means the depth of the beginning of the semantic features *)
@@ -115,7 +123,8 @@ module F (TS: TacticianStructures) = struct
           mkfeats typ @ mkfeats term)
         hyps in
     let x = mkfeats goal in
-    x @ List.flatten hyp_feats
+    (* Must be tail recursive flatten because of large lists *)
+    List.rev_append x @@ rev_flatten hyp_feats
 
   let context_simple_features max_length ctx =
     let mkfeats t = term_sexpr_to_simple_features max_length (term_sexpr t) in
@@ -351,7 +360,8 @@ module F (TS: TacticianStructures) = struct
     let hyp_feats = List.map (fun (_, _, feats) -> feats) hyp_id_typ_feats in
     let goal_feats = mkfeats goal in
     (* seperate the goal from the local context *)
-    (disting_hyps_goal goal_feats "GOAL-") @ (disting_hyps_goal (List.flatten hyp_feats) "HYPS-")
+    (* Flatten must be tail recursive due to large lists *)
+    List.rev_append (disting_hyps_goal goal_feats "GOAL-") (disting_hyps_goal (rev_flatten hyp_feats) "HYPS-")
 
   let context_features_complex max_length ctx =
     let mkfeats t = term_sexpr_to_complex_features max_length (term_sexpr t) in

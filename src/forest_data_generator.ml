@@ -91,14 +91,18 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
       ) IntSet.empty after_states in
     IntSet.elements appear_feat_set
 
-  let learn db loc outcomes tac =
-    let lshfnew = LSHF.learn db.lshf loc outcomes tac in
-    match loc with
-    | File | Lemma ->
+  let cache_type name =
+    let dirp = Global.current_dirpath () in
+    if Libnames.is_dirpath_prefix_of dirp (Libnames.dirpath name) then `File else `Dependency
+
+  let learn db name outcomes tac =
+    let lshfnew = LSHF.learn db.lshf name outcomes tac in
+    match cache_type name with
+    | `File ->
       let newdb = List.map (fun outcome ->
           outcome.before, tac, outcome.preds, outcome.after) outcomes @ db.database in
       last_model := newdb; {database = newdb; lshf = lshfnew}
-    | Dependency -> {database = db.database; lshf = lshfnew}
+    | `Dependency -> {database = db.database; lshf = lshfnew}
   let predict db situations = LSHF.predict db.lshf situations
   let evaluate db _ _ = 0., db
 
