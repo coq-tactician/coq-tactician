@@ -24,7 +24,7 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
   open FH
   module LSHF = Lshf_learner.SimpleLSHF(TS)
   (* features of a proof state, positive tactic, possible tactics, disappear features, appear features *)
-  type ownmodel = (proof_state * tactic * (tactic * proof_state list option) list * proof_state list) list
+  type ownmodel = (proof_state * Libnames.full_path * tactic * (tactic * proof_state list option) list * proof_state list) list
   type model = {database : ownmodel; lshf : LSHF.model}
 
   module IntSet = Set.Make(struct type t = feature let compare = compare end)
@@ -100,7 +100,7 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
     match cache_type name with
     | `File ->
       let newdb = List.map (fun outcome ->
-          outcome.before, tac, outcome.preds, outcome.after) outcomes @ db.database in
+          outcome.before, name, tac, outcome.preds, outcome.after) outcomes @ db.database in
       last_model := newdb; {database = newdb; lshf = lshfnew}
     | `Dependency -> {database = db.database; lshf = lshfnew}
   let predict db situations = LSHF.predict db.lshf situations
@@ -123,7 +123,9 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
     let split = String.split_on_char ' ' str in
     List.map Hashtbl.hash split
 
-  let output_feats (before, tac, neg, after) =
+  let output_feats curr_name (before, new_name, tac, neg, after) =
+    if not (Libnames.eq_full_path curr_name new_name) then
+      output_string (data_file ()) "#lemma";
     let ps = proof_state_to_simple_ints before in
     let neg = List.map (fun (tactic, after) ->
         let disappear_feats = Option.default [-1] @@ Option.map (feat_disappear before) after in
@@ -144,10 +146,13 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
                                      ; Std.sexp_of_list Std.sexp_of_int disappear_feats
                                      ; Std.sexp_of_list Std.sexp_of_int appear_feats
                                      ; Std.sexp_of_list Std.sexp_of_int @@ syntactic_feats tac] in
-    output_string (data_file ()) (Sexp.to_string line ^ "\n")
+    output_string (data_file ()) (Sexp.to_string line ^ "\n");
+    new_name
 
   let endline_hook () = print_endline "writing";
-    List.iter output_feats (List.rev !last_model)
+    ignore @@ List.fold_left output_feats
+      (Libnames.make_path Names.DirPath.empty @@ Names.Id.of_string "xxxxxxxxxxxxxxxx")
+      (List.rev !last_model)
 
   let () = Declaremods.append_end_library_hook endline_hook
 end
