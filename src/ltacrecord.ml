@@ -954,7 +954,7 @@ let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO:
         Feedback.msg_warning (Pp.str (
             "Tactician detected a printing/parsing problem " ^
             "for the following tactic. Please report. " ^ s)) in
-    List.iter (fun trp -> tryadd trp) db; tclUNIT () in
+    List.iter (fun trp -> tryadd trp) @@ List.rev db; tclUNIT () in
   let rtac = decompose_annotate tac record_tac_complete in
   let ptac = Tacinterp.eval_tactic rtac in
   let ptac = ptac <*> tclENV >>= fun env ->
