@@ -162,7 +162,7 @@ module NaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStructures
       in
       List.map (fun (_hash, (score, tac)) -> (score, tac)) (IntMap.bindings ranking_map)
 
-    let predict db f =
+    let predict db _ f =
       if f = [] then IStream.empty else
         let ps = (List.hd f).state in
         let ctx = context_to_ints (proof_state_hypotheses ps) in

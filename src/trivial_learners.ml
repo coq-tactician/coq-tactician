@@ -4,7 +4,7 @@ module NullLearner : TacticianOnlineLearnerType = functor (_ : TacticianStructur
   type model = unit
   let empty () = ()
   let learn () _ _ _ = ()
-  let predict () _ = IStream.empty
+  let predict () _ _ = IStream.empty
 let evaluate () _ _ = 0., ()
 end
 
@@ -33,7 +33,7 @@ module PrintLearner : TacticianOnlineLearnerType = functor (TS : TacticianStruct
           ) outcome.after;
       ) outcomes;
     print_endline "\n"; ()
-  let predict () situations =
+  let predict () _ situations =
     List.iteri (fun i {parents; siblings; state} ->
         print_endline ("Situation " ^ string_of_int i);
         print_endline (proof_state_to_string state (Global.env ()) Evd.empty)
@@ -47,7 +47,7 @@ module ReverseAddedOrder : TacticianOnlineLearnerType = functor (TS : TacticianS
   type model = tactic list
   let empty () = []
   let learn db _ _ tac = tac::db
-  let predict db _ = IStream.of_list (List.map (fun tac -> {confidence = 1.; focus = 0; tactic = tac}) db)
+  let predict db _ _ = IStream.of_list (List.map (fun tac -> {confidence = 1.; focus = 0; tactic = tac}) db)
   let evaluate db _ _ = 1., db
 end
 
@@ -56,7 +56,7 @@ module AddedOrder : TacticianOnlineLearnerType = functor (TS : TacticianStructur
   type model = tactic list
   let empty () = []
   let learn db _ _ tac = tac::db
-  let predict db _ = IStream.of_list (List.map (fun tac -> {confidence = 1.; focus = 0; tactic = tac}) (List.rev db))
+  let predict db _ _ = IStream.of_list (List.map (fun tac -> {confidence = 1.; focus = 0; tactic = tac}) (List.rev db))
   let evaluate db _ _ = 1., db
 end
 
@@ -71,7 +71,7 @@ module Random : TacticianOnlineLearnerType = functor (TS : TacticianStructures) 
     let sond = List.sort compare nd in
     List.map snd sond
 
-  let predict db _ =
+  let predict db _ _ =
     IStream.of_list (List.map (fun tac -> {confidence = 1.; focus = 0; tactic = tac}) (shuffle db))
 
   let evaluate db _ _ = 1., db

@@ -330,6 +330,7 @@ type tactic_trace = glob_tactic_expr list
 type state_id_stack = int list
 
 let record_field : bool Evd.Store.field = Evd.Store.field ()
+let name_field : Libnames.full_path Evd.Store.field = Evd.Store.field ()
 let localdb_field : localdb Evd.Store.field = Evd.Store.field ()
 let goal_stack_field : goal_stack Evd.Store.field = Evd.Store.field ()
 let prediction_stack_field : prediction_stack Evd.Store.field = Evd.Store.field ()
@@ -376,8 +377,14 @@ let get_field_goal2 fi gl d =
 let set_record b =
   modify_field record_field (fun _ -> b, ()) (fun i -> true)
 
+let set_name n =
+  modify_field name_field (fun _ -> n, ()) (fun i -> Libnames.make_path Names.DirPath.empty (Names.Id.of_string "xxxxxxxx"))
+
 let get_record () =
   modify_field record_field (fun b -> b, b) (fun i -> true)
+    
+let get_name () =
+  modify_field name_field (fun n -> n, n) (fun i -> Libnames.make_path Names.DirPath.empty (Names.Id.of_string "xxxxxxxx"))
 
 let push_localdb x =
   modify_field localdb_field (fun db -> x::db, ()) (fun () -> [])
@@ -596,7 +603,7 @@ let rec tclFold2 (d : 'a) (tac : 'a -> 'a Proofview.tactic) : 'a Proofview.tacti
     | None -> tclUNIT d
     | Some x -> tclFold2 x tac
 
-let predict =
+let predict name =
   let open Proofview in
   let open Notations in
   Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
@@ -609,7 +616,7 @@ let predict =
   (* Coq stores goals in reverse order, so we present them in an intuitive order.
      Note that the tclFocus function also internally reverses the list, so focussing
      on goal zero will focus in the first goal of the reversed `situation` *)
-  tclUNIT (learner_predict (List.rev situation))
+  tclUNIT (learner_predict name (List.rev situation))
 
 let filterTactics p q (tacs : Tactic_learner_internal.TS.prediction IStream.t) =
   let exception SuccessException of bool in
@@ -638,7 +645,7 @@ let userPredict =
   let debug = false in
   let open Proofview in
   let open Notations in
-  tclENV >>= fun env -> predict >>=
+  tclENV >>= fun env -> get_name () >>= predict >>=
   (if debug then (fun r -> tclUNIT (to_list 10 r)) else filterTactics 10 10000) >>= fun r ->
   let r = List.map (fun ({confidence; focus; tactic} : Tactic_learner_internal.TS.prediction) ->
       (confidence, focus, tactic)) r in
@@ -649,10 +656,10 @@ let userPredict =
                         Proofview.NonLogical.print_info (print_rank debug env r)))
 
 let tac_exec_count = ref 0
-let tacpredict max_reached =
+let tacpredict max_reached name =
   let open Proofview in
   let open Notations in
-  predict >>= fun predictions ->
+  predict name >>= fun predictions ->
   let taceval i focus (t, h) = tclUNIT () >>= fun () ->
     if max_reached () then Tacticals.New.tclZEROMSG (Pp.str "Ran out of executions") else
       tclFOCUS ~nosuchgoal:(Tacticals.New.tclZEROMSG (Pp.str "Predictor gave wrong focus"))
@@ -712,7 +719,8 @@ let commonSearch max_exec =
              tclLIFT (NonLogical.make (fun () ->
                  tac_exec_count := 0; Dumpglob.pause(); CWarnings.set_flags ("-all"))))
           <*> tclOR
-            (tclONCE (Tacticals.New.tclCOMPLETE (search_with_strategy max_reached (tacpredict max_reached))) <*>
+            (get_name () >>= fun name ->
+             tclONCE (Tacticals.New.tclCOMPLETE (search_with_strategy max_reached (tacpredict max_reached name))) <*>
              get_witness () >>= fun wit -> empty_witness () <*>
              dec_search_recursion_depth () >>= fun () -> setFlags () <*> tclUNIT (wit, !tac_exec_count))
             (fun (e, i) -> setFlags () <*> tclZERO ~info:i e))
@@ -862,10 +870,10 @@ let runTactics n (tacs : Tactic_learner_internal.TS.prediction IStream.t) =
           | (e, _) -> aux (n - 1) tacs ((tactic, None)::glsacc))
   in aux n tacs []
 
-let run_predictions () =
+let run_predictions name =
   let open Proofview in
   let open Notations in
-  predict >>= fun p ->
+  predict name >>= fun p ->
   tclLIFT (NonLogical.make (fun () -> CWarnings.get_flags ())) >>= fun oldFlags ->
   let setFlags () = tclLIFT (NonLogical.make (fun () ->
       Dumpglob.continue (); CWarnings.set_flags (oldFlags))) in
@@ -877,8 +885,9 @@ let push_state_tac () =
   let open Proofview in
   let open Notations in
   get_record () >>= fun b -> if not (should_record b) then tclUNIT () else
+    get_name () >>= fun name ->
     push_state_id_stack () <*> Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
-    push_goal_stack gls <*> run_predictions ()
+    push_goal_stack gls <*> run_predictions name
 
 let record_tac (tac2 : glob_tactic_expr) : unit Proofview.tactic =
   let open Proofview in
@@ -957,7 +966,7 @@ let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO:
     List.iter (fun trp -> tryadd trp) @@ List.rev db; tclUNIT () in
   let rtac = decompose_annotate tac record_tac_complete in
   let ptac = Tacinterp.eval_tactic rtac in
-  let ptac = ptac <*> tclENV >>= fun env ->
+  let ptac = set_name name <*> ptac <*> tclENV >>= fun env ->
     tclEVARMAP >>= fun sigma ->
     let sideff = Evd.eval_side_effects sigma in
     empty_localdb () >>= save_db env sideff.seff_private in
