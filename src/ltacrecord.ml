@@ -186,7 +186,7 @@ let subst_outcomes (s, (outcomes, name, tac)) =
       ; siblings = subst_pd siblings
       ; before = subst_pf before
       ; after = List.map subst_pf after }) outcomes in
-  (outcomes, name, subst_tac tac)
+  (outcomes, Mod_subst.subst_constant s name, subst_tac tac)
 
 let tmp_ltac_defs = Summary.ref ~name:"TACTICIANTMPSECTION" []
 let in_section_ltac_defs : (Names.KerName.t * glob_tactic_expr) list -> Libobject.obj =
@@ -220,7 +220,7 @@ let rebuild_outcomes (outcomes, name, tac) =
     | Step ps -> Step (rebuild_ps ps)
   and rebuild_ps {executions; tactic} =
     { executions = List.map (fun (ps, pd) -> ps, rebuild_pd pd) executions
-    ; tactic = rebuild_tac tactic } in 
+    ; tactic = rebuild_tac tactic } in
   let outcomes = List.map (fun {parents; siblings; before; after} ->
       { parents = List.map (fun (psa, pse) -> (psa, rebuild_ps pse)) parents
       ; siblings = rebuild_pd siblings
