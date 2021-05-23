@@ -24,7 +24,7 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
   open FH
   module LSHF = Lshf_learner.SimpleLSHF(TS)
   (* features of a proof state, positive tactic, possible tactics, disappear features, appear features *)
-  type ownmodel = (proof_state * Libnames.full_path * tactic * (tactic * proof_state list option) list * proof_state list) list
+  type ownmodel = (proof_state * Names.Constant.t * tactic * (tactic * proof_state list option) list * proof_state list) list
   type model = {database : ownmodel; lshf : LSHF.model}
 
   module IntSet = Set.Make(struct type t = feature let compare = compare end)
@@ -93,7 +93,7 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
 
   let cache_type name =
     let dirp = Global.current_dirpath () in
-    if Libnames.is_dirpath_prefix_of dirp (Libnames.dirpath name) then `File else `Dependency
+    if Libnames.is_dirpath_prefix_of dirp (Names.ModPath.dp @@ Names.Constant.modpath name) then `File else `Dependency
 
   let learn db name outcomes tac =
     let lshfnew = LSHF.learn db.lshf name outcomes tac in
@@ -124,7 +124,7 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
     List.map Hashtbl.hash split
 
   let output_feats curr_name (before, new_name, tac, neg, after) =
-    if not (Libnames.eq_full_path curr_name new_name) then
+    if not (Names.Constant.equal curr_name new_name) then
       output_string (data_file ()) "#lemma\n";
     let ps = proof_state_to_simple_ints before in
     let neg = List.map (fun (tactic, after) ->
@@ -151,7 +151,7 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
 
   let endline_hook () = print_endline "writing";
     ignore @@ List.fold_left output_feats
-      (Libnames.make_path Names.DirPath.empty @@ Names.Id.of_string "xxxxxxxxxxxxxxxx")
+      (Names.Constant.make2 Names.ModPath.initial (Names.Label.of_id @@ Names.Id.of_string "xxxxxxxx"))
       (List.rev !last_model)
 
   let () = Declaremods.append_end_library_hook endline_hook
