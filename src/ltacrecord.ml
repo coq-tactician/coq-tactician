@@ -153,7 +153,7 @@ let _ = Goptions.declare_bool_option recordoptions
 
 let _ = Random.self_init ()
 
-type data_in = outcome list * Libnames.full_path * tactic
+type data_in = outcome list * Names.Constant.t * tactic
 
 (* TODO: In interactive mode this is a memory leak, but it seems difficult to properly clean this table *)
 (* It might be possible to completely empty the db when a new lemma starts. *)
@@ -716,7 +716,7 @@ let benchmarkSearch name : unit Proofview.tactic =
       | Some t -> t in
     let timeout_command = if !deterministic then fun x -> x else tclTIMEOUT2 abstract_time in
     let max_exec = if !deterministic then Some abstract_time else None in
-    let full_name = Libnames.string_of_path name in
+    let full_name = Names.Constant.to_string name in
     let print_success env (wit, count) start_time =
       let tcs, m = List.split (List.map (fun {tac;focus;prediction_index} ->
           ((tac, focus), prediction_index)) wit) in
@@ -888,7 +888,7 @@ let record_tac_complete orig tac : glob_tactic_expr =
 let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO: Implement self-learning *)
   let open Proofview in
   let open Notations in
-  let name = Libnames.make_path (Global.current_dirpath ()) name in
+  let name = Names.Constant.make2 (Global.current_modpath ()) (Names.Label.of_id name) in
   let save_db env sideff (db : localdb) =
     let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic env t) in
     let string_tac t = Pp.string_of_ppcmds (tac_pp t) in

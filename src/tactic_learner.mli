@@ -60,7 +60,7 @@ module type TacticianOnlineLearnerType =
     open S
     type model
     val empty    : unit -> model
-    val learn    : model -> Libnames.full_path -> outcome list -> tactic -> model (* TODO: Add lemma dependencies *)
+    val learn    : model -> Constant.t -> outcome list -> tactic -> model (* TODO: Add lemma dependencies *)
     val predict  : model -> situation list -> prediction IStream.t (* TODO: Add global environment *)
     val evaluate : model -> outcome -> tactic -> float * model
   end
@@ -69,7 +69,7 @@ module type TacticianOfflineLearnerType =
   functor (S : TacticianStructures) -> sig
     open S
     type model
-    val add      : Libnames.full_path -> outcome list -> tactic -> unit (* TODO: Add lemma dependencies *)
+    val add      : Constant.t -> outcome list -> tactic -> unit (* TODO: Add lemma dependencies *)
     val train    : unit -> model
     val predict  : model -> situation list -> prediction IStream.t (* TODO: Add global environment *)
     val evaluate : model -> outcome -> tactic -> float
