@@ -107,7 +107,7 @@ module LSHF =
   let random = Random.State.make [||]
 
   type model =
-    { forest : (tactic * Libnames.full_path) forest
+    { forest : (tactic * Names.Constant.t) forest
     ; length : int
     ; frequencies : int Frequencies.t }
 
@@ -139,7 +139,7 @@ module LSHF =
           (fun (o, f) -> let x = tfidf db.length db.frequencies feats f in (x, o))
           candidates in
       let tdidfs = List.filter_map (fun (a, (b, n)) ->
-          if Libnames.eq_full_path n name then None else Some (a, b)) tdidfs in
+          if Names.Constant.equal n name then None else Some (a, b)) tdidfs in
       let out = remove_dups_and_sort tdidfs in
       let out = List.map (fun (a, c) -> { confidence = a; focus = 0; tactic = c }) out in
       IStream.of_list out

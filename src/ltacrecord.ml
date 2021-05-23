@@ -153,7 +153,7 @@ let _ = Goptions.declare_bool_option recordoptions
 
 let _ = Random.self_init ()
 
-type data_in = outcome list * Libnames.full_path * tactic
+type data_in = outcome list * Names.Constant.t * tactic
 
 (* TODO: In interactive mode this is a memory leak, but it seems difficult to properly clean this table *)
 (* It might be possible to completely empty the db when a new lemma starts. *)
@@ -187,7 +187,7 @@ let subst_outcomes (s, (outcomes, name, tac)) =
       ; before = subst_pf before
       ; after = List.map subst_pf after
       ; preds = List.map (fun (t, ps) -> subst_tac t, Option.map (List.map subst_pf) ps) preds}) outcomes in
-  (outcomes, name, subst_tac tac)
+  (outcomes, Mod_subst.subst_constant s name, subst_tac tac)
 
 let tmp_ltac_defs = Summary.ref ~name:"TACTICIANTMPSECTION" []
 let in_section_ltac_defs : (Names.KerName.t * glob_tactic_expr) list -> Libobject.obj =
@@ -221,7 +221,7 @@ let rebuild_outcomes (outcomes, name, tac) =
     | Step ps -> Step (rebuild_ps ps)
   and rebuild_ps {executions; tactic} =
     { executions = List.map (fun (ps, pd) -> ps, rebuild_pd pd) executions
-    ; tactic = rebuild_tac tactic } in 
+    ; tactic = rebuild_tac tactic } in
   let outcomes = List.map (fun {parents; siblings; before; after; preds} ->
       { parents = List.map (fun (psa, pse) -> (psa, rebuild_ps pse)) parents
       ; siblings = rebuild_pd siblings
@@ -330,7 +330,7 @@ type tactic_trace = glob_tactic_expr list
 type state_id_stack = int list
 
 let record_field : bool Evd.Store.field = Evd.Store.field ()
-let name_field : Libnames.full_path Evd.Store.field = Evd.Store.field ()
+let name_field : Names.Constant.t Evd.Store.field = Evd.Store.field ()
 let localdb_field : localdb Evd.Store.field = Evd.Store.field ()
 let goal_stack_field : goal_stack Evd.Store.field = Evd.Store.field ()
 let prediction_stack_field : prediction_stack Evd.Store.field = Evd.Store.field ()
@@ -378,13 +378,15 @@ let set_record b =
   modify_field record_field (fun _ -> b, ()) (fun i -> true)
 
 let set_name n =
-  modify_field name_field (fun _ -> n, ()) (fun i -> Libnames.make_path Names.DirPath.empty (Names.Id.of_string "xxxxxxxx"))
+  modify_field name_field (fun _ -> n, ())
+    (fun i -> Names.Constant.make2 Names.ModPath.initial (Names.Label.of_id @@ Names.Id.of_string "xxxxxxxx"))
 
 let get_record () =
   modify_field record_field (fun b -> b, b) (fun i -> true)
-    
+
 let get_name () =
-  modify_field name_field (fun n -> n, n) (fun i -> Libnames.make_path Names.DirPath.empty (Names.Id.of_string "xxxxxxxx"))
+  modify_field name_field (fun n -> n, n)
+    (fun i -> Names.Constant.make2 Names.ModPath.initial (Names.Label.of_id @@ Names.Id.of_string "xxxxxxxx"))
 
 let push_localdb x =
   modify_field localdb_field (fun db -> x::db, ()) (fun () -> [])
@@ -739,7 +741,7 @@ let benchmarkSearch name : unit Proofview.tactic =
       | Some t -> t in
     let timeout_command = if !deterministic then fun x -> x else tclTIMEOUT2 abstract_time in
     let max_exec = if !deterministic then Some abstract_time else None in
-    let full_name = Libnames.string_of_path name in
+    let full_name = Names.Constant.to_string name in
     let print_success env (wit, count) start_time =
       let tcs, m = List.split (List.map (fun {tac;focus;prediction_index} ->
           ((tac, focus), prediction_index)) wit) in
@@ -947,7 +949,7 @@ let record_tac_complete orig tac : glob_tactic_expr =
 let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO: Implement self-learning *)
   let open Proofview in
   let open Notations in
-  let name = Libnames.make_path (Global.current_dirpath ()) name in
+  let name = Names.Constant.make2 (Global.current_modpath ()) (Names.Label.of_id name) in
   let save_db env sideff (db : localdb) =
     let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic env t) in
     let string_tac t = Pp.string_of_ppcmds (tac_pp t) in
