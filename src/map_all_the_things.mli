@@ -26,11 +26,11 @@ module type MapDef = sig
     ; raw_atomic_tactic : raw_atomic_tactic_expr transformer
     ; glob_tactic_arg : glob_tactic_arg transformer
     ; raw_tactic_arg : raw_tactic_arg transformer
-    ; cast : 'a. 'a CAst.t map
+    ; cast : 'a. 'a CAst.t t -> 'a CAst.t t
     ; constant : Constant.t map
     ; mutind : MutInd.t map
     ; short_name : Id.t CAst.t option map
-    ; located : Loc.t option map
+    ; located : 'a. (Loc.t option * 'a) t -> (Loc.t option * 'a) t
     ; variable : Id.t map
     ; constr_pattern : constr_pattern transformer
     ; constr_expr : constr_expr_r transformer
@@ -79,11 +79,11 @@ module MapDefTemplate (M: Monad.Def) : sig
     ; raw_atomic_tactic : raw_atomic_tactic_expr transformer
     ; glob_tactic_arg : glob_tactic_arg transformer
     ; raw_tactic_arg : raw_tactic_arg transformer
-    ; cast : 'a. 'a CAst.t map
+    ; cast : 'a. 'a CAst.t t -> 'a CAst.t t
     ; constant : Constant.t map
     ; mutind : MutInd.t map
     ; short_name : Id.t CAst.t option map
-    ; located : Loc.t option map
+    ; located : 'a. (Loc.t option * 'a) t -> (Loc.t option * 'a) t
     ; variable : Id.t map
     ; constr_pattern : constr_pattern transformer
     ; constr_expr : constr_expr_r transformer

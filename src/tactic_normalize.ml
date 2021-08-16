@@ -33,9 +33,10 @@ let t : KerNameHash.t = KerNameHash.create 99
 
 let lookup id = KerNameHash.repr (KerName.hash id) id t
 
+(* TODO: This hashing seems entirely wrong *)
 let mapper = { NormalizeDef.default_mapper with
                cast = (fun (CAst.{v; _}) -> CAst.make ?loc:None v)
-             ; located = (fun _ -> None)
+             ; located = (fun (_, x) -> None, x)
              ; constant = (fun x -> ignore(Constant.hash x); return x)
              ; mutind = (fun x -> ignore(MutInd.hash x); return x)
              ; glob_tactic_arg = (fun t g -> match g t with
