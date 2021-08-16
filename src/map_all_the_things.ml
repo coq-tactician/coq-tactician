@@ -15,6 +15,7 @@ open Loc
 open Names
 open Goal_select
 open Namegen
+open Libnames
 
 module type MapDef = sig
   include MonadNotations
@@ -36,6 +37,8 @@ module type MapDef = sig
     ; short_name : Id.t CAst.t option map
     ; located : 'a. (Loc.t option * 'a) t -> (Loc.t option * 'a) t
     ; variable : Id.t map
+    ; qualid : (DirPath.t * Id.t) map
+    (* Guaranteed not be at least partially qualified (otherwise variable is called) *)
     ; constr_pattern : constr_pattern transformer
     ; constr_expr : constr_expr_r transformer
     ; glob_constr : ([ `any ] glob_constr_r) transformer }
@@ -91,6 +94,8 @@ module MapDefTemplate (M: Monad.Def) = struct
     ; short_name : Id.t CAst.t option map
     ; located : 'a. (Loc.t option * 'a) t -> (Loc.t option * 'a) t
     ; variable : Id.t map
+    ; qualid : (DirPath.t * Id.t) map
+    (* Guaranteed not be at least partially qualified (otherwise variable is called) *)
     ; constr_pattern : constr_pattern transformer
     ; constr_expr : constr_expr_r transformer
     ; glob_constr : ([ `any ] glob_constr_r) transformer }
@@ -108,6 +113,7 @@ module MapDefTemplate (M: Monad.Def) = struct
     ; short_name = id
     ; located = (fun x -> x)
     ; variable = id
+    ; qualid = id
     ; constr_pattern = none_transformer
     ; constr_expr = none_transformer
     ; glob_constr = none_transformer }
@@ -289,7 +295,7 @@ module MakeMapper (M: MapDef) = struct
     if DirPath.is_empty d then
       m.cast (let+ id = m.variable id in
               Libnames.make_qualid ?loc DirPath.empty id)
-    else m.cast (return q)
+    else m.cast (let+ d, id = m.qualid (d, id) in Libnames.make_qualid ?loc d id)
 
   let rec cases_pattern_r_map m = function
     | PatVar n -> return (PatVar n, [])
