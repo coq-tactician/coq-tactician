@@ -41,7 +41,10 @@ module type MapDef = sig
     (* Guaranteed not be at least partially qualified (otherwise variable is called) *)
     ; constr_pattern : constr_pattern transformer
     ; constr_expr : constr_expr_r transformer
-    ; glob_constr : ([ `any ] glob_constr_r) transformer }
+    ; glob_constr : ([ `any ] glob_constr_r) transformer
+    ; glob_constr_and_expr : Genintern.glob_constr_and_expr transformer
+    ; glob_constr_pattern_and_expr : Genintern.glob_constr_pattern_and_expr transformer
+    }
 
   type recursor =
     { option_map : 'a. 'a map -> 'a option map
@@ -98,7 +101,10 @@ module MapDefTemplate (M: Monad.Def) = struct
     (* Guaranteed not be at least partially qualified (otherwise variable is called) *)
     ; constr_pattern : constr_pattern transformer
     ; constr_expr : constr_expr_r transformer
-    ; glob_constr : ([ `any ] glob_constr_r) transformer }
+    ; glob_constr : ([ `any ] glob_constr_r) transformer
+    ; glob_constr_and_expr : Genintern.glob_constr_and_expr transformer
+    ; glob_constr_pattern_and_expr : Genintern.glob_constr_pattern_and_expr transformer
+    }
   let none_transformer x f = f x
   let default_mapper =
     { glob_tactic = none_transformer
@@ -116,7 +122,10 @@ module MapDefTemplate (M: Monad.Def) = struct
     ; qualid = id
     ; constr_pattern = none_transformer
     ; constr_expr = none_transformer
-    ; glob_constr = none_transformer }
+    ; glob_constr = none_transformer
+    ; glob_constr_and_expr = none_transformer
+    ; glob_constr_pattern_and_expr = none_transformer
+    }
   type recursor =
     { option_map : 'a. 'a map -> 'a option map
     ; or_var_map : 'a. 'a map -> 'a or_var map
@@ -979,12 +988,14 @@ module MakeMapper (M: MapDef) = struct
      | PInt _ as pat -> return pat
      | PFloat _ as pat -> return pat
 
-  and glob_constr_and_expr_map m r ((gc, ce) : g_trm) =
+  and glob_constr_and_expr_map m r (trm : g_trm) =
+    m.glob_constr_and_expr trm @@ function (gc, ce) ->
     let+ gc = glob_constr_map m r gc
     and+ ce = option_map (constr_expr_map m r) ce in
     (gc, ce)
-  and g_pat_map m r ((ids, c, cp) : g_pat) =
+  and g_pat_map m r (pat : g_pat) =
     (* TODO: `ids` are variables, but unknown if binders. They do not appear to be used, so we ignore *)
+    m.glob_constr_pattern_and_expr pat @@ function (ids, c, cp) ->
     let+ c = glob_constr_and_expr_map m r c
     and+ cp = constr_pattern_map m cp in
     (ids, c, cp)

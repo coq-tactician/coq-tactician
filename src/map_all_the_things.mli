@@ -36,7 +36,10 @@ module type MapDef = sig
     (* Guaranteed not be at least partially qualified (otherwise variable is called) *)
     ; constr_pattern : constr_pattern transformer
     ; constr_expr : constr_expr_r transformer
-    ; glob_constr : ([ `any ] glob_constr_r) transformer }
+    ; glob_constr : ([ `any ] glob_constr_r) transformer
+    ; glob_constr_and_expr : Genintern.glob_constr_and_expr transformer
+    ; glob_constr_pattern_and_expr : Genintern.glob_constr_pattern_and_expr transformer
+    }
 
   type recursor =
     { option_map : 'a. 'a map -> 'a option map
@@ -91,7 +94,10 @@ module MapDefTemplate (M: Monad.Def) : sig
     (* Guaranteed not be at least partially qualified (otherwise variable is called) *)
     ; constr_pattern : constr_pattern transformer
     ; constr_expr : constr_expr_r transformer
-    ; glob_constr : ([ `any ] glob_constr_r) transformer }
+    ; glob_constr : ([ `any ] glob_constr_r) transformer
+    ; glob_constr_and_expr : Genintern.glob_constr_and_expr transformer
+    ; glob_constr_pattern_and_expr : Genintern.glob_constr_pattern_and_expr transformer
+    }
   type recursor =
     { option_map : 'a. 'a map -> 'a option map
     ; or_var_map : 'a. 'a map -> 'a or_var map
