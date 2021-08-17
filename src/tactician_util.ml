@@ -62,3 +62,15 @@ module WriterMonad (R : sig type w val id : w val comb : w -> w -> w end) = stru
   let tell l = ([l], ())
   let censor f (w, x) = (f w, x)
 end
+
+module StateMonad (R : sig type s end) = struct
+  open R
+  type 'a t = s -> s * 'a
+  let return x = fun s -> (s, x)
+  let (>>=) x f = fun s -> let s', a = x s in f a s'
+  let (>>) x y = fun s -> let s', () = x s in y s'
+  let map f x = fun s -> let s', a = x s in s', f a
+
+  let get x = fun s -> s, s
+  let put s = fun _ -> s, ()
+end
