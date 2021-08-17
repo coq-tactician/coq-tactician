@@ -165,7 +165,7 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
 
   let tactic_normalize tac =
     let tac = tactic_normalize (tactic_repr tac) in
-    (* let tac = Tactic_substitute.tactic_substitute (fun _ -> Names.Id.of_string "X") tac in *)
+    let tac = Tactic_substitute.tactic_substitute (fun _ -> Names.Id.of_string "X") tac in
     let tac = tactic_make tac in
     tac
 
