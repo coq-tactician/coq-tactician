@@ -4,6 +4,11 @@ open Sexplib
 open Ltac_plugin
 open Learner_helper
 open Features
+open Map_all_the_things
+open Tactician_util
+open Tacexpr
+open Genarg
+open Mapping_helpers
 
 let data_file =
   let file = ref None in
@@ -15,6 +20,41 @@ let data_file =
        k
      | Some f -> f)
 
+module NormalizeDef = struct
+  include MapDefTemplate (IdentityMonad)
+  let map_sort = "normalize"
+  let warnProblem wit =
+    Feedback.msg_warning (Pp.(str "Tactician is having problems with " ++
+                              str "the following tactic. Please report. " ++
+                              pr_argument_type wit))
+  let default wit = { raw = (fun _ -> warnProblem (ArgumentType wit); id)
+                    ; glb = (fun _ -> warnProblem (ArgumentType wit); id)}
+end
+module NormalizeMapper = MakeMapper(NormalizeDef)
+open NormalizeDef
+open Helpers(NormalizeDef)
+
+type 'a k = 'a NormalizeDef.t
+
+let placeholder = match Coqlib.lib_ref "tactician.private_constant_placeholder" with
+  | Names.GlobRef.ConstRef const -> const
+  | _ -> assert false
+
+let mapper = { NormalizeDef.default_mapper with
+               glob_constr_and_expr = (fun (expr, _) g -> g (expr, None))
+             (* ; variable = (fun _ -> Names.Id.of_string "X")
+              * ; constant = (fun c -> placeholder
+              *     (\* let body = (Global.lookup_constant c).const_body in
+              *      * (match body with
+              *      *  | Declarations.OpaqueDef _ -> placeholder
+              *      *  | _ -> c) *\)
+              *              )
+              * ; constr_pattern = (fun _ _ -> Pattern.PMeta None)
+              * ; constr_expr = (fun _ _ -> CHole (None, IntroAnonymous, None))
+              * ; glob_constr = (fun _ _ -> Glob_term.GHole (Evar_kinds.GoalEvar, IntroAnonymous, None)) *)
+             }
+
+let tactic_normalize = NormalizeMapper.glob_tactic_expr_map mapper
 
 module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : TacticianStructures) -> struct
   module LH = Learner_helper.L(TS)
@@ -96,6 +136,9 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
     if Libnames.is_dirpath_prefix_of dirp (Names.ModPath.dp @@ Names.Constant.modpath name) then `File else `Dependency
 
   let learn db name outcomes tac =
+    let tac = tactic_normalize (tactic_repr tac) in
+    (* let tac = Tactic_substitute.tactic_substitute (fun _ -> Names.Id.of_string "X") tac in *)
+    let tac = tactic_make tac in
     let lshfnew = LSHF.learn db.lshf name outcomes tac in
     match cache_type name with
     | `File ->
