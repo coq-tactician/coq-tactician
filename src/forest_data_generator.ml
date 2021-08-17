@@ -42,14 +42,14 @@ let placeholder = match Coqlib.lib_ref "tactician.private_constant_placeholder" 
 
 let mapper = { NormalizeDef.default_mapper with
                glob_constr_and_expr = (fun (expr, _) g -> g (expr, None))
-             (* ; variable = (fun _ -> Names.Id.of_string "X")
-              * ; constant = (fun c -> placeholder
-              *     (\* let body = (Global.lookup_constant c).const_body in
-              *      * (match body with
-              *      *  | Declarations.OpaqueDef _ -> placeholder
-              *      *  | _ -> c) *\)
-              *              )
-              * ; constr_pattern = (fun _ _ -> Pattern.PMeta None)
+             ; variable = (fun _ -> Names.Id.of_string "X")
+             ; constant = (fun c ->
+                 let body = (Global.lookup_constant c).const_body in
+                 (match body with
+                  | Declarations.OpaqueDef _ -> placeholder
+                  | _ -> c)
+                          )
+             (* ; constr_pattern = (fun _ _ -> Pattern.PMeta None)
               * ; constr_expr = (fun _ _ -> CHole (None, IntroAnonymous, None))
               * ; glob_constr = (fun _ _ -> Glob_term.GHole (Evar_kinds.GoalEvar, IntroAnonymous, None)) *)
              }
@@ -165,7 +165,7 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
 
   let tactic_normalize tac =
     let tac = tactic_normalize (tactic_repr tac) in
-    let tac = Tactic_substitute.tactic_substitute (fun _ -> Names.Id.of_string "X") tac in
+    (* let tac = Tactic_substitute.tactic_substitute (fun _ -> Names.Id.of_string "X") tac in *)
     let tac = tactic_make tac in
     tac
 
