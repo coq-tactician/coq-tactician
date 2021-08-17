@@ -136,9 +136,6 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
     if Libnames.is_dirpath_prefix_of dirp (Names.ModPath.dp @@ Names.Constant.modpath name) then `File else `Dependency
 
   let learn db name outcomes tac =
-    let tac = tactic_normalize (tactic_repr tac) in
-    (* let tac = Tactic_substitute.tactic_substitute (fun _ -> Names.Id.of_string "X") tac in *)
-    let tac = tactic_make tac in
     let lshfnew = LSHF.learn db.lshf name outcomes tac in
     match cache_type name with
     | `File ->
@@ -166,11 +163,19 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
     let split = String.split_on_char ' ' str in
     List.map Hashtbl.hash split
 
+  let tactic_normalize tac =
+    let tac = tactic_normalize (tactic_repr tac) in
+    (* let tac = Tactic_substitute.tactic_substitute (fun _ -> Names.Id.of_string "X") tac in *)
+    let tac = tactic_make tac in
+    tac
+
   let output_feats curr_name (before, new_name, tac, neg, after) =
+    let tac = tactic_normalize tac in
     if not (Names.Constant.equal curr_name new_name) then
       output_string (data_file ()) "#lemma\n";
     let ps = proof_state_to_simple_ints before in
     let neg = List.map (fun (tactic, after) ->
+        let tactic = tactic_normalize tactic in
         let disappear_feats = Option.default [-1] @@ Option.map (feat_disappear before) after in
         let appear_feats = Option.default [-1] @@ Option.map (feat_appear before) after in
         (tactic, disappear_feats, appear_feats)) neg in
