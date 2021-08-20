@@ -164,7 +164,7 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
     List.map Hashtbl.hash split
 
   let tactic_normalize tac =
-    let tac = tactic_normalize (tactic_repr tac) in
+    let tac = tactic_normalize @@ Tactic_normalize.tactic_normalize (tactic_repr tac) in
     (* let tac = Tactic_substitute.tactic_substitute (fun _ -> Names.Id.of_string "X") tac in *)
     (* let tac = tactic_make tac in *)
     tac, Hashtbl.hash_param 255 255 tac
