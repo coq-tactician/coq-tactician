@@ -159,37 +159,36 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
 
   let syntactic_feats tac =
     let str = Pp.string_of_ppcmds @@ Sexpr.format_oneline @@
-      Pptactic.pr_glob_tactic (Global.env ()) (tactic_repr tac) in
+      Pptactic.pr_glob_tactic (Global.env ()) tac in
     let split = String.split_on_char ' ' str in
     List.map Hashtbl.hash split
 
   let tactic_normalize tac =
     let tac = tactic_normalize (tactic_repr tac) in
     (* let tac = Tactic_substitute.tactic_substitute (fun _ -> Names.Id.of_string "X") tac in *)
-    let tac = tactic_make tac in
-    tac
+    (* let tac = tactic_make tac in *)
+    tac, Hashtbl.hash_param 255 255 tac
 
   let output_feats curr_name (before, new_name, tac, neg, after) =
-    let tac = tactic_normalize tac in
+    let tac, hash = tactic_normalize tac in
     if not (Names.Constant.equal curr_name new_name) then
       output_string (data_file ()) "#lemma\n";
     let ps = proof_state_to_simple_ints before in
     let neg = List.map (fun (tactic, after) ->
-        let tactic = tactic_normalize tactic in
+        let tactic, hash = tactic_normalize tactic in
         let disappear_feats = Option.default [-1] @@ Option.map (feat_disappear before) after in
         let appear_feats = Option.default [-1] @@ Option.map (feat_appear before) after in
-        (tactic, disappear_feats, appear_feats)) neg in
+        (tactic, hash, disappear_feats, appear_feats)) neg in
     let disappear_feats = feat_disappear before after in
     let appear_feats = feat_appear before after in
-    let neg = List.map (fun (tac, df, af) ->
-        Sexplib.Pre_sexp.List [Std.sexp_of_int @@ tactic_hash tac;
+    let neg = List.map (fun (tac, hash, df, af) ->
+        Sexplib.Pre_sexp.List [Std.sexp_of_int @@ hash;
                                Std.sexp_of_list Std.sexp_of_int df;
                                Std.sexp_of_list Std.sexp_of_int af;
                                Std.sexp_of_list Std.sexp_of_int @@ syntactic_feats tac]) neg in
-    let tac' = tactic_hash tac in
     (* let neg = List.filter (fun neg_tac -> tac != neg_tac) neg in *)
     let line = Sexplib.Pre_sexp.List [ Std.sexp_of_list Std.sexp_of_int ps
-                                     ; Std.sexp_of_int tac'
+                                     ; Std.sexp_of_int hash
                                      ; Sexplib.Pre_sexp.List neg
                                      ; Std.sexp_of_list Std.sexp_of_int disappear_feats
                                      ; Std.sexp_of_list Std.sexp_of_int appear_feats
