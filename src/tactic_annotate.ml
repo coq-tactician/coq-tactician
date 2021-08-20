@@ -199,6 +199,11 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
           (Names.KerName.to_string e) in
       let args = if inner_record Alias || tactician_cache then
           List.map (fun a -> fst (annotate_arg a)) args else args in
+      (* TODO: This is a possible decomposition *)
+      (* let al = Tacenv.interp_alias e in
+       * let t = TacLetIn (false, List.map2 (fun x y ->
+       *     (CAst.make (Names.Name.Name x)), y) al.Tacenv.alias_args args,
+       *                   al.Tacenv.alias_body) in *)
       let t = TacAlias (CAst.make ?loc (e, args)) in
       if outer_record Alias && not tactician_cache then r tac t else t
       (* TODO: Decompose user-defined tactics *)
