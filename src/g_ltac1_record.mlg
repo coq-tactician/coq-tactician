@@ -68,13 +68,13 @@ let pr_decomposition = function
 let vernac_solve ~pstate n info tcom b id =
   let open Goal_select in
   let skip = pre_vernac_solve pstate id in
-  if skip then pstate else
+  if skip then Some pstate else
     try
-      let pstate, status = Proof_global.map_fold_proof_endline (fun etac p ->
+      let pstate, status = Proof_global.with_current_proof (fun etac p ->
           let with_end_tac = if b then Some etac else None in
           let global = match n with SelectAll | SelectList _ -> true | _ -> false in
           let info = Option.append info !print_info_trace in
-          let name = Proof_global.get_proof_name pstate in
+          let name = Proof_global.get_current_proof_name pstate in
           let (p,status) =
               Pfedit.solve n info (hide_interp_t global tcom None id name) ?with_end_tac p
           in
@@ -83,7 +83,7 @@ let vernac_solve ~pstate n info tcom b id =
           let p = Proof.maximal_unfocus Vernacentries.command_focus p in
           p,status) pstate in
       if not status then Feedback.feedback Feedback.AddedAxiom;
-      pstate
+      Some pstate
     with
     | e when CErrors.noncritical e || e = CErrors.Timeout ->
       save_exn id e; raise e
@@ -112,13 +112,13 @@ VERNAC ARGUMENT EXTEND ltac_use_default_hack PRINTED BY { pr_ltac_use_default }
 | [ "..." ] -> { (Random.int64 (Int64.max_int), true) }
 END
 
-VERNAC { tactician_mode } EXTEND VernacSolveTactician STATE proof
-| [ ltac_selector_opt(g) ltac_info_opt(n) tactic(t) ltac_use_default_hack(def) ] =>
+VERNAC { tactician_mode } EXTEND VernacSolveTactician
+| ![ proof ] [ ltac_selector_opt(g) ltac_info_opt(n) tactic(t) ltac_use_default_hack(def) ] =>
     { (* TODO: Enormously ugly hack *)
-    VtSideff ([], VtNow)
+    VtSideff [], VtNow
     } -> {
     let g = Option.default (Goal_select.get_default_goal_selector ()) g in
-    vernac_solve g n t (snd def) (fst def)
+    Vernacentries.vernac_require_open_proof vernac_solve g n t (snd def) (fst def)
   }
 END
 
@@ -126,7 +126,7 @@ VERNAC COMMAND EXTEND VernacDeclareTacticDefinition
 | #[ deprecation; locality; ] [ "Ltac" ne_ltac_tacdef_body_list_sep(l, "with") ] => {
     VtSideff (List.map (function
       | TacticDefinition (CAst.{v; _},_) -> v
-      | TacticRedefinition (qid,_) -> qualid_basename qid) l, VtLater)
+      | TacticRedefinition (qid,_) -> qualid_basename qid) l), VtLater
   } -> {
          Tacentries.register_ltac (Locality.make_module_locality locality) ?deprecation l;
          section_ltac_helper l
@@ -136,7 +136,7 @@ END
 VERNAC COMMAND EXTEND VernacTacticNotation
 | #[ deprecation; locality; ]
   [ "Tactic" "Notation" ltac_tactic_level_opt(n) ne_ltac_production_item_list(r) ":=" tactic(e) ] =>
-  { VtSideff ([], VtNow) } ->
+  { VtSideff [], VtNow } ->
   {
     let n = Option.default 0 n in
     Tacentries.add_tactic_notation (Locality.make_module_locality locality) n ?deprecation r e;

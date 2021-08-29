@@ -20,6 +20,9 @@ let append file str =
 let open_permanently file =
   open_out_gen [Open_creat; Open_text; Open_trunc; Open_wronly] 0o640 file
 
+exception LibUnmappedDir
+exception LibNotFound
+
 let select_v_file ~warn loadpath base =
   let find ext =
     let loadpath = List.map fst loadpath in
@@ -35,16 +38,7 @@ let select_v_file ~warn loadpath base =
   | Some res ->
     Ok res
 
-let load_path_to_physical t =
-  let printed = pp t in
-  let path = match Pp.repr printed with
-  | Pp.Ppcmd_box (_, k) -> (match Pp.repr k with
-    | Pp.Ppcmd_glue ks -> (match Pp.repr (List.nth ks 2) with
-      | Pp.Ppcmd_string s -> s
-      | _ -> assert false)
-    | _ -> assert false)
-  | _ -> assert false in
-  path
+let load_path_to_physical t = physical t
 
 let filter_path f =
   let rec aux = function
@@ -55,7 +49,7 @@ let filter_path f =
   in
   aux (get_load_paths ())
 
-let locate_absolute_library dir : CUnix.physical_path locate_result =
+let locate_absolute_library dir =
   (* Search in loadpath *)
   let pref, base = Libnames.split_dirpath dir in
   let loadpath = filter_path (fun dir -> Names.DirPath.equal dir pref) in
@@ -69,9 +63,7 @@ let locate_absolute_library dir : CUnix.physical_path locate_result =
 let try_locate_absolute_library dir =
   match locate_absolute_library dir with
   | Ok res -> Some res
-  | Error LibUnmappedDir ->
-    None
-  | Error LibNotFound ->
+  | Error _ ->
     None
 
 let benchmarking = ref None
@@ -253,7 +245,7 @@ let section_ltac_helper bodies =
       Lib.make_kn CAst.(id.v), intern tac
     | TacticRedefinition (id, tac) ->
       Tacenv.locate_tactic id, intern tac in
-  if not (Global.sections_are_opened ()) then () else
+  if not (Lib.sections_are_opened ()) then () else
     Lib.add_anonymous_leaf (in_section_ltac_defs (List.map def_trans bodies))
 
 (* TODO: Ugly hack. It seems impossible to obtain the Kername that a notation
@@ -283,7 +275,7 @@ let find_last_key : (string * string option) Tacentries.grammar_tactic_prod_item
 
 let section_notation_helper prods e =
   tmp_ltac_defs := []; (* Safe to discard tmp state from old section discharge *)
-  if Global.sections_are_opened () then
+  if Lib.sections_are_opened () then
     let id = find_last_key prods in
     let alias = Tacenv.interp_alias id in
     let func = TacFun (List.map Names.Name.mk_name alias.alias_args, alias.alias_body) in
@@ -658,7 +650,7 @@ let tclTIMEOUT2 n t =
   Proofview.tclOR
     (Timeouttac.ptimeout n t)
     begin function (e, info) -> match e with
-      | Logic_monad.Tac_Timeout -> Tacticals.New.tclZEROMSG (Pp.str "timout")
+      | Logic_monad.Timeout -> Tacticals.New.tclZEROMSG (Pp.str "timout")
       | e -> Tacticals.New.tclZEROMSG (Pp.str "haha")
     end
 
@@ -895,8 +887,8 @@ let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO:
     let tryadd (execs, tac) =
       let s = string_tac tac in
       (* TODO: Move this to annotation time *)
-      if (String.equal s "admit" || String.equal s "search" || String.is_prefix "search with cache" s
-          || String.is_prefix "tactician ignore" s)
+      if (String.equal s "admit" || String.equal s "search" || string_is_prefix "search with cache" s
+          || string_is_prefix "tactician ignore" s)
       then () else add_to_db2 id (execs, tac) sideff name;
       try (* This is purely for parsing bug detection and could be removed for performance reasons *)
         let _ = Pcoq.parse_string Pltac.tactic_eoi s in ()
@@ -910,7 +902,7 @@ let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO:
   let ptac = ptac <*> tclENV >>= fun env ->
     tclEVARMAP >>= fun sigma ->
     let sideff = Evd.eval_side_effects sigma in
-    empty_localdb () >>= save_db env sideff.seff_private in
+    empty_localdb () >>= save_db env sideff in
   match !benchmarking with
   | None -> ptac
   | Some _ -> benchmarkSearch name <*> ptac

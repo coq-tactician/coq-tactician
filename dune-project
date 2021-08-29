@@ -11,7 +11,7 @@
 
 (package
   (name coq-tactician)
-  (version 8.11.dev)
+  (version 8.10.dev)
   (synopsis "Tactician: A Seamless, Interactive Tactic Learner and Prover for Coq")
   (description "Tactician is a tactic learner and prover for the Coq Proof Assistant.
 The system will help users make tactical proof decisions while they retain
@@ -26,6 +26,6 @@ automation.")
     (dune (and (>= 2.5) :build))
     (opam-client (>= 2.1.0~beta2))
     cmdliner
-    (coq (and (>= 8.11) (< 8.12~)))
+    (coq (and (>= 8.10) (< 8.11~)))
     conf-git
     (coq-tactician-dummy (and (= 1.0~beta1) :with-test))))

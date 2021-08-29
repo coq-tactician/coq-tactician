@@ -27,7 +27,6 @@ let constr_pattern_name (pat : constr_pattern) = match pat with
   | PFix (_, _) -> ["PFix"]
   | PCoFix (_, _) -> ["PCoFix"]
   | PInt _ -> ["PInt"]
-  | PFloat _ -> ["PFloat"]
 
 let constr_expr_r_name (expr : constr_expr_r) = match expr with
   | CRef (_, _) -> ["CRef"]
@@ -69,7 +68,6 @@ let glob_constr_r_name (expr : 'a glob_constr_r) = match expr with
   | GHole (_, _, _) -> ["GHole"]
   | GCast (_, _) -> ["GCast"]
   | GInt _ -> ["GInt"]
-  | GFloat _ -> ["GFloat"]
 
 let gen_tactic_arg_name (arg : 'a gen_tactic_arg) = match arg with
   | TacGeneric _ -> ["TacGeneric"]

@@ -21,6 +21,11 @@ open Glob_term
 
 *)
 
+let mem_constant kn env =
+  try
+    let _ = Environ.lookup_constant kn env in true
+  with Not_found -> false
+
 module TacticFinderDef = struct
   include MapDefTemplate (IdentityMonad)
   let map_sort = "tactic-finder"
@@ -37,7 +42,7 @@ open TacticFinderDef
 let inline_tactic env t =
   let rec glob_term_inline c = match DAst.get c with
     | GRef (ConstRef const, _) ->
-      if Environ.mem_constant const env then c else
+      if mem_constant const env then c else
         DAst.make @@ GEvar (Names.Id.of_string "private_constant_placeholder", [])
     | _ -> Glob_ops.map_glob_constr glob_term_inline c in
 
@@ -46,7 +51,7 @@ let inline_tactic env t =
   let mapper = { TacticFinderDef.default_mapper with
                  glob_constr = (fun t c -> c @@ DAst.get @@ glob_term_inline (DAst.make t))
                ; constant = (fun const ->
-                     if Environ.mem_constant const env then const else
+                     if mem_constant const env then const else
                        (match Coqlib.lib_ref "tactician.private_constant_placeholder" with
                         | Names.GlobRef.ConstRef const -> const
                         | _ -> assert false)
@@ -57,7 +62,7 @@ let inline_tactic env t =
 let inline env (outcomes, name, tactic) =
   let rec inline_constr c = match Constr.kind c with
     | Const (const, u) ->
-      if Environ.mem_constant const env then c else
+      if mem_constant const env then c else
         (* Total hack of course, because this is not typable. However, since Tactician generally does not
            store sigma contexts, evars are not typable anyway. When that changes, this should be fixed. *)
         of_kind @@ Evar (Evar.unsafe_of_int 0, [||])

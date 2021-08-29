@@ -1,6 +1,5 @@
 open Names
 open Constr
-open Sorts
 open Context
 
 type sexpr = Node of sexpr list | Leaf of string
@@ -32,7 +31,8 @@ let global2s g =
   let b = Nametab.path_of_global (a) in
   s2s (Libnames.string_of_path b)
 
-let sorts2s = function
+let sorts2s =
+  let open Sorts in function
   | SProp  -> [s2s "SProp"]
   | Prop   -> [s2s "Prop"]
   | Set    -> [s2s "Set"]
@@ -49,7 +49,8 @@ let cast_kind2s = function
   | DEFAULTcast -> s2s "DEFAULTcast"
   | REVERTcast -> s2s "REVERTcast"
 
-let relevance2s = function
+let relevance2s =
+  let open Sorts in function
   | Relevant -> s2s "Relevant"
   | Irrelevant -> s2s "Irrelevant"
 
@@ -101,7 +102,6 @@ let constr2s t =
     | CoFix (_, pd) -> Node (s2s "CoFix" :: prec_declaration2s ls pd)
     | Proj (proj, trm) -> Node [s2s "Proj"; constant2s (Projection.constant proj); aux ls trm] (* TODO: Improve *)
     | Int n -> Node [s2s "Int"; s2s (Uint63.to_string n)]
-    | Float n -> Node [s2s "Float"; s2s (Float64.to_string n)]
   and prec_declaration2s ls (ns, typs, trms) =
     let ids = Array.to_list (Array.map (fun n -> n.binder_name) ns) in
     [ Node (List.map name2s ids)

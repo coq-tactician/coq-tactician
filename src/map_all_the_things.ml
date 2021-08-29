@@ -15,7 +15,6 @@ open Loc
 open Names
 open Goal_select
 open Namegen
-open Libnames
 
 module type MapDef = sig
   include MonadNotations
@@ -542,14 +541,15 @@ module MakeMapper (M: MapDef) = struct
       let+ id = m.variable id in
       EvalVarRef id
 
-  let glob_sort_name_map m = function
-    | GType li ->
-      let+ li = m.cast @@ return li in
-      GType li
+  let glob_sort_gen_map f = function
+    | GType x ->
+      let+ x = f x in
+      GType x
     | x -> return x
 
-  let glob_sort_expr_map f = function
-    | UAnonymous x -> return (UAnonymous x)
+  let universe_kind_map f = function
+    | UAnonymous -> return UAnonymous
+    | UUnknown -> return UUnknown
     | UNamed x ->
       let+ x = f x in
       UNamed x
@@ -581,7 +581,9 @@ module MakeMapper (M: MapDef) = struct
       let+ id = f id in MsgIdent id
     | x -> return x
 
-  let glob_level_map m = glob_sort_expr_map (glob_sort_name_map m)
+  let level_info_map m = universe_kind_map m.qualid_map
+
+  let glob_level_map m = glob_sort_gen_map (level_info_map m)
 
   type 'a tactic_mapper = {
     tactic_map   : 'tacexpr map;
@@ -611,10 +613,10 @@ module MakeMapper (M: MapDef) = struct
   let rec glob_constr_r_map m r c' =
     let glob_constr_map = glob_constr_map m r in
     m.glob_constr c' @@ function
-     | GRef (r, l) ->
-       let+ r = globref_map m r
-       and+ l = option_map (List.map (glob_level_map m)) l in
-       GRef (r, l)
+     | GRef (re, l) ->
+       let+ re = globref_map m re
+       and+ l = option_map (List.map (glob_level_map (r m))) l in
+       GRef (re, l)
      | GVar id ->
        let+ id = m.variable id in
        GVar id
@@ -700,7 +702,6 @@ module MakeMapper (M: MapDef) = struct
        and+ c2 = cast_type_map glob_constr_map c2 in
        GCast (c1, c2)
      | GInt _ as c -> return c
-     | GFloat _ as c -> return c
   and glob_constr_map m r c = mdast m (glob_constr_r_map m r) c
 
   let rec cases_pattern_expr_r_map m r (case : cases_pattern_expr_r) =
@@ -986,7 +987,6 @@ module MakeMapper (M: MapDef) = struct
        and+ terms = with_binders fids @@ array_map constr_pattern_map terms in
        PCoFix (i, (ids, typs, terms))
      | PInt _ as pat -> return pat
-     | PFloat _ as pat -> return pat
 
   and glob_constr_and_expr_map m r (trm : g_trm) =
     m.glob_constr_and_expr trm @@ function (gc, ce) ->

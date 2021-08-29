@@ -74,3 +74,21 @@ module StateMonad (R : sig type s end) = struct
   let get x = fun s -> s, s
   let put s = fun _ -> s, ()
 end
+
+(* Taken from CString.is_prefix in Coq 8.11 *)
+let string_is_sub p s off =
+  let lp = String.length p in
+  let ls = String.length s in
+  if ls < off + lp then false
+  else
+    let rec aux i =
+      if lp <= i then true
+      else
+        let cp = String.unsafe_get p i in
+        let cs = String.unsafe_get s (off + i) in
+        if cp = cs then aux (succ i) else false
+    in
+    aux 0
+
+let string_is_prefix p s =
+  string_is_sub p s 0
