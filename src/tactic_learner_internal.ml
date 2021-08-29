@@ -60,11 +60,6 @@ module type TacticianStructures = sig
     { confidence : float
     ; focus      : int
     ; tactic     : tactic }
-
-  type location =
-    | Dependency
-    | File
-    | Lemma
 end
 
 module TS = struct
@@ -115,11 +110,6 @@ module TS = struct
     { confidence : float
     ; focus      : int
     ; tactic     : tactic }
-
-  type location =
-    | Dependency
-    | File
-    | Lemma
 end
 
 let goal_to_proof_state ps =
@@ -134,7 +124,7 @@ module type TacticianOnlineLearnerType =
     open TS
     type model
     val empty    : unit -> model
-    val learn    : model -> location -> outcome list -> tactic -> model (* TODO: Add lemma dependencies *)
+    val learn    : model -> Constant.t -> outcome list -> tactic -> model (* TODO: Add lemma dependencies *)
     val predict  : model -> situation list -> prediction IStream.t (* TODO: Add global environment *)
     val evaluate : model -> outcome -> tactic -> float * model
   end
@@ -143,7 +133,7 @@ module type TacticianOfflineLearnerType =
   functor (TS : TacticianStructures) -> sig
     open TS
     type model
-    val add      : location -> outcome list -> tactic -> unit (* TODO: Add lemma dependencies *)
+    val add      : Constant.t -> outcome list -> tactic -> unit (* TODO: Add lemma dependencies *)
     val train    : unit -> model
     val predict  : model -> situation list -> prediction IStream.t (* TODO: Add global environment *)
     val evaluate : model -> outcome -> tactic -> float

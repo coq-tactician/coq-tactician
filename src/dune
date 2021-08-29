@@ -30,6 +30,7 @@
    map_all_the_witnesses
    map_all_the_things
    sexpr
+   tactic_sexpr
    timeouttac
    tactician_util
  ))
