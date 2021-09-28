@@ -50,3 +50,9 @@ let mapper = { NormalizeDef.default_mapper with
              ; short_name = (fun _ -> None) }
 
 let tactic_normalize = NormalizeMapper.glob_tactic_expr_map mapper
+
+let mapper = { NormalizeDef.default_mapper with
+               glob_constr_and_expr = (fun (expr, _) g -> g (expr, None))
+             }
+
+let tactic_strict = NormalizeMapper.glob_tactic_expr_map mapper
