@@ -118,6 +118,15 @@ module ReaderStateMonad
   let local f x = fun r s -> x (f r) s
 end
 
+let record_map (f : Proofview.Goal.t -> 'a)
+    (gls : Proofview.Goal.t Proofview.tactic list) : 'a list Proofview.tactic =
+  let rec aux gls acc =
+    let open Proofview.Notations in
+    match gls with
+    | [] -> Proofview.tclUNIT (acc)
+    | gl::gls' -> gl >>= fun gl' -> aux gls' (f gl' :: acc) in
+  aux gls []
+
 let proof_state_to_string hyps goal env evar_map =
   let constr_str t = Sexpr.format_oneline (Printer.pr_econstr_env env evar_map t) in
   let goal = constr_str goal in
@@ -137,7 +146,7 @@ let proof_state_to_string hyps goal env evar_map =
 let pr_proof_tac () =
   let open Proofview in
   let open Notations in
-  Goal.goals >>= Ltacrecord.record_map (fun x -> x) >>= fun gls ->
+  Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
   let gls_string = List.map (fun gl ->
       let env = Proofview.Goal.env gl in
       let sigma = Proofview.Goal.sigma gl in

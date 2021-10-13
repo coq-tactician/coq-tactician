@@ -475,15 +475,6 @@ let add_to_db2 id ((outcomes, tac) : (Proofview.Goal.t * Proofview.Goal.t list) 
  *        (\*let feats = List.map Hashtbl.hash feats in*\)
  *        List.sort(\*_uniq*\) Int.compare feats *)
 
-let record_map (f : Proofview.Goal.t -> 'a)
-    (gls : Proofview.Goal.t Proofview.tactic list) : 'a list Proofview.tactic =
-  let rec aux gls acc =
-    let open Proofview.Notations in
-    match gls with
-    | [] -> Proofview.tclUNIT (acc)
-    | gl::gls' -> gl >>= fun gl' -> aux gls' (f gl' :: acc) in
-  aux gls []
-
 (* let () = Vernacentries.requirehook := (fun files ->
  *   let newrequires = List.map (fun (pair) -> CUnix.canonical_path_name (snd pair)) files in
  *   let newrequires = List.map (fun (file) -> (String.sub file 0 (String.length file - 2)) ^ "feat") newrequires in
