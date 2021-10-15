@@ -564,14 +564,6 @@ let tclDebugTac t env debug =
       tclPROGRESS tac2)
     else tclPROGRESS tac2
 
-let rec tclFold2 (d : 'a) (tac : 'a -> 'a Proofview.tactic) : 'a Proofview.tactic =
-    let open Proofview in
-    let open Notations in
-    (tclFOCUS ~nosuchgoal:(tclUNIT None) 1 1 (tac d >>= (fun x -> tclUNIT (Some x)))) >>=
-    function
-    | None -> tclUNIT d
-    | Some x -> tclFold2 x tac
-
 let predict =
   let open Proofview in
   let open Notations in
