@@ -4,7 +4,7 @@ open Names
 open Tactician_util
 
 module M = ReaderStateMonad
-  (struct type r = Id.t list type s = Id.t list end)
+  (struct type r = Id.t list type s = (Id.t * Id.t) list end)
 module AbstractDef = struct
   include MapDefTemplate(M)
   open M
@@ -29,7 +29,7 @@ let mapper = { AbstractDef.default_mapper with
                            if List.exists (Id.equal id) ids then return id else
                              let n = List.length args in
                              let id' = Id.of_string ("t" ^ string_of_int n) in
-                             put (id::args) >> return id')
+                             put ((id, id')::args) >> return id')
              }
 
 let tactic_abstract t =
