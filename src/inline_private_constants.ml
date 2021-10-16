@@ -1,11 +1,9 @@
 open Tactic_learner_internal
 open TS
 open Constr
-open Ltac_plugin
 open Tactician_util
 open Map_all_the_things
 open Genarg
-open Tacexpr
 open Glob_term
 
 (* This file has the purpose of dealing with side effects of the abstract tactic. This is all very

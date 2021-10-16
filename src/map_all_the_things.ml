@@ -15,7 +15,6 @@ open Loc
 open Names
 open Goal_select
 open Namegen
-open Libnames
 
 module type MapDef = sig
   include MonadNotations
