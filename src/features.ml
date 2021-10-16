@@ -130,6 +130,13 @@ module F (TS: TacticianStructures) = struct
     let mkfeats t = term_sexpr_to_simple_features max_length (term_sexpr t) in
     context_map mkfeats mkfeats ctx
 
+  let context_simple_ints ctx =
+    let ctx = context_simple_features 2 ctx in
+
+    (* Tail recursive version of map, because these lists can get very large. *)
+    let to_ints feats = List.sort_uniq Int.compare (List.rev_map Hashtbl.hash feats) in
+    context_map to_ints to_ints ctx
+
   let proof_state_to_simple_ints ps =
     let feats = proof_state_to_simple_features 2 ps in
     (* print_endline (String.concat ", " feats); *)
@@ -363,10 +370,6 @@ module F (TS: TacticianStructures) = struct
     (* Flatten must be tail recursive due to large lists *)
     List.rev_append (disting_hyps_goal goal_feats "GOAL-") (disting_hyps_goal (rev_flatten hyp_feats) "HYPS-")
 
-  let context_features_complex max_length ctx =
-    let mkfeats t = term_sexpr_to_complex_features max_length (term_sexpr t) in
-    context_map mkfeats mkfeats ctx
-
   let count_dup l =
     let sl = List.sort compare l in
     match sl with
@@ -375,6 +378,24 @@ module F (TS: TacticianStructures) = struct
       let acc,x,c = List.fold_left (fun (acc,x,c) y ->
           if y = x then acc,x,c+1 else (x,c)::acc, y,1) ([],hd,1) tl in
       (x,c)::acc
+
+  let context_complex_features max_length ctx =
+    let mkfeats t = term_sexpr_to_complex_features max_length (term_sexpr t) in
+    context_map mkfeats mkfeats ctx
+
+  let context_complex_ints ctx =
+    let ctx = context_complex_features 3 ctx in
+    let feats_with_count_pair = context_map count_dup count_dup ctx in
+    (* Tail recursive version of map, because these lists can get very large. *)
+    let feats_with_count_f pair = List.rev_map (fun ((feat_kind, feat), count) -> feat_kind, feat ^ "-" ^ (Stdlib.string_of_int count))
+        pair in
+    let feats_with_count = context_map feats_with_count_f feats_with_count_f feats_with_count_pair in
+    (* print_endline (String.concat ", "  (List.map Stdlib.snd feats_with_count)); *)
+    (* Tail recursive version of map, because these lists can get very large. *)
+    let feats f = List.rev_map (fun (feat_kind, feat) -> feat_kind, Hashtbl.hash feat) f in
+    let feats = context_map feats feats feats_with_count in
+    let sort f = List.sort_uniq (fun (_, feat1) (_, feat2) -> Int.compare feat1 feat2) f in
+    context_map sort sort feats
 
   let proof_state_to_complex_ints ps =
     let feats = proof_state_to_complex_features 3 ps in
