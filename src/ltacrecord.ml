@@ -153,15 +153,13 @@ let _ = Goptions.declare_bool_option recordoptions
 
 let _ = Random.self_init ()
 
-type data_in = outcome list * Names.Constant.t * tactic
-
 (* TODO: In interactive mode this is a memory leak, but it seems difficult to properly clean this table *)
 (* It might be possible to completely empty the db when a new lemma starts. *)
 type semilocaldb = data_in list
 let int64_to_knn : (Int64.t, semilocaldb * exn option * Safe_typing.private_constants) Hashtbl.t =
   Hashtbl.create 10
 
-let subst_outcomes (s, (outcomes, name, tac)) =
+let subst_outcomes (s, { outcomes;  name; tactic; _ }) =
   let subst_tac tac =
     let tac = tactic_repr tac in
     TS.tactic_make (Tacsubst.subst_tactic s tac) in
@@ -186,7 +184,7 @@ let subst_outcomes (s, (outcomes, name, tac)) =
       ; siblings = subst_pd siblings
       ; before = subst_pf before
       ; after = List.map subst_pf after }) outcomes in
-  (outcomes, Mod_subst.subst_constant s name, subst_tac tac)
+  { outcomes; name = Mod_subst.subst_constant s name; tactic = subst_tac tactic; status = Substituted }
 
 let tmp_ltac_defs = Summary.ref ~name:"TACTICIANTMPSECTION" []
 let in_section_ltac_defs : (Names.KerName.t * glob_tactic_expr) list -> Libobject.obj =
@@ -213,7 +211,7 @@ let rec with_let_prefix ltac_defs tac =
         prefix acc rem in
   prefix tac ltac_defs
 
-let rebuild_outcomes (outcomes, name, tac) =
+let rebuild_outcomes { outcomes; name; tactic; _ } =
   let rebuild_tac tac = tactic_make (with_let_prefix !tmp_ltac_defs (tactic_repr tac)) in
   let rec rebuild_pd = function
     | End -> End
@@ -225,10 +223,10 @@ let rebuild_outcomes (outcomes, name, tac) =
       { parents = List.map (fun (psa, pse) -> (psa, rebuild_ps pse)) parents
       ; siblings = rebuild_pd siblings
       ; before; after }) outcomes in
-  (outcomes, name, rebuild_tac tac)
+  { outcomes; name; tactic = rebuild_tac tactic; status = Discharged }
 
-let discharge_outcomes env (outcomes, name, tac) =
-  if !tmp_ltac_defs = [] then (outcomes, name, tac) else
+let discharge_outcomes env { outcomes; name; tactic; _ } =
+  if !tmp_ltac_defs = [] then {outcomes; name; tactic; status = Discharged } else
     let genarg_print_tac tac =
     let tac = tactic_repr tac in
     TS.tactic_make (discharge env tac) in
@@ -242,7 +240,7 @@ let discharge_outcomes env (outcomes, name, tac) =
         { parents = List.map (fun (psa, pse) -> (psa, genarg_print_ps pse)) parents
         ; siblings = genarg_print_pd siblings
         ; before; after }) outcomes in
-    (outcomes, name, genarg_print_tac tac)
+    { outcomes; name; tactic = genarg_print_tac tactic; status = Discharged }
 
 let section_ltac_helper bodies =
   tmp_ltac_defs := []; (* Safe to discard tmp state from old section discharge *)
@@ -300,11 +298,11 @@ let load_plugins () =
 
 let in_db : data_in -> Libobject.obj =
   Libobject.(declare_object { (default_object "LTACRECORD") with
-                              cache_function = (fun (n,((outcomes, name, tac) : data_in)) ->
-                                  learner_learn name outcomes tac)
-                            ; load_function = (fun i (n, (outcomes, name, tac)) ->
-                                  if !global_record then learner_learn name outcomes tac else ())
-                            ; open_function = (fun i (_, (execs, name, tac)) -> ())
+                              cache_function = (fun (n,({ outcomes; name; tactic; status } : data_in)) ->
+                                  learner_learn status name outcomes tactic)
+                            ; load_function = (fun i (n, { outcomes; name; tactic; status }) ->
+                                  if !global_record then learner_learn status name outcomes tactic else ())
+                            ; open_function = (fun i (_, data) -> ())
                             ; classify_function = (fun data -> Libobject.Substitute data)
                             ; subst_function = (fun x ->
                                 load_plugins (); subst_outcomes x)
@@ -440,13 +438,13 @@ let mk_outcome (st, sts) =
   ; before = st
   ; after = [] (* List.map goal_to_proof_state sts *) }
 
-let add_to_db2 id ((outcomes, tac) : (Proofview.Goal.t * Proofview.Goal.t list) list * glob_tactic_expr)
+let add_to_db2 id ((outcomes, tactic) : (Proofview.Goal.t * Proofview.Goal.t list) list * glob_tactic_expr)
     sideff name =
-  let tac = TS.tactic_make tac in
+  let tactic = TS.tactic_make tactic in
   let outcomes = List.map mk_outcome outcomes in
-  add_to_db (outcomes, name, tac);
+  add_to_db { outcomes; name; tactic; status = Original };
   let semidb, exn, _ = Hashtbl.find int64_to_knn id in
-  Hashtbl.replace int64_to_knn id ((outcomes, name, tac)::semidb, exn, sideff);
+  Hashtbl.replace int64_to_knn id ({ outcomes; name; tactic; status = Original }::semidb, exn, sideff);
   if !featureprinting then (
     (* let h s = string_of_int (Hashtbl.hash s) in
      * (\* let l2s fs = "[" ^ (String.concat ", " (List.map (fun x -> string_of_int x) fs)) ^ "]" in *\)
@@ -456,7 +454,7 @@ let add_to_db2 id ((outcomes, tac) : (Proofview.Goal.t * Proofview.Goal.t list) 
       (* "{\"before\": [" ^ String.concat ", " (List.map p2s before) ^ "]\n" ^
        * ", \"tacid\": " ^ (\*Base64.encode_string*\) h tac ^  "\n" ^
        * ", \"after\": [" ^ String.concat ", " (List.map p2s after) ^ "]}\n" in *)
-    print_to_feat (entry (outcomes, tac)))
+    print_to_feat (entry (outcomes, tactic)))
 
 (* let features term = List.map Hashtbl.hash (Features.extract_features (Hh_term.hhterm_of (Hh_term.econstr_to_constr term)))
  * 

@@ -7,6 +7,8 @@ type sexpr = Sexpr.sexpr = Node of sexpr list | Leaf of string
 
 module type TacticianStructures = Tactic_learner_internal.TacticianStructures
 
+type data_status = Tactic_learner_internal.data_status = Original | Substituted | Discharged
+
 module type TacticianOnlineLearnerType = Tactic_learner_internal.TacticianOnlineLearnerType
 module type TacticianOfflineLearnerType = Tactic_learner_internal.TacticianOfflineLearnerType
 

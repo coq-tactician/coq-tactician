@@ -119,12 +119,16 @@ let goal_to_proof_state ps =
   let hyps = EConstr.Unsafe.to_named_context (Proofview.Goal.hyps ps) in
   (hyps, goal)
 
+type data_status = Original | Substituted | Discharged
+
+type data_in = { outcomes : TS.outcome list; name : Names.Constant.t; tactic : TS.tactic ; status : data_status }
+
 module type TacticianOnlineLearnerType =
   functor (TS : TacticianStructures) -> sig
     open TS
     type model
     val empty    : unit -> model
-    val learn    : model -> Constant.t -> outcome list -> tactic -> model (* TODO: Add lemma dependencies *)
+    val learn    : model -> data_status -> Constant.t -> outcome list -> tactic -> model (* TODO: Add lemma dependencies *)
     val predict  : model -> situation list -> prediction IStream.t (* TODO: Add global environment *)
     val evaluate : model -> outcome -> tactic -> float * model
   end
@@ -133,7 +137,7 @@ module type TacticianOfflineLearnerType =
   functor (TS : TacticianStructures) -> sig
     open TS
     type model
-    val add      : Constant.t -> outcome list -> tactic -> unit (* TODO: Add lemma dependencies *)
+    val add      : data_status -> Constant.t -> outcome list -> tactic -> unit (* TODO: Add lemma dependencies *)
     val train    : unit -> model
     val predict  : model -> situation list -> prediction IStream.t (* TODO: Add global environment *)
     val evaluate : model -> outcome -> tactic -> float
@@ -143,7 +147,7 @@ let new_database name (module Learner : TacticianOnlineLearnerType) =
   let module Learner = Learner(TS) in
   (* Note: This is lazy to give people a chance to set GOptions before a learner gets initialized *)
   let db = Summary.ref ~name:("tactician-db-" ^ name) (lazy (Learner.empty ())) in
-  ( (fun loc exes tac -> db := Lazy.from_val @@ Learner.learn (Lazy.force !db) loc exes tac)
+  ( (fun status loc exes tac -> db := Lazy.from_val @@ Learner.learn (Lazy.force !db) status loc exes tac)
   , (fun t -> Learner.predict (Lazy.force !db) t)
   , (fun outcome tac -> let f, db' = Learner.evaluate (Lazy.force !db) outcome tac in
       db := Lazy.from_val db'; f))
@@ -151,7 +155,7 @@ let new_database name (module Learner : TacticianOnlineLearnerType) =
 module NullLearner : TacticianOnlineLearnerType = functor (_ : TacticianStructures) -> struct
   type model = unit
   let empty () = ()
-  let learn  () _ _ _ = ()
+  let learn  () _ _ _ _ = ()
   let predict () _ = IStream.empty
   let evaluate () _ _ = 0., ()
 end
@@ -166,17 +170,17 @@ let learner_predict p  = let _, x, _ = !current_learner in x p
 let learner_evaluate p = let _, _, x = !current_learner in x p
 
 let process_queue () =
-  List.iter (fun (l, o, t) -> learner_learn l o t) (List.rev !queue); queue := []
+  List.iter (fun (s, l, o, t) -> learner_learn s l o t) (List.rev !queue); queue := []
 
 let learner_predict s =
   process_queue ();
   learner_predict s
 
-let learner_learn l o t =
+let learner_learn s l o t =
   if !queue_enabled then
-    queue := (l, o, t)::!queue
+    queue := (s, l, o, t)::!queue
   else
-    learner_learn l o t
+    learner_learn s l o t
 
 let disable_queue () =
   process_queue (); queue_enabled := false
