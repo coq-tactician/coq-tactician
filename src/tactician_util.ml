@@ -155,3 +155,5 @@ let pr_proof_tac () =
       proof_state_to_string hyps goal env sigma)
       gls in
   List.iter Feedback.msg_notice gls_string; tclUNIT ()
+
+let safe_index0 f x l = try Some (CList.index0 f x l) with Not_found -> None
