@@ -8,6 +8,7 @@
    ltacrecord
    inline_private_constants
    diagonal_iterative_search
+   offline_evaluation_simulator_learner
    naiveknn_learner
    naiveknn_subst_learner
    trivial_learners
