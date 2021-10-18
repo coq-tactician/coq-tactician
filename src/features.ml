@@ -2,17 +2,13 @@ open Tactic_learner
 open Context
 open Learner_helper
 
-(* Tail recursive version of List.flatten *)
-let rev_flatten ll =
-  let rec go acc = function
-    | [] -> acc
-    | l :: r -> go (List.rev_append l acc) r
-  in
-  go [] ll
-
 type feat_kind = Struct | Seman | Verti
-type proof_state_part = Goal | Hyps
-(* int means the depth of the beginning of the semantic features *)
+type semantic_features = {interm:string list list list; acc:string list list}
+(*for `f(g(a), b)` and go to `a`
+  walk: the walk from root to `a`
+  walk_to_sibiling: walk from root to f such that we can calculate the walk to `b` basing on it*) 
+type vertical_features = {walk:string list; acc:string list list} 
+type features = {semantic : semantic_features; structure : string list; vertical: vertical_features}
 
 module F (TS: TacticianStructures) = struct
   module LH = L(TS)
@@ -123,8 +119,7 @@ module F (TS: TacticianStructures) = struct
           mkfeats typ @ mkfeats term)
         hyps in
     let x = mkfeats goal in
-    (* Must be tail recursive flatten because of large lists *)
-    List.rev_append x @@ rev_flatten hyp_feats
+    x @ List.flatten hyp_feats
 
   let context_simple_features max_length ctx =
     let mkfeats t = term_sexpr_to_simple_features max_length (term_sexpr t) in
@@ -139,237 +134,11 @@ module F (TS: TacticianStructures) = struct
 
   let proof_state_to_simple_ints ps =
     let feats = proof_state_to_simple_features 2 ps in
-    (* print_endline (String.concat ", " feats); *)
-
+    (* print_endline (String.concat ", " feats); *) 
     (* Tail recursive version of map, because these lists can get very large. *)
     let feats = List.rev_map Hashtbl.hash feats in
     List.sort_uniq Int.compare feats
-
-
-
-(*TODO: Every variable is renamed to a textual representation of its type*)
-
-  let term_sexpr_to_complex_features maxlength oterm =
-    let atomtypes = ["Evar"; "Rel"; "Construct"; "Ind"; "Const"; "Var"; "Int"; "Float"] in
-    let is_atom nodetype = List.exists (String.equal nodetype) atomtypes in
-    let atom_to_string atomtype content = match atomtype, content with
-      | "Rel", _ -> "R"
-      | "Evar", (Leaf _ :: _) -> "E"
-      | "Construct", Leaf c :: _
-      | "Ind", Leaf c :: _ -> c
-      | "Var", Leaf c :: _ -> c
-      | "Const", Leaf c :: _ -> c
-      | "Int", Leaf c :: _ -> "i" ^ c
-      | "Float", Leaf c :: _ -> "f" ^ c
-      | _, _ -> warn (Leaf "KAK") oterm; "*"
-    in
-    let wrap_partness str_list = ["("] @ str_list @ [")"] in
-    let node_type = ["Sort"; "Meta"; "LetIn"; "Case"; "Fix"; "CoFix";"Prod"; "Lambda"; "Proj"; "App";"Cast"] in
-    let is_correct_node node =
-      if List.mem node node_type
-      then true
-      else false in
-    let rec aux_struct term depth =
-      if depth > 2 then
-        match term with
-        | Node (Leaf nt :: _) when is_atom nt -> ["X"]
-        | Node (Leaf node :: _)  ->
-          if is_correct_node node then ["X"] else (warn term oterm; ["Error"])
-        | _ -> warn term oterm; ["Error"]
-      else
-        match term with
-        (* Interesting leafs *)
-        | Node (Leaf nt :: _) when is_atom nt ->
-          ["X"]
-        (* Uninteresting leafs *)
-        | Node (Leaf "Sort" :: _)
-        | Node (Leaf "Meta" :: _) -> []
-        | Node [Leaf "LetIn"; _; _; body1; typ; body2] ->
-          struct_feat_fold "LetIn" [body1; typ; body2] depth
-        | Node (Leaf "Case" :: _ :: term :: typ :: cases) ->
-          struct_feat_fold "Case" (term::typ::cases) depth
-        | Node [Leaf "Fix"; _; Node types; Node terms] ->
-          struct_feat_fold "Fix" (types@terms) depth
-        | Node [Leaf "CoFix"; _ ; Node types; Node terms] ->
-          struct_feat_fold "CoFix" (types@terms) depth
-        | Node [Leaf "Prod"  ; _; _; typ; body] ->
-          struct_feat_fold "Prod" [typ;body] depth
-        | Node [Leaf "Lambda"; _; _; typ; body] ->
-          struct_feat_fold "Lambda" [typ;body] depth
-        | Node [Leaf "Proj"; _; term] ->
-          struct_feat_fold "Proj" [term] depth
-        | Node (Leaf "App" :: head :: args) ->
-          (* List.length args in let *)
-          let arg_num = List.length args in
-          let func_feat = (aux_struct head (depth + 1)) @ [Stdlib.string_of_int arg_num] in
-          let arg_feat = List.fold_left
-            (fun struct_feats curr_term -> struct_feats @ aux_struct curr_term (depth + 1))
-            [] args in
-          wrap_partness ("App" :: (func_feat@arg_feat))
-          (* struct_feat_fold "App" (head :: args) depth *)
-        | Node [Leaf "Cast"; term; _; typ] ->
-          struct_feat_fold "Cast" [term; typ] depth
-        (* Hope and pray *)
-        | _ -> warn term oterm; ["Error"]
-    and struct_feat_fold binder term_list depth =
-      wrap_partness
-        (List.fold_left (fun struct_feats curr_term -> struct_feats @ aux_struct curr_term (depth + 1))
-      [binder] term_list)
-    in
-    (* for a tuple `(interm, acc)`:
-       - `interm` is an intermediate list of list of features that are still being assembled
-         invariant: `forall i ls, 0<i<=maxlength -> In ls (List.nth (i - 1)) -> List.length ls = i`
-       - `acc`: accumulates features that are fully assembled *)
-    let get_atom_with_role atomtype content role =
-      let atom = (atom_to_string atomtype content) in
-      atom ^":"^role
-    in
-    let add_atom atomtype content (interm, acc) role =
-      let atom_with_role = get_atom_with_role atomtype content role in
-      let interm' = [[atom_with_role]] ::
-        List.map (List.map (fun fs -> fs @ [atom_with_role])) interm in
-      (* use removelast to control the length of terms *)
-      (removelast interm', (List.flatten interm' @ acc)) in
-    let set_interm (_, acc) x = x, acc in
-    let start = replicate [] (maxlength - 1) in
-    let reset_interm f = set_interm f start in
-    let verti_atom atomtype content (interm, acc) role =
-      let atom_with_role = get_atom_with_role atomtype content role in
-      let new_interm = interm @ [atom_with_role] in
-      (new_interm, acc @ [new_interm]) in
-    let rec vert_next_level f term role =
-    (* if next node is atom, then add the role to the atom node directly, else
-       add role to the current path  *)
-      let (original_interm, original_acc) = f in
-      match term with
-      | Node (Leaf nt :: ls ) when is_atom nt ->
-        let _, new_acc = verti_atom nt ls f role in
-        (* for f(a,b), interm of (a) should not affect (b). Only acc is changed *)
-        (original_interm, new_acc)
-      | _ ->
-        let new_interm = original_interm @ [role] in
-        let f' = (new_interm, original_acc) in
-        aux_vert f' term
-    and vert_next_level_fold f terms roles =
-    List.fold_left (fun f' (term, role) -> vert_next_level f' term role) f (List.combine terms roles)
-    and aux_vert f term =
-    match term with
-      (* Interesting leafs *)
-      | Node (Leaf nt :: ls) when is_atom nt ->
-        verti_atom nt ls f "Id"
-      (* Uninteresting leafs *)
-      | Node (Leaf "Sort" :: _)
-      | Node (Leaf "Meta" :: _) -> f
-      (* Recursion for grammar we don't handle *)
-      (* TODO: Handle binders with feature substitution *)
-      | Node [Leaf "LetIn"; _; _; body1; typ; body2] ->
-        let roles = ["LetVarBody"; "LetVarType"; "LetBody"] in
-        vert_next_level_fold f [body1; typ; body2] roles
-      | Node (Leaf "Case" :: _ :: term :: typ :: cases) ->
-        let roles = (["MatchTerm"; "MatchTermType"] @ (rep_elem (List.length cases) "Case")) in
-        vert_next_level_fold f (term::typ::cases) roles
-      | Node [Leaf "Fix"; _; Node types; Node terms] ->
-        let roles = (rep_elem (List.length terms) "FixTerm")
-          @ (rep_elem (List.length types) "FixType") in
-        vert_next_level_fold f (terms @ types) roles
-      | Node [Leaf "CoFix"; _ ; Node types; Node terms] ->
-        let roles = (rep_elem (List.length terms) "CoFixTerm")
-          @ (rep_elem (List.length types) "CoFixType") in
-        vert_next_level_fold f (terms @ types) roles
-      (* TODO: Handle implication separately *)
-      | Node [Leaf "Prod"  ; _; _; typ; body] ->
-        vert_next_level_fold f [typ; body] ["ProdType"; "ProdBody"]
-      | Node [Leaf "Lambda"; _; _; typ; body] ->
-        vert_next_level_fold f [typ; body] ["LambdaType"; "LambdaBody"]
-      (* The golden path *)
-      | Node [Leaf "Proj"; _; term] ->
-        let roles = ["ProjTerm"] in
-        vert_next_level_fold f [term] roles
-      | Node (Leaf "App" :: head :: args) ->
-        let roles = "AppFun" :: (rep_elem (List.length args) "AppArg") in
-        vert_next_level_fold f (head::args) roles
-      | Node [Leaf "Cast"; term; _; typ] ->
-        let roles = ["CastTerm"; "CastType"] in
-        vert_next_level_fold f [term; typ] roles
-      (* Hope and pray *)
-      | term -> warn term oterm; f
-    in
-    let remove_ident seman_feats =
-      List.fold_left (fun acc feat -> if List.length feat < 2 then acc else
-      acc @ [feat] ) [] seman_feats
-    in
-    let rec aux_seman_reset f term role = reset_interm (aux_seman (reset_interm f) term role)
-    and aux_seman_reset_fold f terms roles =
-    List.fold_left (fun f' (term, role) -> aux_seman_reset f' term role) f (List.combine terms roles)
-    and aux_seman ((interm, _) as f) term role=
-    match term with
-      (* Interesting leafs *)
-      | Node (Leaf nt :: ls) when is_atom nt ->
-        add_atom nt ls f role
-      (* Uninteresting leafs *)
-      | Node (Leaf "Sort" :: _)
-      | Node (Leaf "Meta" :: _) -> f
-      (* Recursion for grammar we don't handle *)
-      (* TODO: Handle binders with feature substitution *)
-      | Node [Leaf "LetIn"; _; _; body1; typ; body2] ->
-        let roles = ["LetVarBody"; "LetVarType"; "LetBody"] in
-        aux_seman_reset_fold f [body1; typ; body2] roles
-      | Node (Leaf "Case" :: _ :: term :: typ :: cases) ->
-        let roles = (["MatchTerm"; "MatchTermType"] @ (rep_elem (List.length cases) "Case")) in
-        aux_seman_reset_fold f (term::typ::cases) roles
-      | Node [Leaf "Fix"; _; Node types; Node terms] ->
-        let roles = (rep_elem (List.length terms) "FixTerm")
-          @ (rep_elem (List.length types) "FixType") in
-        aux_seman_reset_fold f (terms @ types) roles
-      | Node [Leaf "CoFix"; _ ; Node types; Node terms] ->
-        let roles = (rep_elem (List.length terms) "CoFixTerm")
-          @ (rep_elem (List.length types) "CoFixType") in
-        aux_seman_reset_fold f (terms @ types) roles
-        (* TODO: Handle implication separately *)
-      | Node [Leaf "Prod"  ; _; _; typ; body] ->
-        (* let f' = aux_seman f typ "ProdType" in
-        aux_seman f' body "ProdBody" *)
-        aux_seman_reset_fold f [typ; body] ["ProdType"; "ProdBody"]
-      | Node [Leaf "Lambda"; _; _; typ; body] ->
-        aux_seman_reset_fold f [typ; body] ["LambdaType"; "LambdaBody"]
-        (* The golden path *)
-      | Node [Leaf "Proj"; p; term] ->
-        aux_seman (add_atom "Const" [p] f "Proj") term "Proj"
-      | Node (Leaf "App" :: head :: args) ->
-        let interm', _ as f' = aux_seman f head "AppFun" in
-        (* We reset back to `interm'` for every arg *)
-        reset_interm
-          (List.fold_left (fun f' t -> set_interm (aux_seman f' t "AppArg") interm') f' args)
-      | Node [Leaf "Cast"; term; _; typ] ->
-        (* We probably want to have the type of the cast, but isolated *)
-        aux_seman (set_interm (aux_seman (reset_interm f) typ "CastType") interm) term "CastTerm"
-      (* Hope and pray *)
-      | term -> warn term oterm; f
-    in
-    let _, vert_feats = aux_vert ([], []) oterm  in
-    let vert_feats = List.map (fun feat -> Verti, "Verti" :: feat) (remove_ident vert_feats) in
-    let struct_feats = Struct, "Struct" :: (aux_struct oterm 0) in
-    let _, seman_feats = (aux_seman (start, []) oterm "Init_Constr") in
-    let seman_feats = List.map (fun feat -> Seman, "Seman" :: feat) seman_feats in
-    (* We use tail-recursive rev_map instead of map to avoid stack overflows on large proof states *)
-    List.rev_map (fun (feat_kind, feats) -> feat_kind, String.concat "-" feats) ((struct_feats::vert_feats) @ seman_feats)
-
-  let proof_state_to_complex_features max_length ps =
-    let hyps = proof_state_hypotheses ps in
-    let goal = proof_state_goal ps in
-    let mkfeats t = term_sexpr_to_complex_features max_length (term_sexpr t) in
-    let hyp_id_typ_feats = List.map (function
-        | Named.Declaration.LocalAssum (id, typ) ->
-          (Names.Id.to_string id.binder_name), (sexpr_to_string (term_sexpr typ)), (mkfeats typ)
-        | Named.Declaration.LocalDef (id, term, typ) ->
-          (Names.Id.to_string id.binder_name),(sexpr_to_string (term_sexpr typ)), (mkfeats typ @ mkfeats term))
-        hyps in
-    let hyp_feats = List.map (fun (_, _, feats) -> feats) hyp_id_typ_feats in
-    let goal_feats = mkfeats goal in
-    (* seperate the goal from the local context *)
-    (* Flatten must be tail recursive due to large lists *)
-    List.rev_append (disting_hyps_goal goal_feats "GOAL-") (disting_hyps_goal (rev_flatten hyp_feats) "HYPS-")
-
+  
   let count_dup l =
     let sl = List.sort compare l in
     match sl with
@@ -377,14 +146,184 @@ module F (TS: TacticianStructures) = struct
     | hd::tl ->
       let acc,x,c = List.fold_left (fun (acc,x,c) y ->
           if y = x then acc,x,c+1 else (x,c)::acc, y,1) ([],hd,1) tl in
-      (x,c)::acc
+      (x,c)::acc    
+      
+  let term_sexpr_to_complex_features maxlength oterm =
+    let atomtypes = ["Evar"; "Rel"; "Construct"; "Ind"; "Const"; "Var"; "Int"; "Float"] in
+    let is_atom nodetype = List.exists (String.equal nodetype) atomtypes in
+    let atom_to_string atomtype content = match atomtype, content with
+      | "Rel", _ -> "R"
+      | "Evar", (Leaf _ :: _) -> "E"
+      | "Construct", Leaf c :: _
+      | "Ind", Leaf c :: _
+      | "Var", Leaf c :: _
+      | "Const", Leaf c :: _ -> c
+      | "Int", Leaf c :: _ -> "i" ^ c
+      | "Float", Leaf c :: _ -> "f" ^ c
+      | _, _ -> warn (Leaf "KAK") oterm; "*"
+    in
+    (* for a tuple `(interm, acc)`:
+       - `interm` is an intermediate list of list of features that are still being assembled
+         invariant: `forall i ls, 0<i<=maxlength -> In ls (List.nth (i - 1)) -> List.length ls = i`
+       - `acc`: accumulates features that are fully assembled *)
+    let add_atom atomtype content features =
+      let interm, acc = features.semantic.interm, features.semantic.acc in
+      let atom = atom_to_string atomtype content in
+      (* `interm` contains term tree walks to maximal depth, maximal depth - 1,..., 1 *)
+      let interm' = [[atom]] :: List.map (List.map (fun fs -> atom::fs)) interm in
+      (* Remove the last item to keep the maximal depth constraint. 
+        The length of `interm` = the maximal depth constraint. 
+        The initial `interm` is [[walk],[],...,[]]; thus, `removelast` will remove [] in the beginning *)
+      {interm = removelast interm'; acc = List.flatten interm' @ acc} 
+    in
+    let set_interm features x = {features with semantic = {features.semantic with interm = x}} in
+    let set_walk features x = {features with vertical = {features.vertical with walk = x}} in 
+    let start = replicate [] (maxlength - 1) in
+    let init_features = {semantic = {interm = replicate [] (maxlength - 1); acc = []} ; 
+      structure = []; vertical = {walk = []; acc = []}} in
+    let reset_interm features = set_interm features start in
+    let start_structure features role =
+      {features with structure = features.structure @ ["(" ; role]}  
+    in 
+    let end_structure features =
+       {features with structure = features.structure @ [")"] }
+    in    
+    let verti_atom atomtype content features role =
+      if List.length features.vertical.walk == 1 then
+        features
+      else  
+        let atom_with_role = (atom_to_string atomtype content) ^":"^role in 
+        {features with vertical = {
+          features.vertical with acc = 
+          (features.vertical.walk@[atom_with_role]) :: features.vertical.acc 
+        }} 
+    in  
+    let calculate_vertical_features term role features =
+      match term with
+      | Node (Leaf nt :: ls ) when is_atom nt ->
+        let features' = verti_atom nt ls features role in
+        features'
+      | _ ->
+        {features with vertical = {
+          features.vertical with walk = (features.vertical.walk@[role])}}
+    in    
+    let rec aux_reset features (term, role) depth walk =
+      let reset_features = reset_interm features in 
+      let reset_features = set_walk reset_features walk in
+      let features' = aux reset_features term role depth in
+      reset_interm features'
+    and aux_reset_fold features term_role_pairs depth = 
+      let walk = features.vertical.walk in
+      let next_level_depth = depth + 1 in
+      List.fold_left (fun features' term_role_pair-> 
+        aux_reset features' term_role_pair next_level_depth walk) features term_role_pairs 
+    and aux features term role depth = 
+      let features = calculate_vertical_features term role features in
+      let features = match term with
+        (* Interesting leafs *)
+        | Node (Leaf nt :: ls) when is_atom nt ->
+          if depth > 2 then
+            {features with semantic = add_atom nt ls features}
+          else
+            {semantic = add_atom nt ls features;
+            structure = features.structure @ ["X"]; 
+            vertical = features.vertical}
+        (* Uninteresting leafs *)
+        | Node (Leaf "Sort" :: _)
+        | Node (Leaf "Meta" :: _) -> features
+        (* Recursion for grammar we don't handle *)
+        | Node [Leaf "LetIn"; _id; _; body1; typ; body2] ->
+          let roles = ["LetVarBody"; "LetVarType"; "LetBody"] in
+          end_structure (aux_reset_fold (start_structure features "LetIn") 
+          (List.combine [body1; typ; body2] roles) depth)
+        | Node (Leaf "Case" :: _ :: term :: typ :: cases) ->
+          let roles = (["MatchTerm"; "MatchTermType"] @ (rep_elem (List.length cases) "Case")) in
+          end_structure (aux_reset_fold (start_structure features "Case") 
+          (List.combine (term::typ::cases) roles) depth)
+        | Node [Leaf "Fix"; _; Node types; Node terms] ->
+          let roles = (rep_elem (List.length terms) "FixTerm") @ (rep_elem (List.length types) "FixType") in
+          end_structure (aux_reset_fold (start_structure features "Fix") (List.combine (terms @ types) roles) depth) 
+        | Node [Leaf "CoFix"; _ ; Node types; Node terms] ->
+          let roles = (rep_elem (List.length terms) "CoFixTerm") @ (rep_elem (List.length types) "CoFixType") in
+          end_structure (aux_reset_fold (start_structure features "CoFix") (List.combine (terms @ types) roles) depth) 
+        | Node [Leaf "Prod"  ; _; _; typ; body] ->
+          let roles = ["ProdType"; "ProdBody"] in
+          end_structure(aux_reset_fold (start_structure features "Prod") (List.combine [typ; body] roles) depth) 
+        | Node [Leaf "Lambda"; _; _; typ; body] -> 
+          let roles = ["LambdaType"; "LambdaBody"] in
+          end_structure(aux_reset_fold (start_structure features "Lambda") (List.combine [typ; body] roles) depth) 
+        (* The golden path *)
+        | Node [Leaf "Proj"; p; term] -> 
+          let features' = start_structure {features with semantic = add_atom "Const" [p] features} "Proj"
+          in end_structure (aux features' term "ProjTerm" (depth + 1))
+        | Node (Leaf "App" :: head :: args) ->
+          let walk = features.vertical.walk in
+          let arg_num = List.length args in
+          let features_with_head = aux (start_structure features "App") head "AppFun" (depth + 1) in
+          let features_with_head_and_arg_num = 
+            {features_with_head with structure = features_with_head.structure @ [Stdlib.string_of_int arg_num]} in
+          let feature' = List.fold_left (fun features arg ->
+            let features = set_walk features walk in
+            let features_this_arg = aux features arg "AppArg" (depth + 1) in
+            (* We reset back to `interm` of `features_with_head_and_arg_num` for every arg *)
+            set_interm features_this_arg features_with_head_and_arg_num.semantic.interm) 
+            features_with_head_and_arg_num args 
+          in
+          end_structure(reset_interm feature')
+        | Node [Leaf "Cast"; term; _; typ] ->
+          (* We probably want to have the type of the cast, but isolated *)
+          let features_reset = reset_interm features in
+          let features_with_type = aux (start_structure features_reset "Cast") typ "CastType" (depth + 1) in
+          let feature' = set_interm features_with_type features.semantic.interm in
+          end_structure (aux feature' term "CastTerm" (depth + 1)) 
+        (* Hope and pray *)
+        | term -> warn term oterm; features
+      in
+      if depth == 3 then
+        (* break the maximal depth constraint*) 
+        {features with structure = features.structure@["X"]}
+      else features 
+    in
+    let features = aux init_features oterm "Root" 0 in
+    (* We use tail-recursive rev_map instead of map to avoid stack overflows on large proof states *)
+    let add_feature_kind features kind = List.map (fun feature -> kind, feature) features in
+    List.rev_map (fun (feat_kind, feats) -> feat_kind, String.concat "-" feats) (
+      (Struct, features.structure) :: 
+      ((add_feature_kind features.semantic.acc Seman) @ 
+      (add_feature_kind features.vertical.acc Verti)))
+
+    let proof_state_to_complex_features max_length ps =
+      let hyps = proof_state_hypotheses ps in
+      let goal = proof_state_goal ps in
+      let mkfeats t = term_sexpr_to_complex_features max_length (term_sexpr t) in
+      let hyp_id_typ_feats = List.map (function
+          | Named.Declaration.LocalAssum (id, typ) ->
+            (Names.Id.to_string id.binder_name), (sexpr_to_string (term_sexpr typ)), (mkfeats typ)
+          | Named.Declaration.LocalDef (id, term, typ) ->
+            (Names.Id.to_string id.binder_name),(sexpr_to_string (term_sexpr typ)), (mkfeats typ @ mkfeats term))
+          hyps in
+      let hyp_feats = List.map (fun (_, _, feats) -> feats) hyp_id_typ_feats in
+      let goal_feats = mkfeats goal in
+      (* seperate the goal from the local context *)  
+      (List.map (fun (kind, feat) -> kind, "GOAL-"^ feat) goal_feats) @  
+      (List.map (fun (kind, feat) -> kind, "HYPS-"^ feat) (List.flatten hyp_feats)) 
+
+  let proof_state_to_complex_ints ps =
+    let complex_feats = proof_state_to_complex_features 2 ps in
+    let feats_with_count_pair = count_dup complex_feats in 
+    (* Tail recursive version of map, because these lists can get very large. *)
+    let feats_with_count = List.rev_map (fun ((kind, feat), count) -> kind, feat ^ "-" ^ (Stdlib.string_of_int count))
+        feats_with_count_pair in 
+    (* print_endline (String.concat ", "  (List.map Stdlib.snd complex_feats)); *)
+    let feats = List.rev_map (fun (kind, feat) ->  kind, Hashtbl.hash feat) feats_with_count in
+    List.sort_uniq (fun (_kind1, feat1) (_kind2, feat2) -> Int.compare feat1 feat2) feats
 
   let context_complex_features max_length ctx =
     let mkfeats t = term_sexpr_to_complex_features max_length (term_sexpr t) in
     context_map mkfeats mkfeats ctx
 
   let context_complex_ints ctx =
-    let ctx = context_complex_features 3 ctx in
+    let ctx = context_complex_features 2 ctx in
     let feats_with_count_pair = context_map count_dup count_dup ctx in
     (* Tail recursive version of map, because these lists can get very large. *)
     let feats_with_count_f pair = List.rev_map (fun ((feat_kind, feat), count) -> feat_kind, feat ^ "-" ^ (Stdlib.string_of_int count))
@@ -396,17 +335,6 @@ module F (TS: TacticianStructures) = struct
     let feats = context_map feats feats feats_with_count in
     let sort f = List.sort_uniq (fun (_, feat1) (_, feat2) -> Int.compare feat1 feat2) f in
     context_map sort sort feats
-
-  let proof_state_to_complex_ints ps =
-    let feats = proof_state_to_complex_features 3 ps in
-    let feats_with_count_pair = count_dup feats in
-    (* Tail recursive version of map, because these lists can get very large. *)
-    let feats_with_count = List.rev_map (fun ((feat_kind, feat), count) -> feat_kind, feat ^ "-" ^ (Stdlib.string_of_int count))
-        feats_with_count_pair in
-    (* print_endline (String.concat ", "  (List.map Stdlib.snd feats_with_count)); *)
-    (* Tail recursive version of map, because these lists can get very large. *)
-    let feats = List.rev_map (fun (feat_kind, feat) -> feat_kind, Hashtbl.hash feat) feats_with_count in
-    List.sort_uniq (fun (_, feat1) (_, feat2) -> Int.compare feat1 feat2) feats
 
   let tfidf size freqs ls1 ls2 =
     let inter = intersect compare ls1 ls2 in
@@ -429,7 +357,7 @@ module F (TS: TacticianStructures) = struct
       (List.map
          (fun (feat_kind, f) ->
             if feat_kind == Struct
-            then (Float.of_int(2) *. similarity_for_one_feat f)
+            then (Float.of_int(1) *. similarity_for_one_feat f)
             else similarity_for_one_feat f)
          inter)
 
