@@ -143,14 +143,23 @@ module type TacticianOfflineLearnerType =
     val evaluate : model -> outcome -> tactic -> float
   end
 
-let new_database name (module Learner : TacticianOnlineLearnerType) =
+type dynamic_learner =
+  { learn : data_status -> Constant.t -> TS.outcome list -> TS.tactic -> dynamic_learner
+  ; predict : TS.situation list -> TS.prediction IStream.t
+  ; evaluate : TS.outcome -> TS.tactic -> dynamic_learner * float }
+
+let new_learner (module Learner : TacticianOnlineLearnerType) =
   let module Learner = Learner(TS) in
+  let rec recurse model =
+    { learn = (fun status loc exes tac ->
+          recurse @@ Lazy.from_val @@ Learner.learn (Lazy.force model) status loc exes tac)
+    ; predict = (fun t ->
+          Learner.predict (Lazy.force model) t)
+    ; evaluate = (fun outcome tac ->
+          let f, model = Learner.evaluate (Lazy.force model) outcome tac in
+          recurse @@ Lazy.from_val model, f) } in
   (* Note: This is lazy to give people a chance to set GOptions before a learner gets initialized *)
-  let db = Summary.ref ~name:("tactician-db-" ^ name) (lazy (Learner.empty ())) in
-  ( (fun status loc exes tac -> db := Lazy.from_val @@ Learner.learn (Lazy.force !db) status loc exes tac)
-  , (fun t -> Learner.predict (Lazy.force !db) t)
-  , (fun outcome tac -> let f, db' = Learner.evaluate (Lazy.force !db) outcome tac in
-      db := Lazy.from_val db'; f))
+  recurse (lazy (Learner.empty ()))
 
 module NullLearner : TacticianOnlineLearnerType = functor (_ : TacticianStructures) -> struct
   type model = unit
@@ -160,14 +169,18 @@ module NullLearner : TacticianOnlineLearnerType = functor (_ : TacticianStructur
   let evaluate () _ _ = 0., ()
 end
 
-let current_learner = ref (new_database "null" (module NullLearner : TacticianOnlineLearnerType))
+let current_learner_empty = ref (new_learner (module NullLearner : TacticianOnlineLearnerType))
+let current_learner = Summary.ref ~name:("tactician-db") (new_learner (module NullLearner : TacticianOnlineLearnerType))
 
 let queue_enabled = Summary.ref ~name: "tactician-queue-enabled" true
 let queue = Summary.ref ~name:"tactician-queue" []
 
-let learner_learn p    = let x, _, _ = !current_learner in x p
-let learner_predict p  = let _, x, _ = !current_learner in x p
-let learner_evaluate p = let _, _, x = !current_learner in x p
+let learner_learn status name outcomes tactic =
+  current_learner := !current_learner.learn status name outcomes tactic
+let learner_predict p  = !current_learner.predict p
+let learner_evaluate outcome tactic =
+  let learner, f = !current_learner.evaluate outcome tactic in
+  current_learner := learner; f
 
 let process_queue () =
   List.iter (fun (s, l, o, t) -> learner_learn s l o t) (List.rev !queue); queue := []
@@ -186,6 +199,6 @@ let disable_queue () =
   process_queue (); queue_enabled := false
 
 let register_online_learner name learner : unit =
-  current_learner := new_database name learner
+  current_learner := new_learner learner
 
 let register_offline_learner name learner : unit = ()
