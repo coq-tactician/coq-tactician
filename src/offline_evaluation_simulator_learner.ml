@@ -176,5 +176,5 @@ module OfflineEvaluationSimulatorLearner : TacticianOnlineLearnerType = functor 
   let () = Declaremods.append_end_library_hook endline_hook
 end
 
-let () = register_online_learner "offline-evaluation-simulator-learner" (module OfflineEvaluationSimulatorLearner)
-let () = Tactic_learner_internal.disable_queue ()
+(* let () = register_online_learner "offline-evaluation-simulator-learner" (module OfflineEvaluationSimulatorLearner) *)
+(* let () = Tactic_learner_internal.disable_queue () *)
