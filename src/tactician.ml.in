@@ -203,7 +203,6 @@ let stdlib () =
   `Ok ()
 
 let exec_command cmd args =
-  (* TODO: Use internal opam API to retrieve this *)
   let wt = "%{coq-tactician:lib}%/with-tactician" in
   Unix.execv wt (Array.of_list (wt::cmd::args))
 
