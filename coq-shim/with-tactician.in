@@ -43,6 +43,14 @@ inject_bwrap () {
           --die-with-parent "$@"
 }
 
+write_wrapper_path () {
+    cat <<EOF > ${1}
+#!/bin/bash
+$OPAMBIN/${2} $TACTICIANFLAGS $TACTICIANEXTRAFLAGS "\$@"
+EOF
+    chmod +x ${1}
+}
+
 inject_path () {
     trap 'rm -rf "$COQBIN"' EXIT
     # The coqbin has to be in the build directory, since that is the only dir that is both
@@ -56,14 +64,10 @@ inject_path () {
     link_binary coq_makefile
     link_binary coqpp
     link_binary coq-tex
-    link_binary coqtop
     link_binary coqwc
 
-    cat <<EOF > $COQBIN/coqc
-#!/bin/bash
-$OPAMBIN/coqc $TACTICIANFLAGS TACTICIANEXTRAFLAGS "\$@"
-EOF
-    chmod +x $COQBIN/coqc
+    write_wrapper_path $COQBIN/coqc "coqc"
+    write_wrapper_path $COQBIN/coqtop "coqtop"
 
     PATH=$(pwd)/$COQBIN:$PATH; export PATH
     # We add a trailing slash because some scripts assume it
