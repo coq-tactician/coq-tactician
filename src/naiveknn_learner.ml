@@ -44,7 +44,7 @@ module NaiveKnn = functor (TS : TacticianStructures) -> struct
     let l = if db.length >= max then db.length else db.length + 1 in
     {entries = comb::purgedentries; length = l; frequencies = newfreq}
 
-  let learn db _loc outcomes tac to_feat =
+  let learn db _status _loc outcomes tac to_feat =
     List.fold_left (fun db out -> add db out.before tac to_feat) db outcomes
 
   let predict db f to_feat tfidf =
@@ -66,7 +66,7 @@ module SimpleNaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStru
   include NaiveKnn
   module FH = F(TS)
   open FH
-  let learn db _loc outcomes tac = learn db _loc outcomes tac proof_state_to_simple_ints
+  let learn db _status _loc outcomes tac = learn db _status _loc outcomes tac proof_state_to_simple_ints
   let predict db _ f = predict db f proof_state_to_simple_ints tfidf
 end
 
@@ -75,7 +75,7 @@ module ComplexNaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStr
   include NaiveKnn
   module FH = F(TS)
   open FH
-  let learn db _loc outcomes tac = learn db _loc outcomes tac
+  let learn db _status _loc outcomes tac = learn db _status _loc outcomes tac
       (fun x -> remove_feat_kind @@ proof_state_to_complex_ints x)
   let predict db _ f = predict db f proof_state_to_complex_ints manually_weighed_tfidf
 

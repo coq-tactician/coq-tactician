@@ -95,8 +95,8 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
     let dirp = Global.current_dirpath () in
     if Libnames.is_dirpath_prefix_of dirp (Names.ModPath.dp @@ Names.Constant.modpath name) then `File else `Dependency
 
-  let learn db name outcomes tac =
-    let lshfnew = LSHF.learn db.lshf name outcomes tac in
+  let learn db status name outcomes tac =
+    let lshfnew = LSHF.learn db.lshf status name outcomes tac in
     match cache_type name with
     | `File ->
       let newdb = List.map (fun outcome ->

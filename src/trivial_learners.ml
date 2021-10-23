@@ -3,7 +3,7 @@ open Tactic_learner
 module NullLearner : TacticianOnlineLearnerType = functor (_ : TacticianStructures) -> struct
   type model = unit
   let empty () = ()
-  let learn () _ _ _ = ()
+  let learn () _ _ _ _ = ()
   let predict () _ _ = IStream.empty
 let evaluate () _ _ = 0., ()
 end
@@ -14,7 +14,7 @@ module PrintLearner : TacticianOnlineLearnerType = functor (TS : TacticianStruct
   open LH
   type model = unit
   let empty () = ()
-  let learn () _ outcomes tac =
+  let learn () _ _ outcomes tac =
     let tactic_to_string t = sexpr_to_string (tactic_sexpr t) in
     print_endline "------------------------------";
     print_endline "Tactic:";
@@ -46,7 +46,7 @@ module ReverseAddedOrder : TacticianOnlineLearnerType = functor (TS : TacticianS
   open TS
   type model = tactic list
   let empty () = []
-  let learn db _ _ tac = tac::db
+  let learn db _ _ _ tac = tac::db
   let predict db _ _ = IStream.of_list (List.map (fun tac -> {confidence = 1.; focus = 0; tactic = tac}) db)
   let evaluate db _ _ = 1., db
 end
@@ -55,7 +55,7 @@ module AddedOrder : TacticianOnlineLearnerType = functor (TS : TacticianStructur
   open TS
   type model = tactic list
   let empty () = []
-  let learn db _ _ tac = tac::db
+  let learn db _ _ _ tac = tac::db
   let predict db _ _ = IStream.of_list (List.map (fun tac -> {confidence = 1.; focus = 0; tactic = tac}) (List.rev db))
   let evaluate db _ _ = 1., db
 end
@@ -64,7 +64,7 @@ module Random : TacticianOnlineLearnerType = functor (TS : TacticianStructures) 
   open TS
   type model = tactic list
   let empty () = []
-  let learn db _ _ tac = tac::db
+  let learn db _ _ _ tac = tac::db
 
   let shuffle d =
     let nd = List.map (fun c -> (Random.bits (), c)) d in

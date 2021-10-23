@@ -1,11 +1,9 @@
 open Tactic_learner_internal
 open TS
 open Constr
-open Ltac_plugin
 open Tactician_util
 open Map_all_the_things
 open Genarg
-open Tacexpr
 open Glob_term
 
 (* This file has the purpose of dealing with side effects of the abstract tactic. This is all very
@@ -54,7 +52,7 @@ let inline_tactic env t =
                } in
   TacticFinderMapper.glob_tactic_expr_map mapper t
 
-let inline env (outcomes, name, tactic) =
+let inline env { outcomes; name; tactic; status } =
   let inline_tactic t = tactic_make @@ inline_tactic env @@ tactic_repr t in
   let rec inline_constr c = match Constr.kind c with
     | Const (const, u) ->
@@ -79,7 +77,10 @@ let inline env (outcomes, name, tactic) =
     ; before = inline_proof_state before
     ; after = List.map inline_proof_state after
     ; preds = List.map (fun (t, ps) -> inline_tactic t, Option.map (List.map inline_proof_state) ps) preds} in
-  List.map inline_outcome outcomes, name, inline_tactic tactic
+  { outcomes = List.map inline_outcome outcomes
+  ; name
+  ; tactic = inline_tactic tactic
+  ; status }
 
 let inline env sideff t =
   if sideff = Safe_typing.empty_private_constants then t else inline env t

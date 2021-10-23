@@ -121,12 +121,16 @@ let goal_to_proof_state ps =
   let hyps = EConstr.Unsafe.to_named_context (Proofview.Goal.hyps ps) in
   (hyps, goal)
 
+type data_status = Original | Substituted | Discharged
+
+type data_in = { outcomes : TS.outcome list; name : Names.Constant.t; tactic : TS.tactic ; status : data_status }
+
 module type TacticianOnlineLearnerType =
   functor (TS : TacticianStructures) -> sig
     open TS
     type model
     val empty    : unit -> model
-    val learn    : model -> Constant.t -> outcome list -> tactic -> model (* TODO: Add lemma dependencies *)
+    val learn    : model -> data_status -> Constant.t -> outcome list -> tactic -> model (* TODO: Add lemma dependencies *)
     val predict  : model -> Constant.t -> situation list -> prediction IStream.t (* TODO: Add global environment *)
     val evaluate : model -> outcome -> tactic -> float * model
   end
@@ -135,55 +139,63 @@ module type TacticianOfflineLearnerType =
   functor (TS : TacticianStructures) -> sig
     open TS
     type model
-    val add      : Constant.t -> outcome list -> tactic -> unit (* TODO: Add lemma dependencies *)
+    val add      : data_status -> Constant.t -> outcome list -> tactic -> unit (* TODO: Add lemma dependencies *)
     val train    : unit -> model
     val predict  : model -> Constant.t -> situation list -> prediction IStream.t (* TODO: Add global environment *)
     val evaluate : model -> outcome -> tactic -> float
   end
 
-let new_database name (module Learner : TacticianOnlineLearnerType) =
+type dynamic_learner =
+  { learn : data_status -> Constant.t -> TS.outcome list -> TS.tactic -> dynamic_learner
+  ; predict : Constant.t -> TS.situation list -> TS.prediction IStream.t
+  ; evaluate : TS.outcome -> TS.tactic -> dynamic_learner * float }
+
+let new_learner (module Learner : TacticianOnlineLearnerType) =
   let module Learner = Learner(TS) in
+  let rec recurse model =
+    { learn = (fun status loc exes tac ->
+          recurse @@ Lazy.from_val @@ Learner.learn (Lazy.force model) status loc exes tac)
+    ; predict = (fun t ->
+          Learner.predict (Lazy.force model) t)
+    ; evaluate = (fun outcome tac ->
+          let f, model = Learner.evaluate (Lazy.force model) outcome tac in
+          recurse @@ Lazy.from_val model, f) } in
   (* Note: This is lazy to give people a chance to set GOptions before a learner gets initialized *)
-  let db = Summary.ref ~name:("tactician-db-" ^ name) (lazy (Learner.empty ())) in
-  ( (fun loc exes tac -> db := Lazy.from_val @@ Learner.learn (Lazy.force !db) loc exes tac)
-  , (fun t -> Learner.predict (Lazy.force !db) t)
-  , (fun outcome tac -> let f, db' = Learner.evaluate (Lazy.force !db) outcome tac in
-      db := Lazy.from_val db'; f))
+  recurse (lazy (Learner.empty ()))
 
 module NullLearner : TacticianOnlineLearnerType = functor (_ : TacticianStructures) -> struct
   type model = unit
   let empty () = ()
-  let learn  () _ _ _ = ()
+  let learn  () _ _ _ _ = ()
   let predict () _ _ = IStream.empty
   let evaluate () _ _ = 0., ()
 end
 
-let current_learner = ref (new_database "null" (module NullLearner : TacticianOnlineLearnerType))
+let current_learner = Summary.ref ~name:("tactician-db") (new_learner (module NullLearner : TacticianOnlineLearnerType))
 
 let queue_enabled = Summary.ref ~name: "tactician-queue-enabled" true
 let queue = Summary.ref ~name:"tactician-queue" []
 
-let learner_learn p    = let x, _, _ = !current_learner in x p
-let learner_predict p  = let _, x, _ = !current_learner in x p
-let learner_evaluate p = let _, _, x = !current_learner in x p
+let learner_learn status name outcomes tactic =
+  current_learner := !current_learner.learn status name outcomes tactic
 
 let process_queue () =
-  List.iter (fun (l, o, t) -> learner_learn l o t) (List.rev !queue); queue := []
+  List.iter (fun (s, l, o, t) -> learner_learn s l o t) (List.rev !queue); queue := []
 
-let learner_predict s =
+let learner_get () =
   process_queue ();
-  learner_predict s
+  !current_learner
 
-let learner_learn l o t =
+let learner_learn s l o t =
   if !queue_enabled then
-    queue := (l, o, t)::!queue
+    queue := (s, l, o, t)::!queue
   else
-    learner_learn l o t
+    learner_learn s l o t
 
 let disable_queue () =
   process_queue (); queue_enabled := false
 
 let register_online_learner name learner : unit =
-  current_learner := new_database name learner
+  current_learner := new_learner learner
 
 let register_offline_learner name learner : unit = ()
