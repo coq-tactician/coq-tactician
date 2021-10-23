@@ -379,14 +379,14 @@ let set_record b =
 
 let set_name n =
   modify_field name_field (fun _ -> n, ())
-    (fun i -> Names.Constant.make2 Names.ModPath.initial (Names.Label.of_id @@ Names.Id.of_string "xxxxxxxx"))
+    (fun i -> Names.Constant.make2 Names.ModPath.initial (Names.Label.of_id @@ Names.Id.of_string "__tactician__"))
 
 let get_record () =
   modify_field record_field (fun b -> b, b) (fun i -> true)
 
 let get_name () =
   modify_field name_field (fun n -> n, n)
-    (fun i -> Names.Constant.make2 Names.ModPath.initial (Names.Label.of_id @@ Names.Id.of_string "xxxxxxxx"))
+    (fun i -> Names.Constant.make2 Names.ModPath.initial (Names.Label.of_id @@ Names.Id.of_string "__tactician__"))
 
 let push_localdb x =
   modify_field localdb_field (fun db -> x::db, ()) (fun () -> [])
