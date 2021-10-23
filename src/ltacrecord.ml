@@ -323,7 +323,21 @@ type goal_stack = Proofview.Goal.t list list
 type tactic_trace = glob_tactic_expr list
 type state_id_stack = int list
 
+let mk_outcome (st, sts) =
+  (* let mem = (List.map TS.tactic_make (get_tactic_trace st)) in *)
+  let st : proof_state = goal_to_proof_state st in
+  { parents = [] (* List.map (fun tac -> (st (\* TODO: Fix *\), { executions = []; tactic = tac })) mem *)
+  ; siblings = End
+  ; before = st
+  ; after = [] (* List.map goal_to_proof_state sts *) }
+
+let mk_data_in outcomes tactic name =
+  let tactic = TS.tactic_make tactic in
+  let outcomes = List.map mk_outcome outcomes in
+  { outcomes; name; tactic; status = Original }
+
 let record_field : bool Evd.Store.field = Evd.Store.field ()
+let name_field : Names.Constant.t Evd.Store.field = Evd.Store.field ()
 let localdb_field : localdb Evd.Store.field = Evd.Store.field ()
 let goal_stack_field : goal_stack Evd.Store.field = Evd.Store.field ()
 let tactic_trace_field : tactic_trace Proofview_monad.StateStore.field = Proofview_monad.StateStore.field ()
@@ -369,14 +383,25 @@ let get_field_goal2 fi gl d =
 let set_record b =
   modify_field record_field (fun _ -> b, ()) (fun i -> true)
 
+let set_name n =
+  modify_field name_field (fun _ -> n, ())
+    (fun i -> Names.Constant.make2 Names.ModPath.initial (Names.Label.of_id @@ Names.Id.of_string "__tactician__"))
+
 let get_record () =
   modify_field record_field (fun b -> b, b) (fun i -> true)
+
+let get_name () =
+  modify_field name_field (fun n -> n, n)
+    (fun i -> Names.Constant.make2 Names.ModPath.initial (Names.Label.of_id @@ Names.Id.of_string "__tactician__"))
 
 let push_localdb x =
   modify_field localdb_field (fun db -> x::db, ()) (fun () -> [])
 
 let empty_localdb () =
   modify_field localdb_field (fun db -> [], db) (fun () -> [])
+
+let get_localdb () =
+  modify_field localdb_field (fun db -> db, db) (fun () -> [])
 
 let push_goal_stack gls =
   let open Proofview in
@@ -430,21 +455,12 @@ let push_tactic_trace tac =
 let get_tactic_trace gl =
   get_field_goal2 tactic_trace_field gl (fun _ -> [])
 
-let mk_outcome (st, sts) =
-  (* let mem = (List.map TS.tactic_make (get_tactic_trace st)) in *)
-  let st : proof_state = goal_to_proof_state st in
-  { parents = [] (* List.map (fun tac -> (st (\* TODO: Fix *\), { executions = []; tactic = tac })) mem *)
-  ; siblings = End
-  ; before = st
-  ; after = [] (* List.map goal_to_proof_state sts *) }
-
 let add_to_db2 id ((outcomes, tactic) : (Proofview.Goal.t * Proofview.Goal.t list) list * glob_tactic_expr)
     sideff name =
-  let tactic = TS.tactic_make tactic in
-  let outcomes = List.map mk_outcome outcomes in
-  add_to_db { outcomes; name; tactic; status = Original };
+  let data = mk_data_in outcomes tactic name in
+  add_to_db data;
   let semidb, exn, _ = Hashtbl.find int64_to_knn id in
-  Hashtbl.replace int64_to_knn id ({ outcomes; name; tactic; status = Original }::semidb, exn, sideff);
+  Hashtbl.replace int64_to_knn id (data::semidb, exn, sideff);
   if !featureprinting then (
     (* let h s = string_of_int (Hashtbl.hash s) in
      * (\* let l2s fs = "[" ^ (String.concat ", " (List.map (fun x -> string_of_int x) fs)) ^ "]" in *\)
@@ -562,7 +578,7 @@ let tclDebugTac t env debug =
       tclPROGRESS tac2)
     else tclPROGRESS tac2
 
-let predict =
+let predict learner =
   let open Proofview in
   let open Notations in
   Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
@@ -575,7 +591,7 @@ let predict =
   (* Coq stores goals in reverse order, so we present them in an intuitive order.
      Note that the tclFocus function also internally reverses the list, so focussing
      on goal zero will focus in the first goal of the reversed `situation` *)
-  tclUNIT (learner_predict (List.rev situation))
+  tclUNIT (learner.predict (List.rev situation))
 
 let filterTactics p q (tacs : Tactic_learner_internal.TS.prediction IStream.t) =
   let exception SuccessException of bool in
@@ -600,11 +616,11 @@ let print_rank debug env rank =
                                      (Pp.string_of_ppcmds (tac_pp env t))) rank in
   Pp.str (String.concat "\n" strs)
 
-let userPredict =
+let userPredict learner =
   let debug = false in
   let open Proofview in
   let open Notations in
-  tclENV >>= fun env -> predict >>=
+  tclENV >>= fun env -> predict learner >>=
   (if debug then (fun r -> tclUNIT (to_list 10 r)) else filterTactics 10 10000) >>= fun r ->
   let r = List.map (fun ({confidence; focus; tactic} : Tactic_learner_internal.TS.prediction) ->
       (confidence, focus, tactic)) r in
@@ -615,10 +631,10 @@ let userPredict =
                         Proofview.NonLogical.print_info (print_rank debug env r)))
 
 let tac_exec_count = ref 0
-let tacpredict max_reached =
+let tacpredict learner max_reached =
   let open Proofview in
   let open Notations in
-  predict >>= fun predictions ->
+  predict learner >>= fun predictions ->
   let taceval i focus (t, h) = tclUNIT () >>= fun () ->
     if max_reached () then Tacticals.New.tclZEROMSG (Pp.str "Ran out of executions") else
       tclFOCUS ~nosuchgoal:(Tacticals.New.tclZEROMSG (Pp.str "Predictor gave wrong focus"))
@@ -630,7 +646,7 @@ let tacpredict max_reached =
               tclDebugTac t env false) >>= fun () ->
              Goal.goals >>= fun gls ->
              let outcome = mk_outcome (gl, gls) in
-             tclUNIT (learner_evaluate outcome (t, h)))) in
+             tclUNIT (snd @@ learner.evaluate outcome (t, h)))) in
   let transform i (r : Tactic_learner_internal.TS.prediction) =
     { confidence = r.confidence; focus = r.focus; tactic = taceval i r.focus r.tactic } in
   tclUNIT (mapi (fun i p -> transform i p) predictions)
@@ -669,6 +685,12 @@ let commonSearch max_exec =
        expressions. But allowing infinite nesting will just lead to divergence. *)
     inc_search_recursion_depth () >>= fun n ->
     if n >= max_recursion_depth then Tacticals.New.tclZEROMSG (Pp.str "too much search nesting") else
+      get_localdb () >>= fun db -> get_name () >>= fun name ->
+      let learner = learner_get () in
+      let learner = List.fold_left (fun learner (outcomes, tactic) ->
+          let { outcomes; name; tactic; status} = mk_data_in outcomes tactic name in
+          learner.learn status name outcomes tactic
+        ) learner db in
       tclLIFT (NonLogical.make (fun () -> CWarnings.get_flags ())) >>= (fun oldFlags ->
           (* TODO: Find a way to reset dumbglob to original value. This is a temporary hack. *)
           let doFlags = n = 0 in
@@ -678,7 +700,7 @@ let commonSearch max_exec =
              tclLIFT (NonLogical.make (fun () ->
                  tac_exec_count := 0; Dumpglob.pause(); CWarnings.set_flags ("-all"))))
           <*> tclOR
-            (tclONCE (Tacticals.New.tclCOMPLETE (search_with_strategy max_reached (tacpredict max_reached))) <*>
+            (tclONCE (Tacticals.New.tclCOMPLETE (search_with_strategy max_reached (tacpredict learner max_reached))) <*>
              get_witness () >>= fun wit -> empty_witness () <*>
              dec_search_recursion_depth () >>= fun () -> setFlags () <*> tclUNIT (wit, !tac_exec_count))
             (fun (e, i) -> setFlags () <*> tclZERO ~info:i e))
@@ -888,7 +910,7 @@ let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO:
     List.iter (fun trp -> tryadd trp) @@ List.rev db; tclUNIT () in
   let rtac = decompose_annotate tac record_tac_complete in
   let ptac = Tacinterp.eval_tactic rtac in
-  let ptac = ptac <*> tclENV >>= fun env ->
+  let ptac = set_name name <*> ptac <*> tclENV >>= fun env ->
     tclEVARMAP >>= fun sigma ->
     let sideff = Evd.eval_side_effects sigma in
     empty_localdb () >>= save_db env sideff.seff_private in

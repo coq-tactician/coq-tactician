@@ -169,7 +169,6 @@ module NullLearner : TacticianOnlineLearnerType = functor (_ : TacticianStructur
   let evaluate () _ _ = 0., ()
 end
 
-let current_learner_empty = ref (new_learner (module NullLearner : TacticianOnlineLearnerType))
 let current_learner = Summary.ref ~name:("tactician-db") (new_learner (module NullLearner : TacticianOnlineLearnerType))
 
 let queue_enabled = Summary.ref ~name: "tactician-queue-enabled" true
@@ -177,17 +176,13 @@ let queue = Summary.ref ~name:"tactician-queue" []
 
 let learner_learn status name outcomes tactic =
   current_learner := !current_learner.learn status name outcomes tactic
-let learner_predict p  = !current_learner.predict p
-let learner_evaluate outcome tactic =
-  let learner, f = !current_learner.evaluate outcome tactic in
-  current_learner := learner; f
 
 let process_queue () =
   List.iter (fun (s, l, o, t) -> learner_learn s l o t) (List.rev !queue); queue := []
 
-let learner_predict s =
+let learner_get () =
   process_queue ();
-  learner_predict s
+  !current_learner
 
 let learner_learn s l o t =
   if !queue_enabled then
