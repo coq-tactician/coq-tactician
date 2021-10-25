@@ -1,3 +1,11 @@
+(rule
+ (targets with-tactician tactician-patch)
+ ; When installed through opam, we perform substitutions through the 'substs' directive in the opam file.
+ ; It also works using this rule, but running opam during an installation can be risky due to sandboxing issues.
+ (mode fallback)
+ (deps with-tactician.in tactician-patch.in)
+ (action (run opam config subst %{targets})))
+
 (install
  (files with-tactician tactician-patch)
  (section libexec)
@@ -6,6 +14,11 @@
 (install
  (files coqc.real) ; mount point for the real coqc
  (section lib)
+ (package coq-tactician)
+)
+(install
+ (files injection-flags)
+ (section etc)
  (package coq-tactician)
 )
 (install

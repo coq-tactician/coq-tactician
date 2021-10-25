@@ -4,6 +4,10 @@ open Context
 
 type sexpr = Node of sexpr list | Leaf of string
 
+let rec sexpr_to_string = function
+  | Leaf str -> str
+  | Node ls -> "(" ^ (String.concat " " (List.map sexpr_to_string ls)) ^ ")"
+
 let s2s s = Leaf s
 
 let id2s id = s2s (Id.to_string id)
