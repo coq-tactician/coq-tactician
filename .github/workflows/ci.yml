@@ -11,8 +11,8 @@ jobs:
       - uses: coq-community/docker-coq-action@v1.2.3
         with:
           opam_file: 'coq-tactician.opam'
-          coq_version: 'dev'
-          ocaml_version: '4.10-flambda'
+          coq_version: '8.14'
+          ocaml_version: '4.12-flambda'
           install: |
             startGroup "Install dependencies"
               opam repo add coq-extra-dev https://coq.inria.fr/opam/extra-dev
