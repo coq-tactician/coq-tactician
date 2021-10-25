@@ -127,7 +127,7 @@ module LSHF =
     let forest = insert db.forest feats obj in
     { forest; length; frequencies }
 
-  let learn db _loc outcomes tac to_feats =
+  let learn db _status _loc outcomes tac to_feats =
     List.fold_left (fun db out -> add db out.before tac to_feats) db outcomes
 
   let predict db f to_feats remove_kind tfidf =
@@ -151,7 +151,7 @@ module SimpleLSHF : TacticianOnlineLearnerType =
     include LSHF
     module FH = F(TS)
     open FH
-  let learn db _loc outcomes tac = learn db _loc outcomes tac proof_state_to_simple_ints
+  let learn db _status _loc outcomes tac = learn db _status _loc outcomes tac proof_state_to_simple_ints
   let predict db f = predict db f proof_state_to_simple_ints (fun x -> x) tfidf
 end
 
@@ -161,10 +161,10 @@ module ComplexLSHF : TacticianOnlineLearnerType =
     include LSHF
     module FH = F(TS)
     open FH
-    let learn db _loc outcomes tac = learn db _loc outcomes tac
+    let learn db _status _loc outcomes tac = learn db _status _loc outcomes tac
         (fun x -> remove_feat_kind @@ proof_state_to_complex_ints x)
     let predict db f = predict db f proof_state_to_complex_ints remove_feat_kind manually_weighed_tfidf
   end
 
-let () = register_online_learner "SimpleLSHF" (module SimpleLSHF)
-(* let () = register_online_learner "ComplexLSHF" (module ComplexLSHF) *)
+(* let () = register_online_learner "SimpleLSHF" (module SimpleLSHF) *)
+let () = register_online_learner "ComplexLSHF" (module ComplexLSHF)
