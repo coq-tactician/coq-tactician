@@ -160,7 +160,7 @@ let safe_index0 f x l = try Some (CList.index0 f x l) with Not_found -> None
 
 let constr_size c =
   let rec aux c =
-    Constr.fold (fun i c -> aux c + 1) 0 c in
+    Constr.fold (fun i c -> i + aux c + 1) 1 c in
   aux c
 
 let econstr_size evd c = constr_size @@ EConstr.to_constr evd c
