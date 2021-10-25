@@ -24,7 +24,7 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
   open FH
   module LSHF = Lshf_learner.SimpleLSHF(TS)
   (* features of a proof state, positive tactic, possible tactics, disappear features, appear features *)
-  type ownmodel = (proof_state * Names.Constant.t * tactic * (tactic * proof_state list option) list * proof_state list) list
+  type ownmodel = (data_status * Names.Constant.t * (outcome list * tactic) list) list
   type model = {database : ownmodel; lshf : LSHF.model}
 
   module IntSet = Set.Make(struct type t = feature let compare = compare end)
@@ -97,12 +97,11 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
 
   let learn db status name outcomes tac =
     let lshfnew = LSHF.learn db.lshf status name outcomes tac in
-    match cache_type name with
-    | `File ->
-      let newdb = List.map (fun outcome ->
-          outcome.before, name, tac, outcome.preds, outcome.after) outcomes @ db.database in
-      last_model := newdb; {database = newdb; lshf = lshfnew}
-    | `Dependency -> {database = db.database; lshf = lshfnew}
+    let new_database = match db.database with
+      | (pstatus, pname, ls)::data when Names.Constant.equal name pname ->
+        (pstatus, pname, (outcomes, tac)::ls)::data
+      | _ -> (status, name, [outcomes, tac])::db.database in
+    last_model := new_database; {database = new_database; lshf = lshfnew}
   let predict db situations = LSHF.predict db.lshf situations
   let evaluate db _ _ = 0., db
 
@@ -123,36 +122,44 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
     let split = String.split_on_char ' ' str in
     List.map Hashtbl.hash split
 
-  let output_feats curr_name (before, new_name, tac, neg, after) =
-    if not (Names.Constant.equal curr_name new_name) then
+  let generate_step (status, name, ls) =
+    match cache_type name with
+    | `File ->
       output_string (data_file ()) "#lemma\n";
-    let ps = proof_state_to_simple_ints before in
-    let neg = List.map (fun (tactic, after) ->
-        let disappear_feats = Option.default [-1] @@ Option.map (feat_disappear before) after in
-        let appear_feats = Option.default [-1] @@ Option.map (feat_appear before) after in
-        (tactic, disappear_feats, appear_feats)) neg in
-    let disappear_feats = feat_disappear before after in
-    let appear_feats = feat_appear before after in
-    let neg = List.map (fun (tac, df, af) ->
-        Sexplib.Pre_sexp.List [Std.sexp_of_int @@ tactic_hash tac;
-                               Std.sexp_of_list Std.sexp_of_int df;
-                               Std.sexp_of_list Std.sexp_of_int af;
-                               Std.sexp_of_list Std.sexp_of_int @@ syntactic_feats tac]) neg in
-    let tac' = tactic_hash tac in
-    (* let neg = List.filter (fun neg_tac -> tac != neg_tac) neg in *)
-    let line = Sexplib.Pre_sexp.List [ Std.sexp_of_list Std.sexp_of_int ps
-                                     ; Std.sexp_of_int tac'
-                                     ; Sexplib.Pre_sexp.List neg
-                                     ; Std.sexp_of_list Std.sexp_of_int disappear_feats
-                                     ; Std.sexp_of_list Std.sexp_of_int appear_feats
-                                     ; Std.sexp_of_list Std.sexp_of_int @@ syntactic_feats tac] in
-    output_string (data_file ()) (Sexp.to_string line ^ "\n");
-    new_name
+      List.iter (fun (outcomes, tac) ->
+          List.iter (fun { before; after; preds; _ } ->
+              let ps = proof_state_to_simple_ints before in
+              let preds = List.map (fun (tactic, after) ->
+                  let disappear_feats = Option.default [-1] @@ Option.map (feat_disappear before) after in
+                  let appear_feats = Option.default [-1] @@ Option.map (feat_appear before) after in
+                  (tactic, disappear_feats, appear_feats)) preds in
+              let disappear_feats = feat_disappear before after in
+              let appear_feats = feat_appear before after in
+              let preds = List.map (fun (tac, df, af) ->
+                  Sexplib.Pre_sexp.List [Std.sexp_of_int @@ tactic_hash tac;
+                                         Std.sexp_of_list Std.sexp_of_int df;
+                                         Std.sexp_of_list Std.sexp_of_int af;
+                                         Std.sexp_of_list Std.sexp_of_int @@ syntactic_feats tac]) preds in
+              let tac' = tactic_hash tac in
+              (* let neg = List.filter (fun neg_tac -> tac != neg_tac) neg in *)
+              let line = Sexplib.Pre_sexp.List [ Std.sexp_of_list Std.sexp_of_int ps
+                                               ; Std.sexp_of_int tac'
+                                               ; Sexplib.Pre_sexp.List preds
+                                               ; Std.sexp_of_list Std.sexp_of_int disappear_feats
+                                               ; Std.sexp_of_list Std.sexp_of_int appear_feats
+                                               ; Std.sexp_of_list Std.sexp_of_int @@ syntactic_feats tac] in
+              output_string (data_file ()) (Sexp.to_string line ^ "\n")
+            ) outcomes
+        ) ls
+    | `Dependency -> ()
+
+  (* We have to do some reversals before the evaluation *)
+  let preprocess model =
+    List.rev_map (fun (state, name, ls) -> state, name, List.rev ls) model
 
   let endline_hook () = print_endline "writing";
-    ignore @@ List.fold_left output_feats
-      (Names.Constant.make2 Names.ModPath.initial (Names.Label.of_id @@ Names.Id.of_string "xxxxxxxx"))
-      (List.rev !last_model)
+    let data = preprocess !last_model in
+    ignore (List.iter generate_step data)
 
   let () = Declaremods.append_end_library_hook endline_hook
 end
