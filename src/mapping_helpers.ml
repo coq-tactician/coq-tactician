@@ -10,9 +10,8 @@ module Helpers (M : MapDef) = struct
 
   (* Maps only bare kernames, not GlobRef.t, Constant.t or MutInd.t *)
   let kername_map f = function
-    | TacAlias x ->
-      let+ x = cast_map (fun (name, args) ->
-          let+ name = f name in (name, args)) x in
-      TacAlias x
+    | TacAlias (name, args) ->
+      let+ name = f name in
+      TacAlias (name, args)
     | x -> return x
 end

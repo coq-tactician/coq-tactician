@@ -20,8 +20,8 @@ module type MapDef = sig
   val with_binders : Id.t list -> 'a t -> 'a t
 
   type mapper =
-    { glob_tactic : glob_tactic_expr transformer
-    ; raw_tactic : raw_tactic_expr transformer
+    { glob_tactic : g_dispatch gen_tactic_expr_r transformer
+    ; raw_tactic : r_dispatch gen_tactic_expr_r transformer
     ; glob_atomic_tactic : glob_atomic_tactic_expr transformer
     ; raw_atomic_tactic : raw_atomic_tactic_expr transformer
     ; glob_tactic_arg : glob_tactic_arg transformer
@@ -73,8 +73,8 @@ module MapDefTemplate (M: Monad.Def) : sig
   type 'a transformer = 'a -> ('a -> 'a t) -> 'a t
   val with_binders : Id.t list -> 'a t -> 'a t
   type mapper =
-    { glob_tactic : glob_tactic_expr transformer
-    ; raw_tactic : raw_tactic_expr transformer
+    { glob_tactic : g_dispatch gen_tactic_expr_r transformer
+    ; raw_tactic : r_dispatch gen_tactic_expr_r transformer
     ; glob_atomic_tactic : glob_atomic_tactic_expr transformer
     ; raw_atomic_tactic : raw_atomic_tactic_expr transformer
     ; glob_tactic_arg : glob_tactic_arg transformer

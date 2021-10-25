@@ -3,6 +3,8 @@ open Learner_helper
 open Features
 open Context
 open Names
+open Ltac_plugin
+open Tacexpr
 
 (*
 let proof_state_feats_to_feats {hypotheses = hyps; goal = goal} =
@@ -193,7 +195,7 @@ module NaiveKnn : TacticianOnlineLearnerType = functor (TS : TacticianStructures
             (fun (s, p) ->
                let ts = subst (s, p) in
                if (tactic_hash p.obj) = (tactic_hash ts.tactic) then
-                 {confidence = Float.neg_infinity; focus = 0; tactic = tactic_make (TacId []) } else ts
+                 {confidence = Float.neg_infinity; focus = 0; tactic = tactic_make (CAst.make @@ TacId []) } else ts
             )
             (IStream.of_list sorted) in
         IStream.app (IStream.of_list out) subst_stream

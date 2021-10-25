@@ -44,10 +44,11 @@ let inner_record ast = match ast_setting_lookup ast with
 
 let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_tactic_expr -> glob_tactic_expr) : glob_tactic_expr =
   let mkatom loc atom =
-    let t = TacAtom (CAst.make ?loc:loc atom) in
+    let t = CAst.make @@ TacAtom atom in
     r t t in
-  let tacthenfirst t1 t2 = TacThens3parts (t1, Array.of_list [t2], TacId [], Array.of_list []) in
-  let tacthenlast  t1 t2 = TacThens3parts (t1, Array.of_list [], TacId [], Array.of_list [t2]) in
+  let mktactic t = CAst.make t in
+  let tacthenfirst t1 t2 = mktactic @@ TacThens3parts (t1, Array.of_list [t2], mktactic @@ TacId [], Array.of_list []) in
+  let tacthenlast  t1 t2 = mktactic @@ TacThens3parts (t1, Array.of_list [], mktactic @@ TacId [], Array.of_list [t2]) in
   let decompose_apply flg1 flg2 intros loc (ls : 'trm with_bindings_arg list) =
     let no_intro intro = match intro with | [] -> [] | [n, _] -> [n, None] | _ -> assert false in
     let combiner intro = match intro with | [] -> tacthenlast | _::_ -> tacthenfirst in
@@ -64,43 +65,43 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
     let rec aux = function
       | [] -> assert false
       | [s] -> mkatom loc (TacGeneralize [s])
-      | s::ls -> TacThen (mkatom loc (TacGeneralize [s]), aux ls)
+      | s::ls -> mktactic @@ TacThen (mkatom loc (TacGeneralize [s]), aux ls)
     in aux ls in
   let decompose_induction_destruct loc flg1 flg2 ls =
     let rec aux = function
       | [] -> assert false
       | [s] -> mkatom loc (TacInductionDestruct (flg1, flg2, ([s], None)))
-      | s::ls -> TacThen (mkatom loc (TacInductionDestruct (flg1, flg2, ([s], None))), aux ls)
+      | s::ls -> mktactic @@ TacThen (mkatom loc (TacInductionDestruct (flg1, flg2, ([s], None))), aux ls)
     in aux ls in
   let decompose_multi loc flg inc b trm by byorig mult = (* TODO: Maybe replace this with an OCaml-level tactic? *)
     let recname = CAst.make @@ Names.Id.of_string "rec" in
     let recname' = CAst.make @@ Names.Name.mk_name recname.v in
-    let reccall = TacArg (CAst.make (Reference (ArgVar recname))) in
+    let reccall = mktactic @@ TacArg (Reference (ArgVar recname)) in
     (* TODO: Why can't we use the 'do' and 'repeat' tactics here again? *)
-    let repeat tac = TacLetIn (true, [(recname', Tacexp (TacTry (tacthenfirst tac reccall)))], reccall) in
-    let rec don n tac = if n > 0 then tacthenfirst tac (don (n-1) tac) else TacId [] in
+    let repeat tac = mktactic @@ TacLetIn (true, [(recname', Tacexp (mktactic @@ TacTry (tacthenfirst tac reccall)))], reccall) in
+    let rec don n tac = if n > 0 then tacthenfirst tac (don (n-1) tac) else mktactic @@ TacId [] in
     let onerewrite = TacRewrite (flg, [(b, Precisely 1, trm)], inc, by) in
     let at r = match mult with
       | Precisely 1 -> mkatom loc onerewrite
       | Precisely n -> r (don n (mkatom loc onerewrite))
       | RepeatStar -> r (repeat (mkatom loc onerewrite))
       | RepeatPlus -> r (tacthenfirst (mkatom loc onerewrite) (repeat (mkatom loc onerewrite)))
-      | UpTo n -> r (don n (TacTry (mkatom loc onerewrite))) in
-    let r = if outer_record RewriteMulti then r (TacAtom (CAst.make ?loc:loc (TacRewrite (flg, [(b, mult, trm)], inc, byorig)))) else fun x -> x in
-    if inner_record RewriteMulti then at r else r (TacAtom (CAst.make ?loc:loc (TacRewrite (flg, [(b, mult, trm)], inc, by)))) in
+      | UpTo n -> r (don n (mktactic @@ TacTry (mkatom loc onerewrite))) in
+    let r = if outer_record RewriteMulti then r (CAst.make ?loc @@ TacAtom (TacRewrite (flg, [(b, mult, trm)], inc, byorig))) else fun x -> x in
+    if inner_record RewriteMulti then at r else r (CAst.make ?loc @@ TacAtom (TacRewrite (flg, [(b, mult, trm)], inc, by))) in
   let decompose_rewrite loc flg inc ls by byorig =
     let rec aux = function
       | [] -> assert false
       | [(b, mult, trm)] -> decompose_multi loc flg inc b trm by byorig mult
-      | (b, mult, trm)::ls -> TacTry (tacthenfirst (decompose_multi loc flg inc b trm by byorig mult) (aux ls))
+      | (b, mult, trm)::ls -> mktactic @@ TacTry (tacthenfirst (decompose_multi loc flg inc b trm by byorig mult) (aux ls))
     in aux ls in
-  let rec annotate_atomic a : glob_tactic_expr =
-    let router ast t = if outer_record ast then r (TacAtom a) t else t in
-    let at = TacAtom a in
-    match a.v with
+  let rec annotate_atomic loc a : glob_tactic_expr =
+    let router ast t = if outer_record ast then r (CAst.make ?loc @@ TacAtom a) t else t in
+    let at = CAst.make ?loc @@ TacAtom a in
+    match a with
     | TacIntroPattern _ -> router IntroPattern at
     | TacApply (flg1, flg2, ls, intro) ->
-      let at = if (inner_record Apply) then decompose_apply flg1 flg2 intro a.loc ls else at in
+      let at = if (inner_record Apply) then decompose_apply flg1 flg2 intro loc ls else at in
       router Apply at
     | TacElim _ -> router Elim at
     | TacCase _ -> router Case at
@@ -108,9 +109,9 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
     | TacMutualCofix _ -> router MutualCofix at
     | TacAssert (flg, b, by, pat, term) ->
       let by = if inner_record Assert then Option.map (Option.map annotate) by else by in
-      router Assert (TacAtom (CAst.make ?loc:a.loc (TacAssert (flg, b, by, pat, term))))
+      router Assert (CAst.make ?loc @@ TacAtom (TacAssert (flg, b, by, pat, term)))
     | TacGeneralize gs ->
-      let at = if inner_record Generalize then decompose_generalize a.loc (List.rev gs) else at in
+      let at = if inner_record Generalize then decompose_generalize loc (List.rev gs) else at in
       router Generalize at
     | TacLetTac _ -> router LetTac at
     (* This is induction .. using .., which is not decomposable *)
@@ -118,12 +119,12 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
     (* TODO: induction a, b is not equal to induction a; induction b due to name mangling *)
     | TacInductionDestruct (true, _, _) -> router InductionDestruct at
     | TacInductionDestruct (flg1, flg2, (ts, None)) ->
-      let at = if inner_record InductionDestruct then decompose_induction_destruct a.loc flg1 flg2 ts else at in
+      let at = if inner_record InductionDestruct then decompose_induction_destruct loc flg1 flg2 ts else at in
       router InductionDestruct at
     | TacReduce _ -> router Reduce at
     | TacChange _ -> router Change at
     | TacRewrite (flg1, ts, i, d) ->
-      let at = if inner_record Rewrite then decompose_rewrite a.loc flg1 i ts (Option.map annotate d) d else at in (* TODO: Normalize rewrite .. by t to rewrite ..; [| t] (or similar) *)
+      let at = if inner_record Rewrite then decompose_rewrite loc flg1 i ts (Option.map annotate d) d else at in (* TODO: Normalize rewrite .. by t to rewrite ..; [| t] (or similar) *)
       router Rewrite at
     | TacInversion _ -> router Inversion at
   and annotate_arg x = match x with
@@ -137,11 +138,12 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
     | TacPretype _ -> x, r
     | TacNumgoals -> x, r
   (* TODO: Improve efficiency of the annotation recursion *)
-  and annotate (tac : glob_tactic_expr) : glob_tactic_expr =
-    let router ast t = if outer_record ast then r tac t else t in
+  and annotate_r loc (tac' : g_dispatch gen_tactic_expr_r) : glob_tactic_expr =
+    let tac = CAst.make ?loc tac' in
+    let router ast t = if outer_record ast then r tac (CAst.make ?loc t) else CAst.make ?loc t in
     let rinner ast t = if inner_record ast then annotate t else t in
-    match tac with
-    | TacAtom a         ->                 annotate_atomic a
+    match tac' with
+    | TacAtom a         ->                 annotate_atomic loc a
     | TacThen (t1, t2)  ->                 router Then (TacThen (rinner Then t1, rinner Then t2))
     | TacDispatch tl    ->                 router Dispatch (TacDispatch (List.map (rinner Dispatch) tl))
     | TacExtendTac (tl1, t, tl2) ->        router Extend (TacExtendTac (Array.map (rinner Extend) tl1,
@@ -156,7 +158,7 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
     | TacFirst ts       ->                 router First (TacFirst (List.map (rinner First) ts))
     | TacComplete t     ->                 router Complete (TacComplete (rinner Complete t))
     | TacSolve ts       ->                 router Solve (TacSolve (List.map (rinner Solve) ts))
-    | TacTry t          ->                 TacTry (annotate t) (* No need to record try *)
+    | TacTry t          ->                 CAst.make ?loc @@ TacTry (annotate tac) (* No need to record try *)
     | TacOr (t1, t2)    ->                 router Or (TacOr (rinner Or t1, rinner Or t2))
     | TacOnce t         ->                 router Once (TacOnce (rinner Once t))
     | TacExactlyOnce t  ->                 router ExactlyOnce (TacExactlyOnce (rinner ExactlyOnce t))
@@ -166,10 +168,10 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
     | TacOrelse (t1, t2) ->                router Orelse (TacOrelse (rinner Orelse t1, rinner Orelse t2))
     | TacDo (n, t) ->                      router Do (TacDo (n, rinner Do t)) (* TODO: Perform decomposition when n is a number *)
     | TacTimeout (n, t)      ->            router Timeout (TacTimeout (n, rinner Timeout t))
-    | TacTime (s, t)         ->            TacTime (s, annotate t) (* No need to record try *)
+    | TacTime (s, t)         ->            CAst.make ?loc @@ TacTime (s, annotate t) (* No need to record try *)
     | TacRepeat t       ->                 router Repeat (TacRepeat (rinner Repeat t))
     | TacProgress t     ->                 router Progress (TacProgress (rinner Progress t))
-    | TacShowHyps t     ->                 TacShowHyps (annotate t) (* No need to record infoH *)
+    | TacShowHyps t     ->                 CAst.make ?loc @@ TacShowHyps (annotate t) (* No need to record infoH *)
     | TacAbstract (t, id) ->               router Abstract (TacAbstract (rinner Abstract t, id))
     | TacId _           ->                 tac (* No need to record id *)
     | TacFail _         ->                 tac (* No need to record fail *)
@@ -184,21 +186,23 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
       router MatchGoal (TacMatchGoal (
           flg, d, List.map (function | All t -> All (rinner MatchGoal t)
                                      | Pat (c, p, t) -> Pat (c, p, rinner MatchGoal t)) ts))
-    | TacFun (args, t) -> TacFun (args, annotate t) (* Probably not outer-recordable *)
+    | TacFun (args, t) -> CAst.make ?loc @@ TacFun (args, annotate t) (* Probably not outer-recordable *)
     | TacArg x ->
-      let x', r = if inner_record Arg then annotate_arg x.v else x.v, r in
-      let res = TacArg (CAst.make ?loc:x.loc x') in
+      let x', r = if inner_record Arg then annotate_arg x else x, r in
+      let res = CAst.make ?loc @@ TacArg x' in
       if outer_record Arg then r tac res else res
     | TacSelect (i, t)       ->            router Select (TacSelect (i, rinner Select t))
-    | TacML CAst.{loc; v=(e, args)} ->
+    | TacML (e, args) ->
       let args = if inner_record ML then List.map (fun a -> fst (annotate_arg a)) args else args in
-      router ML (TacML (CAst.make ?loc (e, args))) (* TODO: Decompose interesting known tactics (such as ssreflect) *)
-    | TacAlias CAst.{loc; v=(e, args)} ->
+      router ML (TacML (e, args)) (* TODO: Decompose interesting known tactics (such as ssreflect) *)
+    | TacAlias (e, args) ->
       let tactician_cache = CString.is_prefix "Tactician.Ltac1.Tactics.search_with_cache"
           (Names.KerName.to_string e) in
       let args = if inner_record Alias || tactician_cache then
           List.map (fun a -> fst (annotate_arg a)) args else args in
-      let t = TacAlias (CAst.make ?loc (e, args)) in
+      let t = CAst.make ?loc @@ TacAlias (e, args) in
       if outer_record Alias && not tactician_cache then r tac t else t
       (* TODO: Decompose user-defined tactics *)
+  and annotate CAst.{v=tac; loc} =
+    annotate_r loc tac
   in annotate tac

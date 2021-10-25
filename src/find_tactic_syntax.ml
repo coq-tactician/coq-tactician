@@ -32,10 +32,10 @@ let contains_ml_tactic ml t =
                        c a
                      | _ -> c a))
                ; glob_tactic = (fun t c -> (match t with
-                     | TacML CAst.{ v=(e, args); _} ->
+                     | TacML (e, args) ->
                        let* () = if ml = e then (true, ()) else return () in
                        c t
-                     | TacAlias CAst.{ v=(k, args); _} ->
+                     | TacAlias (k, args) ->
                        let* _ = contains_ml_tactic_alias k in
                        c t
                      | _ -> c t)) } in

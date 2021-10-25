@@ -25,8 +25,8 @@ module type MapDef = sig
   val with_binders : Id.t list -> 'a t -> 'a t
 
   type mapper =
-    { glob_tactic : glob_tactic_expr transformer
-    ; raw_tactic : raw_tactic_expr transformer
+    { glob_tactic : g_dispatch gen_tactic_expr_r transformer
+    ; raw_tactic : r_dispatch gen_tactic_expr_r transformer
     ; glob_atomic_tactic : glob_atomic_tactic_expr transformer
     ; raw_atomic_tactic : raw_atomic_tactic_expr transformer
     ; glob_tactic_arg : glob_tactic_arg transformer
@@ -80,8 +80,8 @@ module MapDefTemplate (M: Monad.Def) = struct
   type 'a map = 'a -> 'a t
   let with_binders _ x = x
   type mapper =
-    { glob_tactic : glob_tactic_expr transformer
-    ; raw_tactic : raw_tactic_expr transformer
+    { glob_tactic : g_dispatch gen_tactic_expr_r transformer
+    ; raw_tactic : r_dispatch gen_tactic_expr_r transformer
     ; glob_atomic_tactic : glob_atomic_tactic_expr transformer
     ; raw_atomic_tactic : raw_atomic_tactic_expr transformer
     ; glob_tactic_arg : glob_tactic_arg transformer
@@ -578,7 +578,7 @@ module MakeMapper (M: MapDef) = struct
     ref_map      : 'ref map;
     cst_map      : 'cst map;
     nam_map      : 'nam map;
-    tactic       : 'a gen_tactic_expr transformer;
+    tactic       : 'a gen_tactic_expr_r transformer;
     atomic_tactic : 'a gen_atomic_tactic_expr transformer;
     tactic_arg   : 'a gen_tactic_arg transformer;
     u            : mapper
@@ -1116,11 +1116,11 @@ module MakeMapper (M: MapDef) = struct
        let+ is = inversion_strength_map m.u m.trm_map m.trm_map (mcast m.u m.u.variable) is
        and+ qh = quantified_hypothesis_map m.u qh in
        TacInversion (is, qh)
-  and tactic_map
-      (m : 'a tactic_mapper) (tac' : 'a gen_tactic_expr) : 'a gen_tactic_expr t =
+  and tactic_r_map
+      (m : 'a tactic_mapper) (tac' : 'a gen_tactic_expr_r) : 'a gen_tactic_expr_r t =
     m.tactic tac' @@ function
      | TacAtom a ->
-       let+ a = mcast m.u (atomic_tactic_map m) a in
+       let+ a = atomic_tactic_map m a in
        TacAtom a
      | TacThen (t1, t2)  ->
        let+ t1 = m.tactic_map t1
@@ -1223,20 +1223,22 @@ module MakeMapper (M: MapDef) = struct
        let+ t = with_binders bnds @@ m.tactic_map t in
        TacFun (args, t)
      | TacArg c ->
-       let+ c = mcast m.u (fun a -> (tactic_arg_map m) a) c in
+       let+ c = tactic_arg_map m c in
        TacArg c
      | TacSelect (i, t) ->
        let+ t = m.tactic_map t
        and+ i = goal_select_map m.u i in
        TacSelect (i, t)
-     | TacML c ->
-       let+ c = mcast m.u (fun (ml, args) ->
-           let+ args = List.map (tactic_arg_map m) args in (ml, args)) c in
-       TacML c
-     | TacAlias c ->
-       let+ c = mcast m.u (fun (id, args) ->
-           let+ args = List.map (tactic_arg_map m) args in (id, args)) c in
-       TacAlias c
+     | TacML (ml, args) ->
+       let+ args = List.map (tactic_arg_map m) args in
+       TacML (ml, args)
+     | TacAlias (id, args) ->
+       let+ args = List.map (tactic_arg_map m) args in
+       TacAlias (id, args)
+  and tactic_map
+      (m : 'a tactic_mapper) (CAst.{v=tac'; loc} : 'a gen_tactic_expr) : 'a gen_tactic_expr t =
+    let+ tac' = tactic_r_map m tac' in
+    CAst.make ?loc tac'
 
   let rec recursor m =
     { option_map = option_map

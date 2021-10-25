@@ -85,11 +85,11 @@ let cook s (tac : glob_tactic_expr) : glob_tactic_expr discharged =
   and cook_match mats = List.map (function
         | All t -> let+ t = cook t in All t
         | Pat (c, p, t) -> let+ t = cook t in Pat (c, p, t)) mats
-  and cook (tac : glob_tactic_expr) : glob_tactic_expr discharged =
+  and cook_tac_r (tac : 'a gen_tactic_expr_r) : 'a gen_tactic_expr_r discharged =
     match tac with
-    | TacAtom CAst.{v; _} ->
+    | TacAtom v ->
       let+ v = cook_atomic v in
-      TacAtom (CAst.make v)
+      TacAtom v
     | TacThen (t1, t2)  ->
       let+ t1 = cook t1
       and+ t2 = cook t2 in
@@ -180,21 +180,25 @@ let cook s (tac : glob_tactic_expr) : glob_tactic_expr discharged =
     | TacFun (args, t) ->
       let+ t = cook t in
       TacFun (args, t)
-    | TacArg CAst.{v; _} ->
+    | TacArg v ->
       let+ v = cook_arg v in
-      TacArg (CAst.make v)
+      TacArg v
     | TacSelect (i, t) ->
       let+ t = cook t in
       TacSelect (i, t)
-    | TacML CAst.{v=(e, args); _} ->
+    | TacML (e, args) ->
       let+ args = cook_args args in
-      TacML (CAst.make (e, args))
-    | TacAlias CAst.{v=(id, args); _} ->
+      TacML (e, args)
+    | TacAlias (id, args) ->
       let* args = cook_args args in
-      if Tacenv.check_alias id then return @@ TacAlias (CAst.make (id, args)) else
+      if Tacenv.check_alias id then return @@ TacAlias (id, args) else
         let lid = CAst.make (Names.(Label.to_id (KerName.label id))) in
         let+ () = log id in
-        TacArg (CAst.make (TacCall (CAst.make (ArgVar lid, args))))
+        TacArg (TacCall (CAst.make (ArgVar lid, args)))
+  and cook (CAst.{v=tac; loc} : glob_tactic_expr) =
+    let+ tac = cook_tac_r tac in
+    CAst.make ?loc tac
+
   in cook tac
 
 (* TODO: This is a huge hack *)
@@ -220,11 +224,11 @@ let discharge env tac =
   if tactic_traversable tac then tac else
     let tacstr = Pptactic.pr_glob_tactic env tac in
     warnProblem tacstr;
-    TacArg (CAst.make (TacGeneric (None, in_gen (glbwit wit_pr_arg) (PrString (Pp.string_of_ppcmds tacstr)))))
+    CAst.make (TacArg (TacGeneric (None, in_gen (glbwit wit_pr_arg) (PrString (Pp.string_of_ppcmds tacstr)))))
 
-let rebuild s tac =
+let rebuild s (tac : glob_tactic_expr) =
   match tac with
-  | TacArg (CAst.{v = TacGeneric (None, (GenArg _ as g)); _}) when has_type g (Glbwit wit_pr_arg) ->
+  | CAst.{v=TacArg (TacGeneric (None, (GenArg _ as g))); _} when has_type g (Glbwit wit_pr_arg) ->
     let PrString str = out_gen (glbwit wit_pr_arg) g in
     (try
       let raw = Pcoq.parse_string Pltac.tactic str in
@@ -232,7 +236,7 @@ let rebuild s tac =
       Tacintern.intern_tactic_or_tacarg ist raw, true, Names.KNset.empty
      with e ->
        Feedback.msg_warning (Pp.str (Printexc.to_string e));
-       warnProblem (Pp.str str); TacId [], false, Names.KNset.empty)
+       warnProblem (Pp.str str); CAst.make @@ TacId [], false, Names.KNset.empty)
   | _ ->
     try
       let tac, ls = cook s tac in tac, false, ls

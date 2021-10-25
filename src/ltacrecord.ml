@@ -195,7 +195,7 @@ let rec with_let_prefix ltac_defs tac =
   let tac, all, ids = rebuild names tac in
   let kername_tolname id = CAst.make (Names.(Name.mk_name (Label.to_id (KerName.label id)))) in
   let ltac_to_let rem_defs ltacset int =
-    TacLetIn (true,
+    CAst.make @@ TacLetIn (true,
               List.map (fun (id, tac) -> (kername_tolname id, Tacexp (with_let_prefix rem_defs tac))) ltacset,
               int) in
   let rec prefix acc = function
@@ -281,7 +281,7 @@ let section_notation_helper prods e =
   if Global.sections_are_opened () then
     let id = find_last_key prods in
     let alias = Tacenv.interp_alias id in
-    let func = TacFun (List.map Names.Name.mk_name alias.alias_args, alias.alias_body) in
+    let func = CAst.make @@ TacFun (List.map Names.Name.mk_name alias.alias_args, alias.alias_body) in
     Lib.add_anonymous_leaf (in_section_ltac_defs [id, func])
 
 (* TODO: Determining where we have to call this exactly is tricky business *)
@@ -511,7 +511,7 @@ let register tac name =
   let fullname = {mltac_plugin = "recording"; mltac_tactic = name} in
   register_ml_tactic fullname [| tac |]
 
-let run_ml_tac name = TacML (CAst.make ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = name}; mltac_index = 0}, []))
+let run_ml_tac name = CAst.make @@ TacML ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = name}; mltac_index = 0}, [])
 
 (* Running predicted tactics *)
 
@@ -870,16 +870,16 @@ let () = register ml_push_state_tac "pushstatetac"
 
 let run_record_tac (tac : glob_tactic_expr) : glob_tactic_expr =
   let enc = Genarg.in_gen (Genarg.glbwit wit_glbtactic) tac in
-  TacML (CAst.make ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = "recordtac"}; mltac_index = 0},
-                    [TacGeneric (None, enc)]))
+  CAst.make @@ TacML ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = "recordtac"}; mltac_index = 0},
+                      [TacGeneric (None, enc)])
 
 let run_pushs_state_tac (): glob_tactic_expr =
   (*let tac_glob = Tacintern.intern_pure_tactic*)
-  TacML (CAst.make ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = "pushstatetac"}; mltac_index = 0},
-                []))
+  CAst.make @@ TacML ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = "pushstatetac"}; mltac_index = 0},
+                [])
 
 let record_tac_complete orig tac : glob_tactic_expr =
-  TacThen (run_pushs_state_tac (), TacThen (tac, run_record_tac orig))
+  CAst.make @@ TacThen (run_pushs_state_tac (), CAst.make @@ TacThen (tac, run_record_tac orig))
 
 let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO: Implement self-learning *)
   let open Proofview in
