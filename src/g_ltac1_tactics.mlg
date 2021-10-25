@@ -22,7 +22,6 @@ VERNAC COMMAND EXTEND TacticianSuggest CLASSIFIED AS QUERY STATE proof_query
 | [ "Suggest" ]
   -> { fun ~pstate -> let _ =
          Pfedit.solve (Goal_select.get_default_goal_selector ()) None
-           (Tactician_ltac1_record_plugin.Ltacrecord.userPredict
-              (Tactician_ltac1_record_plugin.Tactic_learner_internal.learner_get ()))
-                      (Proof_global.get_proof pstate) in () }
+           Tactician_ltac1_record_plugin.Ltacrecord.userPredict
+           (Proof_global.get_proof pstate) in () }
 END
