@@ -817,7 +817,7 @@ module MakeMapper (M: MapDef) = struct
       let+ q = qualid_map m q
       and+ cs = List.map (fun (c, e) ->
           let+ c = constr_expr_map c
-          (* and+ e = option_map (mcast m ) in _ *)
+          and+ e = option_map (mcast m (explicitation_map m)) e
           in c, e
         ) cs
       and+ c = constr_expr_map c in
