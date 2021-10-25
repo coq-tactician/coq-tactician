@@ -47,7 +47,6 @@ let cast_kind2s = function
   | VMcast -> s2s "VMcast"
   | NATIVEcast -> s2s "NATIVEcast"
   | DEFAULTcast -> s2s "DEFAULTcast"
-  | REVERTcast -> s2s "REVERTcast"
 
 let relevance2s = function
   | Relevant -> s2s "Relevant"

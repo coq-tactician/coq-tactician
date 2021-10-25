@@ -304,17 +304,6 @@ module MakeMapper (M: MapDef) = struct
     let p', bndrs = DAst.get p in
     DAst.map (fun _ -> p') p, bndrs
 
-  let cast_type_map f = function
-    | CastConv x ->
-      let+ x = f x in
-      CastConv x
-    | CastVM x ->
-      let+ x = f x in
-      CastConv x
-    | CastNative x ->
-      let+ x = f x in
-      CastNative x
-
   let or_var_map m f = function
     | ArgArg x ->
       let+ x = f x in
@@ -325,7 +314,7 @@ module MakeMapper (M: MapDef) = struct
   let quantified_hypothesis_map m = function
     | AnonHyp _ as x -> return x
     | NamedHyp id ->
-      let+ id = m.variable id in
+      let+ id = mcast m m.variable id in
       NamedHyp id
   let bindings_map m f = function
     | ImplicitBindings ls ->
@@ -681,10 +670,15 @@ module MakeMapper (M: MapDef) = struct
        let+ gen = option_map (generic_glob_map (r m)) gen
        and+ intr = intro_pattern_naming_expr_map m intr in
        GHole (k, intr, gen)
-     | GCast (c1, c2) ->
+     | GCast (c1, k, c3) ->
        let+ c1 = glob_constr_map c1
-       and+ c2 = cast_type_map glob_constr_map c2 in
-       GCast (c1, c2)
+       and+ c3 = glob_constr_map c3 in
+       GCast (c1, k, c3)
+     | GProj ((co, le), cs, c) ->
+       let+ co = m.constant co
+       and+ cs = List.map glob_constr_map cs
+       and+ c = glob_constr_map c in
+       GProj ((co, le), cs, c)
      | GInt _ as c -> return c
      | GFloat _ as c -> return c
      | GArray (gl, cs, c1, c2) ->
@@ -785,16 +779,25 @@ module MakeMapper (M: MapDef) = struct
       and+ typ = option_map constr_expr_map typ
       and+ term = with_binders (filter_lnames [l]) @@ constr_expr_map term in
       CLetIn (l, b, typ, term)
-    | CAppExpl ((flg, l, ie), cs) ->
+    | CAppExpl ((l, ie), cs) ->
       let+ l = qualid_map m l
       and+ cs = List.map constr_expr_map cs in
-      CAppExpl ((flg, l, ie), cs)
-    | CApp ((flg, c), cs) ->
+      CAppExpl ((l, ie), cs)
+    | CApp (c, cs) ->
       let+ c = constr_expr_map c
       and+ cs = List.map (fun (c, e) ->
           let+ c = constr_expr_map c in
           (c,e)) cs in
-      CApp ((flg, c), cs)
+      CApp (c, cs)
+    | CProj (flgs, (q, ie), cs, c) ->
+      let+ q = qualid_map m q
+      and+ cs = List.map (fun (c, e) ->
+          let+ c = constr_expr_map c
+          (* and+ e = option_map (mcast m ) in _ *)
+          in c, e
+        ) cs
+      and+ c = constr_expr_map c in
+      CProj (flgs, (q, ie), cs, c)
     | CRecord xs ->
       let+ xs = List.map (fun (l, c) ->
         let+ l = qualid_map m l
@@ -851,10 +854,10 @@ module MakeMapper (M: MapDef) = struct
           (l, c)) xs in
       CEvar (e, xs)
     | CSort _ as c -> return c
-    | CCast (c, ct) ->
+    | CCast (c, k, c2) ->
       let+ c = constr_expr_map c
-      and+ ct = cast_type_map constr_expr_map ct in
-      CCast (c, ct)
+      and+ c2 = constr_expr_map c2 in
+      CCast (c, k, c2)
     | CNotation (ns, n, (cs1, cs2, ps, bs)) ->
       (* TODO: Having the binders in the right location here seems very complicated *)
       let+ cs1 = List.map constr_expr_map cs1
@@ -864,9 +867,9 @@ module MakeMapper (M: MapDef) = struct
       let ps, _ = OList.split ps in
       let bs, _ = OList.split (OList.map OList.split bs) in
       CNotation (ns, n, (cs1, cs2, ps, bs))
-    | CGeneralization (bk, ak, c) ->
+    | CGeneralization (bk, c) ->
       let+ c = constr_expr_map c in
-      CGeneralization (bk, ak, c)
+      CGeneralization (bk, c)
     | CPrim _ as c -> return c
     | CDelimiters (str, c) ->
      let+ c = constr_expr_map c in
