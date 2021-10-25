@@ -578,20 +578,28 @@ let tclDebugTac t env debug =
       tclPROGRESS tac2)
     else tclPROGRESS tac2
 
-let predict learner =
+let predict () =
   let open Proofview in
   let open Notations in
-  Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
-  let situation = List.map (fun gl ->
-      let ps = goal_to_proof_state gl in
-      { parents = List.map (fun tac -> (ps (* TODO: Fix *), { executions = [](*TODO: Fix*); tactic = tac }))
-            ([] (* List.map TS.tactic_make (get_tactic_trace gl) *))
-      ; siblings = End
-      ; state = ps}) gls in
-  (* Coq stores goals in reverse order, so we present them in an intuitive order.
-     Note that the tclFocus function also internally reverses the list, so focussing
-     on goal zero will focus in the first goal of the reversed `situation` *)
-  tclUNIT (learner.predict (List.rev situation))
+  get_localdb () >>= fun db -> get_name () >>= fun name ->
+  let learner = learner_get () in
+  let learner = List.fold_left (fun learner (outcomes, tactic) ->
+      let { outcomes; name; tactic; status} = mk_data_in outcomes tactic name in
+      learner.learn status name outcomes tactic
+    ) learner db in
+  let cont =
+    Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
+    let situation = List.map (fun gl ->
+        let ps = goal_to_proof_state gl in
+        { parents = List.map (fun tac -> (ps (* TODO: Fix *), { executions = [](*TODO: Fix*); tactic = tac }))
+              ([] (* List.map TS.tactic_make (get_tactic_trace gl) *))
+        ; siblings = End
+        ; state = ps}) gls in
+    (* Coq stores goals in reverse order, so we present them in an intuitive order.
+       Note that the tclFocus function also internally reverses the list, so focussing
+       on goal zero will focus in the first goal of the reversed `situation` *)
+    tclUNIT (learner.predict (List.rev situation)) in
+  tclUNIT (learner, cont)
 
 let filterTactics p q (tacs : Tactic_learner_internal.TS.prediction IStream.t) =
   let exception SuccessException of bool in
@@ -616,11 +624,11 @@ let print_rank debug env rank =
                                      (Pp.string_of_ppcmds (tac_pp env t))) rank in
   Pp.str (String.concat "\n" strs)
 
-let userPredict learner =
+let userPredict =
   let debug = false in
   let open Proofview in
   let open Notations in
-  tclENV >>= fun env -> predict learner >>=
+  tclENV >>= fun env -> predict () >>= fun (learner, cont) -> cont >>=
   (if debug then (fun r -> tclUNIT (to_list 10 r)) else filterTactics 10 10000) >>= fun r ->
   let r = List.map (fun ({confidence; focus; tactic} : Tactic_learner_internal.TS.prediction) ->
       (confidence, focus, tactic)) r in
@@ -631,25 +639,27 @@ let userPredict learner =
                         Proofview.NonLogical.print_info (print_rank debug env r)))
 
 let tac_exec_count = ref 0
-let tacpredict learner max_reached =
+let tacpredict max_reached =
   let open Proofview in
   let open Notations in
-  predict learner >>= fun predictions ->
-  let taceval i focus (t, h) = tclUNIT () >>= fun () ->
-    if max_reached () then Tacticals.New.tclZEROMSG (Pp.str "Ran out of executions") else
-      tclFOCUS ~nosuchgoal:(Tacticals.New.tclZEROMSG (Pp.str "Predictor gave wrong focus"))
-        (focus+1) (focus+1)
-        (Goal.enter_one (fun gl ->
-             let env = Goal.env gl in
-             push_witness { tac = t; focus; prediction_index = i } <*>
-             (tac_exec_count := 1 + !tac_exec_count;
-              tclDebugTac t env false) >>= fun () ->
-             Goal.goals >>= fun gls ->
-             let outcome = mk_outcome (gl, gls) in
-             tclUNIT (snd @@ learner.evaluate outcome (t, h)))) in
-  let transform i (r : Tactic_learner_internal.TS.prediction) =
-    { confidence = r.confidence; focus = r.focus; tactic = taceval i r.focus r.tactic } in
-  tclUNIT (mapi (fun i p -> transform i p) predictions)
+  predict () >>= fun (learner, cont) ->
+  let cont = cont >>= fun predictions ->
+    let taceval i focus (t, h) = tclUNIT () >>= fun () ->
+      if max_reached () then Tacticals.New.tclZEROMSG (Pp.str "Ran out of executions") else
+        tclFOCUS ~nosuchgoal:(Tacticals.New.tclZEROMSG (Pp.str "Predictor gave wrong focus"))
+          (focus+1) (focus+1)
+          (Goal.enter_one (fun gl ->
+               let env = Goal.env gl in
+               push_witness { tac = t; focus; prediction_index = i } <*>
+               (tac_exec_count := 1 + !tac_exec_count;
+                tclDebugTac t env false) >>= fun () ->
+               Goal.goals >>= fun gls ->
+               let outcome = mk_outcome (gl, gls) in
+               tclUNIT (snd @@ learner.evaluate outcome (t, h)))) in
+    let transform i (r : Tactic_learner_internal.TS.prediction) =
+      { confidence = r.confidence; focus = r.focus; tactic = taceval i r.focus r.tactic } in
+    tclUNIT (mapi (fun i p -> transform i p) predictions) in
+  tclUNIT cont
 
 let tclTIMEOUT2 n t =
   Proofview.tclOR
@@ -685,12 +695,7 @@ let commonSearch max_exec =
        expressions. But allowing infinite nesting will just lead to divergence. *)
     inc_search_recursion_depth () >>= fun n ->
     if n >= max_recursion_depth then Tacticals.New.tclZEROMSG (Pp.str "too much search nesting") else
-      get_localdb () >>= fun db -> get_name () >>= fun name ->
-      let learner = learner_get () in
-      let learner = List.fold_left (fun learner (outcomes, tactic) ->
-          let { outcomes; name; tactic; status} = mk_data_in outcomes tactic name in
-          learner.learn status name outcomes tactic
-        ) learner db in
+      tacpredict max_reached >>= fun predict ->
       tclLIFT (NonLogical.make (fun () -> CWarnings.get_flags ())) >>= (fun oldFlags ->
           (* TODO: Find a way to reset dumbglob to original value. This is a temporary hack. *)
           let doFlags = n = 0 in
@@ -700,7 +705,7 @@ let commonSearch max_exec =
              tclLIFT (NonLogical.make (fun () ->
                  tac_exec_count := 0; Dumpglob.pause(); CWarnings.set_flags ("-all"))))
           <*> tclOR
-            (tclONCE (Tacticals.New.tclCOMPLETE (search_with_strategy max_reached (tacpredict learner max_reached))) <*>
+            (tclONCE (Tacticals.New.tclCOMPLETE (search_with_strategy max_reached predict)) <*>
              get_witness () >>= fun wit -> empty_witness () <*>
              dec_search_recursion_depth () >>= fun () -> setFlags () <*> tclUNIT (wit, !tac_exec_count))
             (fun (e, i) -> setFlags () <*> tclZERO ~info:i e))
