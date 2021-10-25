@@ -1,3 +1,7 @@
+(* Needed to deal with the 'abstract' tactic. See inline_private_constants.ml *)
+Definition private_constant_placeholder (x : Type) := x.
+Register private_constant_placeholder as tactician.private_constant_placeholder.
+
 Declare ML Module "ltac_plugin".
 Declare ML Module "firstorder_plugin".
 Declare ML Module "extraction_plugin".

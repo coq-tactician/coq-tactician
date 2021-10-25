@@ -55,3 +55,8 @@ tags: [
   "category:Miscellaneous/Coq Extensions"
   "logpath:Tactician"
 ]
+substs: [
+  "coq-shim/with-tactician"
+  "coq-shim/tactician-patch"
+  "src/tactician.ml"
+]
