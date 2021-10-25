@@ -203,9 +203,7 @@ let stdlib () =
   `Ok ()
 
 let exec_command cmd args =
-  (* TODO: Use internal opam API to retrieve this *)
-  let lib = String.trim @@ syscall ("opam var coq-tactician:lib") in
-  let wt = Filename.concat lib "with-tactician" in
+  let wt = "%{coq-tactician:lib}%/with-tactician" in
   Unix.execv wt (Array.of_list (wt::cmd::args))
 
 (* Command line interface *)

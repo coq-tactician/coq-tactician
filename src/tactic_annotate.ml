@@ -80,20 +80,24 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
     (* TODO: Why can't we use the 'do' and 'repeat' tactics here again? *)
     let repeat tac = mktactic @@ TacLetIn (true, [(recname', Tacexp (mktactic @@ TacTry (tacthenfirst tac reccall)))], reccall) in
     let rec don n tac = if n > 0 then tacthenfirst tac (don (n-1) tac) else mktactic @@ TacId [] in
-    let onerewrite = TacRewrite (flg, [(b, Precisely 1, trm)], inc, by) in
+    let onerewrite =
+      let rew = mkatom loc @@ TacRewrite (flg, [(b, Precisely 1, trm)], inc, None) in
+      match by with
+      | None -> rew
+      | Some by -> mktactic @@ TacThens3parts (rew, Array.of_list [mktactic @@ TacId []], mktactic @@ TacSolve [by], Array.of_list [])in
     let at r = match mult with
-      | Precisely 1 -> mkatom loc onerewrite
-      | Precisely n -> r (don n (mkatom loc onerewrite))
-      | RepeatStar -> r (repeat (mkatom loc onerewrite))
-      | RepeatPlus -> r (tacthenfirst (mkatom loc onerewrite) (repeat (mkatom loc onerewrite)))
-      | UpTo n -> r (don n (mktactic @@ TacTry (mkatom loc onerewrite))) in
+      | Precisely 1 -> onerewrite
+      | Precisely n -> r (don n (onerewrite))
+      | RepeatStar -> r (repeat (onerewrite))
+      | RepeatPlus -> r (tacthenfirst (onerewrite) (repeat (onerewrite)))
+      | UpTo n -> r (don n (mktactic @@ TacTry (onerewrite))) in
     let r = if outer_record RewriteMulti then r (CAst.make ?loc @@ TacAtom (TacRewrite (flg, [(b, mult, trm)], inc, byorig))) else fun x -> x in
-    if inner_record RewriteMulti then at r else r (CAst.make ?loc @@ TacAtom (TacRewrite (flg, [(b, mult, trm)], inc, by))) in
+    if inner_record RewriteMulti then at r else r (CAst.make ?loc @@ TacAtom (TacRewrite (flg, [(b, mult, trm)], inc, byorig))) in
   let decompose_rewrite loc flg inc ls by byorig =
     let rec aux = function
       | [] -> assert false
       | [(b, mult, trm)] -> decompose_multi loc flg inc b trm by byorig mult
-      | (b, mult, trm)::ls -> mktactic @@ TacTry (tacthenfirst (decompose_multi loc flg inc b trm by byorig mult) (aux ls))
+      | (b, mult, trm)::ls -> tacthenfirst (decompose_multi loc flg inc b trm by byorig mult) (aux ls)
     in aux ls in
   let rec annotate_atomic loc a : glob_tactic_expr =
     let router ast t = if outer_record ast then r (CAst.make ?loc @@ TacAtom a) t else t in
@@ -200,6 +204,11 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
           (Names.KerName.to_string e) in
       let args = if inner_record Alias || tactician_cache then
           List.map (fun a -> fst (annotate_arg a)) args else args in
+      (* TODO: This is a possible decomposition *)
+      (* let al = Tacenv.interp_alias e in
+       * let t = TacLetIn (false, List.map2 (fun x y ->
+       *     (CAst.make (Names.Name.Name x)), y) al.Tacenv.alias_args args,
+       *                   al.Tacenv.alias_body) in *)
       let t = CAst.make ?loc @@ TacAlias (e, args) in
       if outer_record Alias && not tactician_cache then r tac t else t
       (* TODO: Decompose user-defined tactics *)
