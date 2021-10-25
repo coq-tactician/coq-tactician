@@ -11,13 +11,15 @@ module Frequencies = Map.Make(FeatureOrd)
 module IntMap = Stdlib.Map.Make(struct type t = int
     let compare = Int.compare end)
 
+let rec sexpr_to_string = function
+  | Leaf str -> str
+  | Node ls -> "(" ^ (String.concat " " (List.map sexpr_to_string ls)) ^ ")"
+
 
 module L (TS: TacticianStructures) = struct
   open TS
 
-  let rec sexpr_to_string = function
-    | Leaf str -> str
-    | Node ls -> "(" ^ (String.concat " " (List.map sexpr_to_string ls)) ^ ")"
+  let sexpr_to_string = sexpr_to_string
 
   let replicate x n =
     let rec aux n ls =

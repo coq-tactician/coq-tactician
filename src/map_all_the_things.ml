@@ -15,7 +15,6 @@ open Loc
 open Names
 open Goal_select
 open Namegen
-open Libnames
 
 module type MapDef = sig
   include MonadNotations
@@ -710,6 +709,14 @@ module MakeMapper (M: MapDef) = struct
        GArray (gl, cs, c1, c2)
   and glob_constr_map m r c = mdast m (glob_constr_r_map m r) c
 
+  let explicitation_map m = function
+    | ExplByPos (i, id) ->
+      let+ id = option_map m.variable id in
+      ExplByPos (i, id)
+    | ExplByName id ->
+      let+ id = m.variable id in
+      ExplByName id
+
   let rec cases_pattern_expr_r_map m r (case : cases_pattern_expr_r) =
     let cases_pattern_expr_map = cases_pattern_expr_map m r in
     match case with
@@ -808,7 +815,8 @@ module MakeMapper (M: MapDef) = struct
     | CApp ((flg, c), cs) ->
       let+ c = constr_expr_map c
       and+ cs = List.map (fun (c, e) ->
-          let+ c = constr_expr_map c in
+          let+ c = constr_expr_map c
+          and+ e = option_map (mcast m (explicitation_map m)) e in
           (c,e)) cs in
       CApp ((flg, c), cs)
     | CRecord xs ->

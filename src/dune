@@ -8,6 +8,7 @@
    ltacrecord
    inline_private_constants
    diagonal_iterative_search
+   offline_evaluation_simulator_learner
    naiveknn_learner
    naiveknn_subst_learner
    trivial_learners
@@ -15,6 +16,7 @@
    knn
    find_tactic_syntax
    tactic_substitute
+   tactic_abstract
    search_strategy
    search_strategy_internal
    learner_helper
@@ -66,6 +68,13 @@
    coq-tactician.record-plugin
  )
 )
+(rule
+ (targets tactician.ml)
+ ; When installed through opam, we perform substitutions through the 'substs' directive in the opam file.
+ ; It also works using this rule, but running opam during an installation can be risky due to sandboxing issues.
+ (mode fallback)
+ (deps tactician.ml.in)
+ (action (run opam config subst %{targets})))
 (executable
  (name tactician)
  (package coq-tactician)
