@@ -854,6 +854,8 @@ let wit_glbtactic : (Empty.t, glob_tactic_expr, glob_tactic_expr) Genarg.genarg_
 let should_record b =
   b && !global_record
 
+let count = ref 0
+
 let runTactics n (tacs : Tactic_learner_internal.TS.prediction IStream.t) =
   let open Proofview in
   let open Notations in
@@ -861,14 +863,32 @@ let runTactics n (tacs : Tactic_learner_internal.TS.prediction IStream.t) =
   let rec aux n tacs glsacc = match n = 0, IStream.peek tacs with
     | true, _ | _, IStream.Nil -> tclUNIT glsacc
     | false, IStream.Cons (Tactic_learner_internal.TS.{ tactic; _ }, tacs) ->
+      (* (\* if n < 5 then *\) *)
+      (* Feedback.msg_info (Pp.int !count); *)
+      (* Feedback.msg_info Pp.(str "(try " ++ Pptactic.pr_glob_tactic (Global.env ()) (tactic_repr tactic) ++ str "; gfail) ||"); *)
       let tactic' = parse_tac (tactic_repr tactic) in
       tclOR
         (tclTIMEOUT 1 tactic' <*> Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
+         List.iter (fun gl ->
+             let size = Tactician_util.goal_size gl in
+             if size >= 10000 then
+               Feedback.msg_info Pp.(str "size: " ++ int(size));
+           ) gls;
+         (* Three are only two real proof states in stdlib that exceed 10000, so we set the limit there *)
          tclZERO (StateException gls))
         (function
           | (StateException gls, _) -> aux (n - 1) tacs ((tactic, Some gls)::glsacc)
           | (e, _) -> aux (n - 1) tacs ((tactic, None)::glsacc))
-  in aux n tacs []
+  in
+  aux n tacs []
+  (* Feedback.msg_info (Pp.str "separator"); *)
+  (* get_name () >>= fun name -> Feedback.msg_notice @@ Names.Constant.print name; *)
+  (* (\* if Names.DirPath.to_string @@ Names.ModPath.dp @@ Names.Constant.modpath name = "Coq.Logic.Hurkens" then *\) *)
+  (* if Names.Label.to_string @@ Names.Constant.label name = "fun_choice_and_ext_pred_ext_and_proof_irrel_imp_setoid_fun_choice" then *)
+  (*   (count := !count + 1; *)
+  (*    if true then *)
+  (*      aux n tacs [] else tclUNIT []) *)
+  (* else tclUNIT [] *)
 
 let run_predictions learner name =
   let open Proofview in
