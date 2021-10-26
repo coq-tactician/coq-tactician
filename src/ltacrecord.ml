@@ -860,6 +860,7 @@ let runTactics n (tacs : Tactic_learner_internal.TS.prediction IStream.t) =
   let open Proofview in
   let open Notations in
   let exception StateException of Goal.t list in
+  let exception SizeException in
   let rec aux n tacs glsacc = match n = 0, IStream.peek tacs with
     | true, _ | _, IStream.Nil -> tclUNIT glsacc
     | false, IStream.Cons (Tactic_learner_internal.TS.{ tactic; _ }, tacs) ->
@@ -869,13 +870,14 @@ let runTactics n (tacs : Tactic_learner_internal.TS.prediction IStream.t) =
       let tactic' = parse_tac (tactic_repr tactic) in
       tclOR
         (tclTIMEOUT 1 tactic' <*> Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
-         List.iter (fun gl ->
+         (* Three are only two real proof states in stdlib that exceed 10000, so we set the limit there *)
+         let too_large = List.fold_left (fun too_large gl ->
              let size = Tactician_util.goal_size gl in
              if size >= 10000 then
-               Feedback.msg_info Pp.(str "size: " ++ int(size));
-           ) gls;
-         (* Three are only two real proof states in stdlib that exceed 10000, so we set the limit there *)
-         tclZERO (StateException gls))
+               (Feedback.msg_info Pp.(str "size omitted: " ++ int(size));
+                true) else too_large
+           ) false gls in
+         if too_large then tclZERO (StateException gls) else tclZERO (SizeException))
         (function
           | (StateException gls, _) -> aux (n - 1) tacs ((tactic, Some gls)::glsacc)
           | (e, _) -> aux (n - 1) tacs ((tactic, None)::glsacc))
