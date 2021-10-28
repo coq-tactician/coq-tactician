@@ -886,9 +886,9 @@ let runTactics n (tacs : Tactic_learner_internal.TS.prediction IStream.t) =
   (* Feedback.msg_info (Pp.str "separator"); *)
   (* get_name () >>= fun name -> Feedback.msg_notice @@ Names.Constant.print name; *)
   (* (\* if Names.DirPath.to_string @@ Names.ModPath.dp @@ Names.Constant.modpath name = "Coq.Logic.Hurkens" then *\) *)
-  (* if Names.Label.to_string @@ Names.Constant.label name = "fun_choice_and_ext_pred_ext_and_proof_irrel_imp_setoid_fun_choice" then *)
+  (* if true (\* Names.Label.to_string @@ Names.Constant.label name = "fun_choice_and_ext_pred_ext_and_proof_irrel_imp_setoid_fun_choice" *\) then *)
   (*   (count := !count + 1; *)
-  (*    if true then *)
+  (*    if true (\* !count = 8 *\) then *)
   (*      aux n tacs [] else tclUNIT []) *)
   (* else tclUNIT [] *)
 
