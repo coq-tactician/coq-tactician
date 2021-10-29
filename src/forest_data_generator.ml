@@ -22,7 +22,7 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
   open TS
   open LH
   open FH
-  module LSHF = Naiveknn_learner.SimpleNaiveKnn(TS)
+  module LSHF = Naiveknn_learner.ComplexNaiveKnn(TS)
   (* features of a proof state, positive tactic, possible tactics, disappear features, appear features *)
   type ownmodel = (data_status * Names.Constant.t * (outcome list * tactic) list) list
   type model = {database : ownmodel; lshf : LSHF.model}
