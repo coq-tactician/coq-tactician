@@ -33,7 +33,7 @@ module NaiveKnn = functor (TS : TacticianStructures) -> struct
            Frequencies.update f (fun y -> Some ((default 0 y) + 1)) freq)
         db.frequencies
         feats in
-    let max = 1000 in
+    let max = 2000 in
     let last, purgedentries = if db.length >= max then deletelast db.entries else ([], db.entries) in
     let newfreq = List.fold_left
         (fun freq f ->
