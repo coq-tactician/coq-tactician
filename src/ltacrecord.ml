@@ -901,7 +901,7 @@ let run_predictions learner name =
       Dumpglob.continue (); CWarnings.set_flags (oldFlags))) in
   (tclLIFT (NonLogical.make (fun () ->
        Dumpglob.pause(); CWarnings.set_flags ("-all"))))
-  <*> runTactics 100 p >>= push_prediction_stack <*> setFlags ()
+  <*> runTactics 200 p >>= push_prediction_stack <*> setFlags ()
 
 let push_state_tac () =
   let open Proofview in
