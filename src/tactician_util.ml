@@ -24,6 +24,7 @@ end
 
 module WithMonadNotations (M : Monad.Def) = struct
   include M
+  type 'a map = 'a -> 'a t
   let id = return
   let (<*>) f x     = f >>= fun f -> return (f x)
   let (let+) x f    = map f x

@@ -1,6 +1,5 @@
 open Tactic_learner
-open Names
-open Ltac_plugin
+open Tactician_util
 
 let data_file =
   let file = ref None in
@@ -12,14 +11,14 @@ let data_file =
        k
      | Some f -> f)
 
+module Cata = Coq_ast_cata.Cata(IdentityMonad)
+
 module DecompositionLearner : TacticianOnlineLearnerType = functor (TS : TacticianStructures) -> struct
   module LH = Learner_helper.L(TS)
   open TS
   module Learner = Lshf_learner.ComplexLSHF
 
   type model = unit
-
-  let last_model = Summary.ref ~name:"offline-evaluation-simulator-learner-lastmodel" []
 
   let empty () = ()
 
@@ -30,17 +29,19 @@ module DecompositionLearner : TacticianOnlineLearnerType = functor (TS : Tactici
   let learn db status name outcomes tac =
     match cache_type name with
     | `File ->
-      let strict_tac = Tactic_normalize.tactic_strict @@ tactic_repr tac in
+      let tac = tactic_repr tac in
+      let tac = Cata.glob_tactic_expr_cata Cata.default_sequence_record tac in
+      let strict_tac = Tactic_normalize.tactic_strict tac in
       let free = Tactic_substitute.tactic_free_variables @@ strict_tac in
       List.iter (fun outcome ->
           let ps_hyps = proof_state_hypotheses outcome.before in
           let bound_hyps = Context.Named.to_vars ps_hyps in
           let free = List.filter (fun id -> not @@ Names.Id.Set.mem id bound_hyps) free in
-          if free != [] then
-            begin
-              Feedback.msg_warning (Pp.seq (List.map Names.Id.print free));
-              Feedback.msg_warning (Pptactic.pr_glob_tactic (Global.env ()) @@ tactic_repr tac)
-            end;
+          (* if free != [] then *)
+          (*   begin *)
+          (*     Feedback.msg_warning (Pp.seq (List.map Names.Id.print free)); *)
+          (*     Feedback.msg_warning (Pptactic.pr_glob_tactic (Global.env ()) tac) *)
+          (*   end; *)
           ()) outcomes
       (* Feedback.msg_info @@ Pptactic.pr_glob_tactic (Global.env ()) @@ tactic_repr tac *)
     | `Dependency -> ()
