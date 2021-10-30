@@ -877,8 +877,15 @@ let ml_record_tac args is =
 let ml_push_state_tac args is =
   push_state_tac ()
 
+let ml_fail_strict_tac args is =
+  (*let num = Tacinterp.Value.cast (Genarg.topwit Tacarg.wit_tactic) (List.hd args) in*)
+  let tac = Tacinterp.Value.cast (Genarg.topwit wit_glbtactic) (List.hd args) in
+  Feedback.msg_warning Pp.(str "Strict failure: " ++ Pptactic.pr_glob_tactic (Global.env ()) tac);
+  Proofview.tclUNIT ()
+
 let () = register ml_record_tac "recordtac"
 let () = register ml_push_state_tac "pushstatetac"
+let () = register ml_fail_strict_tac "failstricttac"
 
 let run_record_tac (tac : glob_tactic_expr) : glob_tactic_expr =
   let enc = Genarg.in_gen (Genarg.glbwit wit_glbtactic) tac in
@@ -890,8 +897,14 @@ let run_pushs_state_tac (): glob_tactic_expr =
   TacML (CAst.make ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = "pushstatetac"}; mltac_index = 0},
                 []))
 
+let fail_strict_tac (tac : glob_tactic_expr) : glob_tactic_expr =
+  let enc = Genarg.in_gen (Genarg.glbwit wit_glbtactic) tac in
+  TacML (CAst.make ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = "failstricttac"}; mltac_index = 0},
+                    [TacGeneric enc]))
+
 let record_tac_complete orig tac : glob_tactic_expr =
-  TacThen (run_pushs_state_tac (), TacThen (tac, run_record_tac orig))
+  let strict_tac = Tactic_normalize.tactic_strict tac in
+  TacThen (run_pushs_state_tac (), TacThen (TacFirst [strict_tac; TacThen (fail_strict_tac tac, tac)], run_record_tac orig))
 
 let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO: Implement self-learning *)
   let open Proofview in
