@@ -162,7 +162,7 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
     let data = preprocess !last_model in
     ignore (List.iter generate_step data)
 
-  (* let () = Declaremods.append_end_library_hook endline_hook *)
+  let () = Declaremods.append_end_library_hook endline_hook
 end
 
 let () = register_online_learner "Dataset Generator Learner" (module DatasetGeneratorLearner)
