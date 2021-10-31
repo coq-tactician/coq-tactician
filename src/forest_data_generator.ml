@@ -129,6 +129,7 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
       List.iter (fun (outcomes, tac) ->
           List.iter (fun { before; after; preds; _ } ->
               let ps = proof_state_to_simple_ints before in
+              let preds = CEphemeron.default preds [] in
               let preds = List.map (fun (tactic, after) ->
                   let disappear_feats = Option.default [-1] @@ Option.map (feat_disappear before) after in
                   let appear_feats = Option.default [-1] @@ Option.map (feat_appear before) after in

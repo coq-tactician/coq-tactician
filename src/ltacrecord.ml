@@ -184,7 +184,9 @@ let subst_outcomes (s, { outcomes;  name; tactic; _ }) =
       ; siblings = subst_pd siblings
       ; before = subst_pf before
       ; after = List.map subst_pf after
-      ; preds = List.map (fun (t, ps) -> subst_tac t, Option.map (List.map subst_pf) ps) preds}) outcomes in
+      ; preds =
+          let preds = CEphemeron.default preds [] in
+          CEphemeron.create @@ List.map (fun (t, ps) -> subst_tac t, Option.map (List.map subst_pf) ps) preds}) outcomes in
   { outcomes; name = Mod_subst.subst_constant s name; tactic = subst_tac tactic; status = Substituted }
 
 let tmp_ltac_defs = Summary.ref ~name:"TACTICIANTMPSECTION" []
@@ -224,7 +226,9 @@ let rebuild_outcomes { outcomes; name; tactic; _ } =
       { parents = List.map (fun (psa, pse) -> (psa, rebuild_ps pse)) parents
       ; siblings = rebuild_pd siblings
       ; before; after
-      ; preds = List.map (fun (t, ps) -> rebuild_tac t, ps) preds}) outcomes in
+      ; preds =
+          let preds = CEphemeron.default preds [] in
+          CEphemeron.create @@ List.map (fun (t, ps) -> rebuild_tac t, ps) preds}) outcomes in
   { outcomes; name; tactic = rebuild_tac tactic; status = Discharged }
 
 let discharge_outcomes env { outcomes; name; tactic; _ } =
@@ -242,7 +246,9 @@ let discharge_outcomes env { outcomes; name; tactic; _ } =
         { parents = List.map (fun (psa, pse) -> (psa, genarg_print_ps pse)) parents
         ; siblings = genarg_print_pd siblings
         ; before; after
-        ; preds = List.map (fun (t, ps) -> genarg_print_tac t, ps) preds}) outcomes in
+        ; preds =
+            let preds = CEphemeron.default preds [] in
+            CEphemeron.create @@ List.map (fun (t, ps) -> genarg_print_tac t, ps) preds}) outcomes in
     { outcomes; name; tactic = genarg_print_tac tactic; status = Discharged }
 
 let section_ltac_helper bodies =
@@ -334,7 +340,7 @@ let mk_outcome (st, sts, preds) =
   ; siblings = End
   ; before = st
   ; after = [] (* List.map goal_to_proof_state sts *)
-  ; preds = List.map (fun (t, sts) -> t, Option.map (List.map goal_to_proof_state) sts) preds}
+  ; preds = CEphemeron.create @@ List.map (fun (t, sts) -> t, Option.map (List.map goal_to_proof_state) sts) preds}
 
 let mk_data_in outcomes tactic name =
   let tactic = TS.tactic_make tactic in
