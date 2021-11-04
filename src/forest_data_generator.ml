@@ -43,7 +43,7 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
 
   let list_to_set l =
     List.fold_left (fun int_set elm -> IntSet.add elm int_set) IntSet.empty l
-
+  (*
   let rec hyps_feats_disappear hyps hyps' feat_set =
     let get_hyp_feats hyp =
     match hyp with
@@ -89,7 +89,57 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
       List.fold_left (fun feat_set after_state ->
         (IntSet.union feat_set (state_diff after_state before_state))
       ) IntSet.empty after_states in
-    IntSet.elements appear_feat_set
+    IntSet.elements appear_feat_set *)
+
+  let rec add_to_features_and_count_list feature' feature_and_count =
+    match feature_and_count with
+    | [] -> [(feature', 1)]
+    | (feature, count)::tl -> 
+      if feature = feature' then (feature, count + 1)::tl
+      else (feature, count)::add_to_features_and_count_list feature' tl
+
+  let rec attach_count_to_features features' features_and_count =
+    match features' with
+    | [] -> features_and_count
+    | hd :: tl -> attach_count_to_features tl (add_to_features_and_count_list hd features_and_count)
+
+  let proof_state_to_int_and_count state extract_feat = 
+    let features = extract_feat state in    
+    let sorted_features = List.sort String.compare features in
+    let feature_and_count_list = attach_count_to_features sorted_features [] in
+    let ints_and_count_list = List.map (fun (feature, count) -> Hashtbl.hash feature, count) feature_and_count_list in
+    ints_and_count_list
+
+  (* features in int_and_count but not int_and_count' *)
+  let get_state_diff int_and_count int_and_count'=
+    List.fold_left (fun acc (int_feat, count) -> 
+      if (List.exists (fun (int_feat', count') -> 
+        if (int_feat' = int_feat) && (count>count') then true else false 
+        ) int_and_count') 
+        || ((List.exists (fun (int_feat', count') -> int_feat' = int_feat) int_and_count') = false)
+      then (int_feat::acc) else acc
+    ) [] int_and_count 
+    
+  let get_tac_semantic_aux before_state after_state proof_state_to_feats = 
+    let int_and_count = proof_state_to_int_and_count before_state proof_state_to_feats in
+    let int_and_count' = proof_state_to_int_and_count after_state proof_state_to_feats in
+    let disappear_feats = get_state_diff int_and_count int_and_count' in
+    let appear_feats = get_state_diff int_and_count' int_and_count in
+    disappear_feats, appear_feats
+
+  let get_tac_semantic before_state after_states = 
+    (* let proof_state_to_complex_features = (fun state -> remove_feat_kind (proof_state_to_complex_features 2 state)) in *)
+    let proof_state_to_simple_features = (fun state -> (proof_state_to_simple_features 2 state)) in 
+    let disappear_feats, appear_feats = 
+    if after_states != [] then
+      List.fold_left (
+        fun (disappear_feats_acc, appear_feats_acc) after_state -> 
+          let disappear_feats', appear_feats' = get_tac_semantic_aux before_state after_state proof_state_to_simple_features in
+          disappear_feats_acc@disappear_feats', appear_feats_acc@appear_feats'
+      )  ([], []) after_states 
+    else (proof_state_to_simple_ints before_state), []
+    in
+    List.sort_uniq Int.compare disappear_feats, List.sort_uniq Int.compare appear_feats 
 
   let cache_type name =
     let dirp = Global.current_dirpath () in
@@ -130,17 +180,23 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
           List.iter (fun { before; after; preds; _ } ->
               let ps = proof_state_to_simple_ints before in
               let preds = CEphemeron.default preds [] in
-              let preds = List.map (fun (tactic, after) ->
+              (* let preds = List.map (fun (tactic, after) ->
                   let disappear_feats = Option.default [-1] @@ Option.map (feat_disappear before) after in
                   let appear_feats = Option.default [-1] @@ Option.map (feat_appear before) after in
+                  (tactic, disappear_feats, appear_feats)) preds in *)
+              let preds = List.map (fun (tactic, after) ->
+                let disappear_feats, appear_feats = 
+                  if after = None then [-1], [-1] 
+                  else get_tac_semantic before (Option.get after) in
                   (tactic, disappear_feats, appear_feats)) preds in
-              let disappear_feats = feat_disappear before after in
-              let appear_feats = feat_appear before after in
+              let disappear_feats, appear_feats = get_tac_semantic before after in 
+              (* let disappear_feats = feat_disappear before after in
+              let appear_feats = feat_appear before after in *)
               let preds = List.map (fun (tac, df, af) ->
-                  Sexplib.Pre_sexp.List [Std.sexp_of_int @@ tactic_hash tac;
-                                         Std.sexp_of_list Std.sexp_of_int df;
-                                         Std.sexp_of_list Std.sexp_of_int af;
-                                         Std.sexp_of_list Std.sexp_of_int @@ syntactic_feats tac]) preds in
+                  Sexplib.Pre_sexp.List [ Std.sexp_of_int @@ tactic_hash tac
+                                        ; Std.sexp_of_list Std.sexp_of_int df
+                                        ; Std.sexp_of_list Std.sexp_of_int af
+                                        (* ; Std.sexp_of_list Std.sexp_of_int @@ syntactic_feats tac *)]) preds in
               let tac' = tactic_hash tac in
               (* let neg = List.filter (fun neg_tac -> tac != neg_tac) neg in *)
               let line = Sexplib.Pre_sexp.List [ Std.sexp_of_list Std.sexp_of_int ps
@@ -148,7 +204,7 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
                                                ; Sexplib.Pre_sexp.List preds
                                                ; Std.sexp_of_list Std.sexp_of_int disappear_feats
                                                ; Std.sexp_of_list Std.sexp_of_int appear_feats
-                                               ; Std.sexp_of_list Std.sexp_of_int @@ syntactic_feats tac] in
+                                               (* ; Std.sexp_of_list Std.sexp_of_int @@ syntactic_feats tac *)] in
               output_string (data_file ()) (Sexp.to_string line ^ "\n")
             ) outcomes
         ) ls
