@@ -333,20 +333,6 @@ type prediction_stack = (tactic * Proofview.Goal.t list option) list list
 type tactic_trace = glob_tactic_expr list
 type state_id_stack = int list
 
-let mk_outcome (st, sts, preds) =
-  (* let mem = (List.map TS.tactic_make (get_tactic_trace st)) in *)
-  let st : proof_state = goal_to_proof_state st in
-  { parents = [] (* List.map (fun tac -> (st (\* TODO: Fix *\), { executions = []; tactic = tac })) mem *)
-  ; siblings = End
-  ; before = st
-  ; after = List.map goal_to_proof_state sts
-  ; preds = CEphemeron.create @@ List.map (fun (t, sts) -> t, Option.map (List.map goal_to_proof_state) sts) preds}
-
-let mk_data_in outcomes tactic name =
-  let tactic = TS.tactic_make tactic in
-  let outcomes = List.map mk_outcome outcomes in
-  { outcomes; name; tactic; status = Original }
-
 let record_field : bool Evd.Store.field = Evd.Store.field ()
 let name_field : Names.Constant.t Evd.Store.field = Evd.Store.field ()
 let localdb_field : localdb Evd.Store.field = Evd.Store.field ()
@@ -475,6 +461,20 @@ let push_tactic_trace tac =
 
 let get_tactic_trace gl =
   get_field_goal2 tactic_trace_field gl (fun _ -> [])
+
+let mk_outcome (st, sts, preds) =
+  let mem = (List.map TS.tactic_make (get_tactic_trace st)) in
+  let st : proof_state = goal_to_proof_state st in
+  { parents = List.map (fun tac -> (st (* TODO: Fix *), { executions = []; tactic = tac })) mem
+  ; siblings = End
+  ; before = st
+  ; after = List.map goal_to_proof_state sts
+  ; preds = CEphemeron.create @@ List.map (fun (t, sts) -> t, Option.map (List.map goal_to_proof_state) sts) preds}
+
+let mk_data_in outcomes tactic name =
+  let tactic = TS.tactic_make tactic in
+  let outcomes = List.map mk_outcome outcomes in
+  { outcomes; name; tactic; status = Original }
 
 let add_to_db2 id ((outcomes, tactic) : (Proofview.Goal.t * Proofview.Goal.t list * (tactic * Proofview.Goal.t list option) list) list * glob_tactic_expr)
     sideff name =
