@@ -339,7 +339,7 @@ let mk_outcome (st, sts, preds) =
   { parents = [] (* List.map (fun tac -> (st (\* TODO: Fix *\), { executions = []; tactic = tac })) mem *)
   ; siblings = End
   ; before = st
-  ; after = [] (* List.map goal_to_proof_state sts *)
+  ; after = List.map goal_to_proof_state sts
   ; preds = CEphemeron.create @@ List.map (fun (t, sts) -> t, Option.map (List.map goal_to_proof_state) sts) preds}
 
 let mk_data_in outcomes tactic name =
