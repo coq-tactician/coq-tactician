@@ -23,7 +23,7 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
   open LH
   open FH
   module LSHF = Naiveknn_learner.ComplexNaiveKnn(TS)
-  (* features of a proof state, positive tactic, possible tactics, disappear features, appear features *)
+
   type ownmodel = (data_status * Names.Constant.t * (outcome list * tactic) list) list
   type model = {database : ownmodel; lshf : LSHF.model}
 
@@ -177,7 +177,7 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
     | `File ->
       output_string (data_file ()) "#lemma\n";
       List.iter (fun (outcomes, tac) ->
-          List.iter (fun { before; after; preds; _ } ->
+          List.iter (fun { before; after; preds; parents; _ } ->
               let ps = proof_state_to_simple_ints before in
               let preds = CEphemeron.default preds [] in
               (* let preds = List.map (fun (tactic, after) ->
@@ -199,12 +199,14 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
                                         (* ; Std.sexp_of_list Std.sexp_of_int @@ syntactic_feats tac *)]) preds in
               let tac' = tactic_hash tac in
               (* let neg = List.filter (fun neg_tac -> tac != neg_tac) neg in *)
+              let parent_tacs = List.map (fun (_, { executions; tactic }) -> tactic_hash tactic) parents in
               let line = Sexplib.Pre_sexp.List [ Std.sexp_of_list Std.sexp_of_int ps
                                                ; Std.sexp_of_int tac'
                                                ; Sexplib.Pre_sexp.List preds
                                                ; Std.sexp_of_list Std.sexp_of_int disappear_feats
                                                ; Std.sexp_of_list Std.sexp_of_int appear_feats
-                                               (* ; Std.sexp_of_list Std.sexp_of_int @@ syntactic_feats tac *)] in
+                                               (* ; Std.sexp_of_list Std.sexp_of_int @@ syntactic_feats tac *)
+                                               ; Std.sexp_of_list Std.sexp_of_int @@ parent_tacs ] in
               output_string (data_file ()) (Sexp.to_string line ^ "\n")
             ) outcomes
         ) ls
