@@ -90,6 +90,13 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
         (IntSet.union feat_set (state_diff after_state before_state))
       ) IntSet.empty after_states in
     IntSet.elements appear_feat_set *)
+  
+  (** remove the occurrence numbers just for recording *)
+  let proof_state_to_complex_ints ps =
+    let complex_feats = proof_state_to_complex_features 2 ps in
+    (* print_endline (String.concat ", "  (List.map Stdlib.snd complex_feats)); *)
+    let feats = List.rev_map (fun (kind, feat) ->  kind, Hashtbl.hash feat) complex_feats in
+    List.sort_uniq (fun (_kind1, feat1) (_kind2, feat2) -> Int.compare feat1 feat2) feats
 
   let rec add_to_features_and_count_list feature' feature_and_count =
     match feature_and_count with
@@ -137,7 +144,7 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
           let disappear_feats', appear_feats' = get_tac_semantic_aux before_state after_state proof_state_to_complex_features in
           disappear_feats_acc@disappear_feats', appear_feats_acc@appear_feats'
       )  ([], []) after_states 
-    else (proof_state_to_simple_ints before_state), []
+    else remove_feat_kind (proof_state_to_complex_ints before_state), []
     in
     List.sort_uniq Int.compare disappear_feats, List.sort_uniq Int.compare appear_feats 
 
