@@ -22,7 +22,8 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
   open TS
   open LH
   open FH
-  module LSHF = Naiveknn_learner.ComplexNaiveKnn(TS)
+  (* module LSHF = Naiveknn_learner.ComplexNaiveKnn(TS) *)
+  module LSHF = Naiveknn_learner.SimpleNaiveKnn(TS)
 
   type ownmodel = (data_status * Names.Constant.t * (outcome list * tactic) list) list
   type model = {database : ownmodel; lshf : LSHF.model}
@@ -39,7 +40,7 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
   let hyp_equal hyp1 hyp2 = Context.Named.Declaration.equal
     (fun hyp_1 hyp_2 -> term_equal hyp_1 hyp_2) hyp1 hyp2
 
-  let mkfeats t = term_sexpr_to_simple_features 3 (term_sexpr t)
+  let mkfeats t = term_sexpr_to_simple_features 2 (term_sexpr t)
 
   let list_to_set l =
     List.fold_left (fun int_set elm -> IntSet.add elm int_set) IntSet.empty l
@@ -135,16 +136,16 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
     disappear_feats, appear_feats
 
   let get_tac_semantic before_state after_states = 
-    let proof_state_to_complex_features = (fun state -> remove_feat_kind (proof_state_to_complex_features 2 state)) in
-    (* let proof_state_to_simple_features = (fun state -> (proof_state_to_simple_features 2 state)) in **)
+    (* let proof_state_to_complex_features = (fun state -> remove_feat_kind (proof_state_to_complex_features 2 state)) in *)
+    let proof_state_to_simple_features = (fun state -> (proof_state_to_simple_features 2 state)) in 
     let disappear_feats, appear_feats = 
     if after_states != [] then
       List.fold_left (
         fun (disappear_feats_acc, appear_feats_acc) after_state -> 
-          let disappear_feats', appear_feats' = get_tac_semantic_aux before_state after_state proof_state_to_complex_features in
+          let disappear_feats', appear_feats' = get_tac_semantic_aux before_state after_state proof_state_to_simple_features in
           disappear_feats_acc@disappear_feats', appear_feats_acc@appear_feats'
       )  ([], []) after_states 
-    else remove_feat_kind (proof_state_to_complex_ints before_state), []
+    else proof_state_to_simple_ints before_state, []
     in
     List.sort_uniq Int.compare disappear_feats, List.sort_uniq Int.compare appear_feats 
 
@@ -185,8 +186,8 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
       output_string (data_file ()) "#lemma\n";
       List.iter (fun (outcomes, tac) ->
           List.iter (fun { before; after; preds; parents; _ } ->
-              (* let ps = proof_state_to_simple_ints before in *)
-              let ps = remove_feat_kind (proof_state_to_complex_ints before) in
+              let ps = proof_state_to_simple_ints before in 
+              (* let ps = remove_feat_kind (proof_state_to_complex_ints before) in *)
               let preds = CEphemeron.default preds [] in
               (* let preds = List.map (fun (tactic, after) ->
                   let disappear_feats = Option.default [-1] @@ Option.map (feat_disappear before) after in
