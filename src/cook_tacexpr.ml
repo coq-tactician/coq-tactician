@@ -158,9 +158,6 @@ let cook s (tac : glob_tactic_expr) : glob_tactic_expr discharged =
     | TacProgress t ->
       let+ t = cook t in
       TacProgress t
-    | TacShowHyps t ->
-      let+ t = cook t in
-      TacShowHyps t
     | TacAbstract (t, id) ->
       let t, ids = cook t in
       TacAbstract (t, id), ids

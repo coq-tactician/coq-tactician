@@ -137,7 +137,6 @@ let gen_tactic_expr_r_name r (tac : 'a gen_tactic_expr_r) = match tac with
   | TacTime (_, _) -> [s2s "TacTime"]
   | TacRepeat _ -> [s2s "TacRepeat"]
   | TacProgress _ -> [s2s "TacProgress"]
-  | TacShowHyps _ -> [s2s "TacShowHyps"]
   | TacAbstract (_, _) -> [s2s "TacAbstract"]
   | TacId _ -> [s2s "TacId"]
   | TacFail (_, _, _) -> [s2s "TacFail"]

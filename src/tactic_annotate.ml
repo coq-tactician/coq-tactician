@@ -175,7 +175,6 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
     | TacTime (s, t)         ->            CAst.make ?loc @@ TacTime (s, annotate t) (* No need to record try *)
     | TacRepeat t       ->                 router Repeat (TacRepeat (rinner Repeat t))
     | TacProgress t     ->                 router Progress (TacProgress (rinner Progress t))
-    | TacShowHyps t     ->                 CAst.make ?loc @@ TacShowHyps (annotate t) (* No need to record infoH *)
     | TacAbstract (t, id) ->               router Abstract (TacAbstract (rinner Abstract t, id))
     | TacId _           ->                 tac (* No need to record id *)
     | TacFail _         ->                 tac (* No need to record fail *)

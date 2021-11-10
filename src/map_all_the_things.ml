@@ -1219,9 +1219,6 @@ module MakeMapper (M: MapDef) = struct
      | TacProgress t ->
        let+ t = m.tactic_map t in
        TacProgress t
-     | TacShowHyps t ->
-       let+ t = m.tactic_map t in
-       TacShowHyps t
      | TacAbstract (t, id) ->
        let+ t = m.tactic_map t
        and+ id = option_map m.u.variable id in
