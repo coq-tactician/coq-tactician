@@ -1,0 +1,52 @@
+name: CI Daily
+
+on:
+  schedule:
+    - cron:  '0 0 * * *'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - branch: coq8.10
+            coq_version: '8.10'
+            ocaml_version: 4.09-flambda
+          - branch: coq8.11
+            coq_version: 8.11
+            ocaml_version: 4.11-flambda
+          - branch: coq8.12
+            coq_version: 8.12
+            ocaml_version: 4.11-flambda
+          - branch: coq8.13
+            coq_version: 8.13
+            ocaml_version: 4.12-flambda
+          - branch: coq8.14
+            coq_version: 8.14
+            ocaml_version: 4.12-flambda
+          - branch: coqdev
+            coq_version: dev
+            ocaml_version: 4.12-flambda
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          ref: ${{ matrix.branch }}
+      - uses: coq-community/docker-coq-action@v1.2.3
+        with:
+          opam_file: 'coq-tactician.opam'
+          coq_version: ${{ matrix.coq_version }}
+          ocaml_version: ${{ matrix.ocaml_version }}
+          install: |
+            startGroup "Install dependencies"
+              opam repo add coq-extra-dev https://coq.inria.fr/opam/extra-dev
+              opam pin add -n -y -k path $PACKAGE $WORKDIR
+              opam update -y
+              opam install -y -j 2 -t $PACKAGE --deps-only
+            endGroup
+          script: |
+            startGroup "Build"
+              opam install -y -v -j 2 -t $PACKAGE
+              opam list
+            endGroup
