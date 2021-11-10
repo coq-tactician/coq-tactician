@@ -8,7 +8,7 @@ type prediction =
 (* TODO: Modify this with a more failsafe contract *)
 type search_strategy = (unit -> bool) -> prediction IStream.t tactic -> unit tactic
 
-let null_strategy _ _ = Tacticals.New.tclZEROMSG (Pp.str "No search strategy registered")
+let null_strategy _ _ = Tacticals.tclZEROMSG (Pp.str "No search strategy registered")
 
 let strategy : search_strategy ref = ref null_strategy
 let register_search_strategy str strat = strategy := strat

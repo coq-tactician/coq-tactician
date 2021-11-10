@@ -641,8 +641,8 @@ let tacpredict max_reached =
   predict () >>= fun (learner, cont) ->
   let cont = cont >>= fun predictions ->
     let taceval i focus (t, h) = tclUNIT () >>= fun () ->
-      if max_reached () then Tacticals.New.tclZEROMSG (Pp.str "Ran out of executions") else
-        tclFOCUS ~nosuchgoal:(Tacticals.New.tclZEROMSG (Pp.str "Predictor gave wrong focus"))
+      if max_reached () then Tacticals.tclZEROMSG (Pp.str "Ran out of executions") else
+        tclFOCUS ~nosuchgoal:(Tacticals.tclZEROMSG (Pp.str "Predictor gave wrong focus"))
           (focus+1) (focus+1)
           (Goal.enter_one (fun gl ->
                let env = Goal.env gl in
@@ -661,8 +661,8 @@ let tclTIMEOUT2 n t =
   Proofview.tclOR
     (Timeouttac.ptimeout n t)
     begin function (e, info) -> match e with
-      | Logic_monad.Tac_Timeout -> Tacticals.New.tclZEROMSG (Pp.str "timout")
-      | e -> Tacticals.New.tclZEROMSG (Pp.str "haha")
+      | Logic_monad.Tac_Timeout -> Tacticals.tclZEROMSG (Pp.str "timout")
+      | e -> Tacticals.tclZEROMSG (Pp.str "haha")
     end
 
 let contains s1 s2 =
@@ -690,7 +690,7 @@ let commonSearch max_exec =
     (* We want to allow at least one nested search, such that users can embed search in more complicated
        expressions. But allowing infinite nesting will just lead to divergence. *)
     inc_search_recursion_depth () >>= fun n ->
-    if n >= max_recursion_depth then Tacticals.New.tclZEROMSG (Pp.str "too much search nesting") else
+    if n >= max_recursion_depth then Tacticals.tclZEROMSG (Pp.str "too much search nesting") else
       tacpredict max_reached >>= fun predict ->
       tclLIFT (NonLogical.make (fun () -> CWarnings.get_flags ())) >>= (fun oldFlags ->
           let doFlags = n = 0 in
@@ -700,7 +700,7 @@ let commonSearch max_exec =
              tclLIFT (NonLogical.make (fun () ->
                  tac_exec_count := 0; Dumpglob.pause (); CWarnings.set_flags ("-all"))))
           <*> tclOR
-            (tclONCE (Tacticals.New.tclCOMPLETE (search_with_strategy max_reached predict)) <*>
+            (tclONCE (Tacticals.tclCOMPLETE (search_with_strategy max_reached predict)) <*>
              get_witness () >>= fun wit -> empty_witness () <*>
              dec_search_recursion_depth () >>= fun () -> setFlags () <*> tclUNIT (wit, !tac_exec_count))
             (fun (e, i) -> setFlags () <*> tclZERO ~info:i e))

@@ -38,12 +38,12 @@ let tclSearchDiagonalDFS max_reached predict depth =
 
 let rec tclSearchDiagonalIterative d max_reached predict : unit tactic =
   (* (tclLIFT (NonLogical.print_info (Pp.str ("Iterative depth: " ^ string_of_int d)))) <*> *)
-  if max_reached () then Tacticals.New.tclZEROMSG (Pp.str "No more executions") else
+  if max_reached () then Tacticals.tclZEROMSG (Pp.str "No more executions") else
   tclOR
     (tclSearchDiagonalDFS max_reached predict d)
     (function
       | (PredictionsEnd, _) ->
-        Tacticals.New.tclZEROMSG (Pp.str "Tactician failed: there are no more tactics left")
+        Tacticals.tclZEROMSG (Pp.str "Tactician failed: there are no more tactics left")
       | _ -> tclSearchDiagonalIterative (d + 1) max_reached predict)
 
 let () = register_search_strategy "diagonal iterative search" (tclSearchDiagonalIterative 10)
