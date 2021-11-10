@@ -12,7 +12,7 @@ TACTICIANLIB=%{coq-tactician:lib}%
 TACTICIANDIR=%{coq:lib}%/user-contrib/Tactician
 
 TACTICIANEXTRAFLAGS=$(cat %{coq-tactician:etc}%/injection-flags)
-TACTICIANFLAGS="-q -I $TACTICIANDIR -R $TACTICIANDIR Tactician -rifrom Tactician Ltac1.Record"
+TACTICIANFLAGS="-q -I $TACTICIANDIR -R $TACTICIANDIR Tactician -require Tactician.Ltac1.Record"
 
 link_binary() {
     ln -s $OPAMBIN/${1} $COQBIN/${1}
