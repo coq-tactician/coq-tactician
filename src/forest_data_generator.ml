@@ -135,7 +135,7 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
                   let appear_feats = Option.default [-1] @@ Option.map (feat_appear before) after in
                   (tactic, disappear_feats, appear_feats)) preds in
               let disappear_feats = [] (* feat_disappear before after *) in
-              let appear_feats = [] (* feat_appear before after *) in
+              let appear_feats = feat_appear before after in
               let preds = List.map (fun (tac, df, af) ->
                   Sexplib.Pre_sexp.List [Std.sexp_of_int @@ tactic_hash tac;
                                          Std.sexp_of_list Std.sexp_of_int df;
