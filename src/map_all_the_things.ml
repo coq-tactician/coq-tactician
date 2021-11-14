@@ -704,9 +704,7 @@ module MakeMapper (M: MapDef) = struct
   and glob_constr_map m r c = mdast m (glob_constr_r_map m r) c
 
   let explicitation_map m = function
-    | ExplByPos (i, id) ->
-      let+ id = option_map m.variable id in
-      ExplByPos (i, id)
+    | ExplByPos i -> return @@ ExplByPos i
     | ExplByName id ->
       let+ id = m.variable id in
       ExplByName id
