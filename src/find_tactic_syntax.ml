@@ -5,8 +5,9 @@ open Genarg
 open Tacexpr
 
 module TacticFinderDef = struct
-  include MapDefTemplate (WriterMonad
-                            (struct type w = bool let id = false let comb = Bool.(||) end))
+  module M = WriterMonad
+      (struct type w = bool let id = false let comb = Bool.(||) end)
+  include MapDefTemplate (M)
   let map_sort = "tactic-finder"
   let warnProblem wit =
     Feedback.msg_warning (Pp.(str "Tactician is having problems with " ++
@@ -33,10 +34,10 @@ let contains_ml_tactic ml t =
                      | _ -> c a))
                ; glob_tactic = (fun t c -> (match t with
                      | TacML CAst.{ v=(e, args); _} ->
-                       let* () = if ml = e then (true, ()) else return () in
+                       let* () = if ml = e then M.tell true else return () in
                        c t
                      | TacAlias CAst.{ v=(k, args); _} ->
                        let* _ = contains_ml_tactic_alias k in
                        c t
                      | _ -> c t)) } in
-  fst @@ TacticFinderMapper.glob_tactic_expr_map mapper t
+  fst @@ M.run @@ TacticFinderMapper.glob_tactic_expr_map mapper t
