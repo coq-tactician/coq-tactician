@@ -190,16 +190,6 @@ let _ = register_generic_map wit_lconstr (module struct
     end
   end)
 
-let _ = register_generic_map wit_casted_constr (module struct
-    type raw = constr_expr
-    type glob = glob_constr_and_expr
-    module M = functor (M : MapDef) -> struct
-      open M
-      let raw_map m = m.constr_expr_map
-      let glob_map m = m.glob_constr_and_expr_map
-    end
-  end)
-
 let _ = register_generic_map wit_in_clause (module struct
     type raw = lident clause_expr
     type glob = lident clause_expr

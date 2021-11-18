@@ -26,7 +26,7 @@ let _ = [
   at wit_clause_dft_concl;
 
   (* Extraargs *)
-  at wit_orient; at wit_rename; at wit_natural; at wit_glob; at wit_lconstr; at wit_casted_constr;
+  at wit_orient; at wit_rename; at wit_natural; at wit_glob; at wit_lconstr;
   at wit_hloc; (* wit_by_arg_tac *) at wit_test_lpar_id_colon; at wit_in_clause; at wit_occurrences;
 
   (* Tacarg *)
