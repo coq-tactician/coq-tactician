@@ -115,7 +115,7 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
     let features = extract_feat state in    
     let sorted_features = List.sort String.compare features in
     let feature_and_count_list = attach_count_to_features sorted_features [] in
-    let ints_and_count_list = List.map (fun (feature, count) -> Hashtbl.hash feature, count) feature_and_count_list in
+    let ints_and_count_list = List.rev_map (fun (feature, count) -> Hashtbl.hash feature, count) feature_and_count_list in
     ints_and_count_list
 
   (* features in int_and_count but not int_and_count' *)
@@ -136,16 +136,16 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
     disappear_feats, appear_feats
 
   let get_tac_semantic before_state after_states = 
-    (* let proof_state_to_complex_features = (fun state -> remove_feat_kind (proof_state_to_complex_features 2 state)) in *)
-    let proof_state_to_simple_features = (fun state -> (proof_state_to_simple_features 2 state)) in 
+    let proof_state_to_complex_features = (fun state -> remove_feat_kind (proof_state_to_complex_features 2 state)) in 
+    (* let proof_state_to_simple_features = (fun state -> (proof_state_to_simple_features 2 state)) in *) 
     let disappear_feats, appear_feats = 
     if after_states != [] then
       List.fold_left (
         fun (disappear_feats_acc, appear_feats_acc) after_state -> 
-          let disappear_feats', appear_feats' = get_tac_semantic_aux before_state after_state proof_state_to_simple_features in
+          let disappear_feats', appear_feats' = get_tac_semantic_aux before_state after_state proof_state_to_complex_features in
           disappear_feats_acc@disappear_feats', appear_feats_acc@appear_feats'
       )  ([], []) after_states 
-    else proof_state_to_simple_ints before_state, []
+    else remove_feat_kind (proof_state_to_complex_ints before_state), []
     in
     List.sort_uniq Int.compare disappear_feats, List.sort_uniq Int.compare appear_feats 
 
@@ -186,14 +186,14 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
       output_string (data_file ()) "#lemma\n";
       List.iter (fun (outcomes, tac) ->
           List.iter (fun { before; after; preds; parents; _ } ->
-              let ps = proof_state_to_simple_ints before in 
-              (* let ps = remove_feat_kind (proof_state_to_complex_ints before) in *)
+              (* let ps = proof_state_to_simple_ints before in *) 
+              let ps = remove_feat_kind (proof_state_to_complex_ints before) in 
               let preds = CEphemeron.default preds [] in
               (* let preds = List.map (fun (tactic, after) ->
                   let disappear_feats = Option.default [-1] @@ Option.map (feat_disappear before) after in
                   let appear_feats = Option.default [-1] @@ Option.map (feat_appear before) after in
                   (tactic, disappear_feats, appear_feats)) preds in *)
-              let preds = List.map (fun (tactic, after) ->
+              let preds = List.rev_map (fun (tactic, after) ->
                 let disappear_feats, appear_feats = 
                   if after = None then [-1], [-1] 
                   else get_tac_semantic before (Option.get after) in
@@ -201,7 +201,7 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
               let disappear_feats, appear_feats = get_tac_semantic before after in 
               (* let disappear_feats = feat_disappear before after in
               let appear_feats = feat_appear before after in *)
-              let preds = List.map (fun (tac, df, af) ->
+              let preds = List.rev_map (fun (tac, df, af) ->
                   Sexplib.Pre_sexp.List [ Std.sexp_of_int @@ tactic_hash tac
                                         ; Std.sexp_of_list Std.sexp_of_int df
                                         ; Std.sexp_of_list Std.sexp_of_int af
