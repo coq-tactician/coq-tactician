@@ -883,7 +883,7 @@ let runTactics n (tacs : Tactic_learner_internal.TS.prediction IStream.t) =
                (Feedback.msg_info Pp.(str "size omitted: " ++ int(size));
                 true) else too_large
            ) false gls in
-         if too_large then tclZERO (StateException gls) else tclZERO (SizeException))
+         if not too_large then tclZERO (StateException gls) else tclZERO (SizeException))
         (function
           | (StateException gls, _) -> aux (n - 1) tacs ((tactic, Some gls)::glsacc)
           | (e, _) -> aux (n - 1) tacs ((tactic, None)::glsacc))
