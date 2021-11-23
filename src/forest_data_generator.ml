@@ -131,8 +131,7 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
               let ps = proof_state_to_simple_ints before in
               let preds = CEphemeron.default preds [] in
               let preds = List.map (fun (tactic, after) ->
-                  if after != None then
-                    Feedback.msg_notice (Pp.str "After not none");
+                  Option.iter (fun ls -> Feedback.msg_notice (Pp.int (List.length ls))) after;
                   let disappear_feats = Option.default [-1] @@ Option.map (feat_disappear before) after in
                   let appear_feats = Option.default [-1] @@ Option.map (feat_appear before) after in
                   (tactic, disappear_feats, appear_feats)) preds in
