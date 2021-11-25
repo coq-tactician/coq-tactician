@@ -47,6 +47,7 @@
    coq_ast_monadic_map
    coq_ast_cata
    coq_ast_sequence
+   coq_ast_map_elements
  ))
  (libraries
    coq.plugins.ltac

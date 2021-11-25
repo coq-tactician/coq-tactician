@@ -18,7 +18,9 @@ module Sequence (M : Monad.Def) = struct
     name:g_nam t;
     tacexpr:glob_tactic_expr t;
     tacarg:glob_tactic_arg t;
-    genarg:glevel generic_argument t
+    genarg:glevel generic_argument t;
+    intro_pattern_expr:g_trm intro_pattern_expr t;
+    or_and_intro_pattern_expr:g_trm or_and_intro_pattern_expr t;
   >
   and glob_tactic_expr_t =
     g_dispatch_t gen_tactic_expr
@@ -36,11 +38,13 @@ module Sequence (M : Monad.Def) = struct
     name:r_nam t;
     tacexpr:raw_tactic_expr t;
     tacarg:raw_tactic_arg t;
-    genarg:rlevel generic_argument t
+    genarg:rlevel generic_argument t;
+    intro_pattern_expr:r_trm intro_pattern_expr t;
+    or_and_intro_pattern_expr:r_trm or_and_intro_pattern_expr t;
   >
-  and raw_tactic_expr_t =
+  type raw_tactic_expr_t =
     r_dispatch_t gen_tactic_expr
-  and raw_tactic_arg_t =
+  type raw_tactic_arg_t =
     r_dispatch_t gen_tactic_arg
   type raw_atomic_tactic_expr_t =
     r_dispatch_t gen_atomic_tactic_expr
@@ -50,18 +54,28 @@ module Sequence (M : Monad.Def) = struct
     cases_pattern_g:cases_pattern t;
     genarg:Genarg.glob_generic_argument t
   >
-  and glob_constr_t = (constr_g_dispatch_t glob_constr_r, [ `any ]) DAst.t
-  and cases_pattern_t = (constr_g_dispatch_t cases_pattern_r, [ `any ]) DAst.t
+ type glob_constr_t = (constr_g_dispatch_t glob_constr_r, [ `any ]) DAst.t
+ type cases_pattern_t = (constr_g_dispatch_t cases_pattern_r, [ `any ]) DAst.t
 
   type constr_r_dispatch_t = <
     constr_expr:constr_expr t;
     cases_pattern_expr:cases_pattern_expr t;
     genarg:Genarg.raw_generic_argument t
   >
-  and constr_expr_t = constr_r_dispatch_t constr_expr_r CAst.t
-  and cases_pattern_expr_t = constr_r_dispatch_t cases_pattern_expr_r CAst.t
+  type constr_expr_t = constr_r_dispatch_t constr_expr_r CAst.t
+  type cases_pattern_expr_t = constr_r_dispatch_t cases_pattern_expr_r CAst.t
 
   type constr_pattern_t = constr_pattern t constr_pattern_r
+
+  type 'constr intro_pattern_dispatch_t = <
+    constr:'constr t;
+    intro_pattern_expr:'constr intro_pattern_expr t;
+    intro_pattern_action_expr:'constr intro_pattern_action_expr t;
+    or_and_intro_pattern_expr:'constr or_and_intro_pattern_expr t
+  >
+  type 'constr intro_pattern_expr_t = 'constr intro_pattern_dispatch_t intro_pattern_expr_r
+  type 'constr intro_pattern_action_expr_t = 'constr intro_pattern_dispatch_t intro_pattern_action_expr_r
+  type 'constr or_and_intro_pattern_expr_t = 'constr intro_pattern_dispatch_t or_and_intro_pattern_expr_r
 
   let id x = x
   let idobj = object
@@ -78,6 +92,10 @@ module Sequence (M : Monad.Def) = struct
     method term = id
     method dterm = id
     method name = id
+    method intro_pattern_expr = id
+    method intro_pattern_action_expr = id
+    method or_and_intro_pattern_expr = id
+    method constr = id
   end
 
   module MM = Mapper(M)
@@ -100,5 +118,11 @@ module Sequence (M : Monad.Def) = struct
     MM.gen_tactic_arg_map idobj
   let raw_tacexpr_sequence : raw_tactic_expr_t -> raw_tactic_expr t =
     MM.gen_tactic_expr_map idobj
+  let intro_pattern_expr_sequence (t : 'a intro_pattern_expr_t) : 'a intro_pattern_expr t =
+    MM.intro_pattern_expr_map idobj t
+  let intro_pattern_action_expr_sequence (t : 'a intro_pattern_action_expr_t) : 'a intro_pattern_action_expr t =
+    MM.intro_pattern_action_expr_map idobj t
+  let or_and_intro_pattern_expr_sequence (t : 'a or_and_intro_pattern_expr_t) : 'a or_and_intro_pattern_expr t =
+    MM.or_and_intro_pattern_expr_map idobj t
 
 end

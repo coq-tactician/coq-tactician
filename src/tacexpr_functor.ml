@@ -8,25 +8,123 @@ open Tacexpr
 open Tactypes
 open Libnames
 
+type 'a intro_pattern_expr_r =
+  | IntroForthcoming of bool
+  | IntroNaming of Namegen.intro_pattern_naming_expr
+  | IntroAction of 'intro_pattern_action_expr
+  constraint 'a = <
+    constr:'constr;
+    intro_pattern_expr:'intro_pattern_expr;
+    intro_pattern_action_expr:'intro_pattern_action_expr;
+    or_and_intro_pattern_expr:'or_and_intro_pattern_expr
+  >
+type 'a intro_pattern_action_expr_r =
+  | IntroWildcard
+  | IntroOrAndPattern of 'or_and_intro_pattern_expr
+  | IntroInjection of ('intro_pattern_expr) CAst.t list
+  | IntroApplyOn of 'constr CAst.t * 'intro_pattern_expr CAst.t
+  | IntroRewrite of bool
+  constraint 'a = <
+    constr:'constr;
+    intro_pattern_expr:'intro_pattern_expr;
+    intro_pattern_action_expr:'intro_pattern_action_expr;
+    or_and_intro_pattern_expr:'or_and_intro_pattern_expr
+  >
+type 'a or_and_intro_pattern_expr_r =
+  | IntroOrPattern of ('intro_pattern_expr) CAst.t list list
+  | IntroAndPattern of ('intro_pattern_expr) CAst.t list
+  constraint 'a = <
+    constr:'constr;
+    intro_pattern_expr:'intro_pattern_expr;
+    intro_pattern_action_expr:'intro_pattern_action_expr;
+    or_and_intro_pattern_expr:'or_and_intro_pattern_expr
+  >
+
+type 'constr intro_pattern_dispatch = <
+  constr:'constr;
+  intro_pattern_expr:'constr intro_pattern_expr;
+  intro_pattern_action_expr:'constr intro_pattern_action_expr;
+  or_and_intro_pattern_expr:'constr or_and_intro_pattern_expr
+>
+and 'constr intro_pattern_expr = 'constr intro_pattern_dispatch intro_pattern_expr_r
+and 'constr intro_pattern_action_expr = 'constr intro_pattern_dispatch intro_pattern_action_expr_r
+and 'constr or_and_intro_pattern_expr = 'constr intro_pattern_dispatch or_and_intro_pattern_expr_r
+
+type 'a inversion_strength =
+  | NonDepInversion of
+      Inv.inversion_kind * 'name list * 'or_and_intro_pattern_expr CAst.t or_var option
+  | DepInversion of
+      Inv.inversion_kind * 'term option * 'or_and_intro_pattern_expr CAst.t or_var option
+  | InversionUsing of 'term * 'name list
+  constraint 'a = <
+    term:'term;
+    dterm: 'dterm;
+    pattern:'pattern;
+    constant:'constant;
+    reference:'reference;
+    name:'name;
+    tacexpr:'tacexpr;
+    tacarg:'tacarg;
+    genarg:'genarg;
+    intro_pattern_expr:'intro_pattern_expr;
+    or_and_intro_pattern_expr:'or_and_intro_pattern_expr;
+  >
+
+type 'a induction_clause =
+  'dterm with_bindings Tactics.destruction_arg *
+  (Namegen.intro_pattern_naming_expr CAst.t option (* eqn:... *)
+   * 'or_and_intro_pattern_expr CAst.t or_var option) (* as ... *)
+  * 'name clause_expr option (* in ... *)
+  constraint 'a = <
+    term:'term;
+    dterm: 'dterm;
+    pattern:'pattern;
+    constant:'constant;
+    reference:'reference;
+    name:'name;
+    tacexpr:'tacexpr;
+    tacarg:'tacarg;
+    genarg:'genarg;
+    intro_pattern_expr:'intro_pattern_expr;
+    or_and_intro_pattern_expr:'or_and_intro_pattern_expr;
+  >
+
+type 'a induction_clause_list =
+  'a induction_clause list
+  * 'term with_bindings option (* using ... *)
+  constraint 'a = <
+    term:'term;
+    dterm: 'dterm;
+    pattern:'pattern;
+    constant:'constant;
+    reference:'reference;
+    name:'name;
+    tacexpr:'tacexpr;
+    tacarg:'tacarg;
+    genarg:'genarg;
+    intro_pattern_expr:'intro_pattern_expr;
+    or_and_intro_pattern_expr:'or_and_intro_pattern_expr;
+  >
+
 type 'a gen_atomic_tactic_expr =
   (* Basic tactics *)
-  | TacIntroPattern of evars_flag * 'dterm intro_pattern_expr CAst.t list
+  | TacIntroPattern of evars_flag * 'intro_pattern_expr CAst.t list
   | TacApply of advanced_flag * evars_flag * 'term with_bindings_arg list *
-      ('name * 'dterm intro_pattern_expr CAst.t option) option
+      ('name * 'intro_pattern_expr CAst.t option) option
   | TacElim of evars_flag * 'term with_bindings_arg * 'term with_bindings option
   | TacCase of evars_flag * 'term with_bindings_arg
   | TacMutualFix of Id.t * int * (Id.t * int * 'term) list
   | TacMutualCofix of Id.t * (Id.t * 'term) list
   | TacAssert of
       evars_flag * bool * 'tacexpr option option *
-      'dterm intro_pattern_expr CAst.t option * 'term
+      'intro_pattern_expr CAst.t option * 'term
   | TacGeneralize of ('term with_occurrences * Name.t) list
   | TacLetTac of evars_flag * Name.t * 'term * 'name clause_expr * letin_flag *
       Namegen.intro_pattern_naming_expr CAst.t option
 
   (* Derived basic tactics *)
   | TacInductionDestruct of
-      rec_flag * evars_flag * ('term,'dterm,'name) induction_clause_list
+      rec_flag * evars_flag * 'a induction_clause_list
 
   (* Conversion *)
   | TacReduce of ('term,'constant,'pattern) red_expr_gen * 'name clause_expr
@@ -42,7 +140,7 @@ type 'a gen_atomic_tactic_expr =
          uninterpreted, it works fine here too, and avoid more
          disruption of this file. *)
       'tacexpr option
-  | TacInversion of ('term,'dterm,'name) inversion_strength * quantified_hypothesis
+  | TacInversion of 'a inversion_strength * quantified_hypothesis
 
   constraint 'a = <
     term:'term;
@@ -53,7 +151,9 @@ type 'a gen_atomic_tactic_expr =
     name:'name;
     tacexpr:'tacexpr;
     tacarg:'tacarg;
-    genarg:'genarg
+    genarg:'genarg;
+    intro_pattern_expr:'intro_pattern_expr;
+    or_and_intro_pattern_expr:'or_and_intro_pattern_expr;
   >
 
 type 'a gen_tactic_arg =
@@ -75,7 +175,9 @@ type 'a gen_tactic_arg =
     name:'name;
     tacexpr:'tacexpr;
     tacarg:'tacarg;
-    genarg:'genarg
+    genarg:'genarg;
+    intro_pattern_expr:'intro_pattern_expr;
+    or_and_intro_pattern_expr:'or_and_intro_pattern_expr;
   >
 
 type 'a gen_tactic_fun_ast =
@@ -90,7 +192,9 @@ type 'a gen_tactic_fun_ast =
     name:'name;
     tacexpr:'tacexpr;
     tacarg:'tacarg;
-    genarg:'genarg
+    genarg:'genarg;
+    intro_pattern_expr:'intro_pattern_expr;
+    or_and_intro_pattern_expr:'or_and_intro_pattern_expr;
   >
 
 (** Generic ltac expressions.
@@ -170,7 +274,9 @@ constraint 'a = <
     name:'name;
     tacexpr:'tacexpr;
     tacarg:'tacarg;
-    genarg:'genarg
+    genarg:'genarg;
+    intro_pattern_expr:'intro_pattern_expr;
+    or_and_intro_pattern_expr:'or_and_intro_pattern_expr;
 >
 
 (** Globalized tactics *)
@@ -190,7 +296,9 @@ type g_dispatch =  <
   name:g_nam;
   tacexpr:glob_tactic_expr;
   tacarg:glob_tactic_arg;
-  genarg:glevel generic_argument
+  genarg:glevel generic_argument;
+  intro_pattern_expr:g_trm intro_pattern_expr;
+  or_and_intro_pattern_expr:g_trm or_and_intro_pattern_expr;
 >
 
 and glob_tactic_expr =
@@ -220,7 +328,9 @@ type r_dispatch =  <
   name:r_nam;
   tacexpr:raw_tactic_expr;
   tacarg:raw_tactic_arg;
-  genarg:rlevel generic_argument
+  genarg:rlevel generic_argument;
+  intro_pattern_expr:r_trm intro_pattern_expr;
+  or_and_intro_pattern_expr:r_trm or_and_intro_pattern_expr;
 >
 
 and raw_tactic_expr =

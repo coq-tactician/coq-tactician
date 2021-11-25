@@ -19,7 +19,13 @@ module Cata (M : Monad.Def) : sig
     ; glob_tacarg     : glob_tactic_arg_t    -> glob_tactic_arg t
     ; glob_tacexpr    : glob_tactic_expr_t   -> glob_tactic_expr t
     ; raw_tacarg      : raw_tactic_arg_t     -> raw_tactic_arg t
-    ; raw_tacexpr     : raw_tactic_expr_t    -> raw_tactic_expr t }
+    ; raw_tacexpr     : raw_tactic_expr_t    -> raw_tactic_expr t
+    ; glob_intro_pattern_expr : g_trm intro_pattern_expr_t -> g_trm intro_pattern_expr t
+    ; glob_intro_pattern_action_expr : g_trm intro_pattern_action_expr_t -> g_trm intro_pattern_action_expr t
+    ; glob_or_and_intro_pattern_expr : g_trm or_and_intro_pattern_expr_t -> g_trm or_and_intro_pattern_expr t
+    ; raw_intro_pattern_expr : r_trm intro_pattern_expr_t -> r_trm intro_pattern_expr t
+    ; raw_intro_pattern_action_expr : r_trm intro_pattern_action_expr_t -> r_trm intro_pattern_action_expr t
+    ; raw_or_and_intro_pattern_expr : r_trm or_and_intro_pattern_expr_t -> r_trm or_and_intro_pattern_expr t }
 
   val default_sequence_record : sequence_record
 
@@ -49,6 +55,8 @@ module MapDef (M : Monad.Def) : sig
   open Tacexpr
   open Glob_term
   open Constrexpr
+  open Tactypes
+  open Genredexpr
 
   type generic_obj =
     < cases_pattern_g    : cases_pattern map
@@ -60,7 +68,14 @@ module MapDef (M : Monad.Def) : sig
     ; raw_tacarg         : raw_tactic_arg map
     ; raw_tacexpr        : raw_tactic_expr map
     ; g_term             : g_trm map
-    ; constr_expr        : constr_expr map >
+    ; constr_expr        : constr_expr map
+    ; raw_intro_pattern_expr : r_trm intro_pattern_expr map
+    ; glob_intro_pattern_expr : g_trm intro_pattern_expr map
+    ; raw_intro_pattern_action_expr : r_trm intro_pattern_action_expr map
+    ; glob_intro_pattern_action_expr : g_trm intro_pattern_action_expr map
+    ; raw_or_and_intro_pattern_expr : r_trm or_and_intro_pattern_expr map
+    ; glob_or_and_intro_pattern_expr : g_trm or_and_intro_pattern_expr map
+    >
 end
 
 module type GenMap = sig

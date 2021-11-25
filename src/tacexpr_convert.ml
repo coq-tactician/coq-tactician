@@ -14,7 +14,14 @@ let ( glob_tactic_expr_to_glob_tactic_expr
     , raw_tactic_arg_to_raw_tactic_arg
     , raw_atomic_tactic_to_raw_atomic_tactic
     , g_trm_to_g_trm
-    , g_pat_to_g_pat ) :
+    , g_pat_to_g_pat
+    , glob_intro_pattern_expr_to_glob_intro_pattern_expr
+    , glob_intro_pattern_action_expr_to_glob_intro_pattern_action_expr
+    , glob_or_and_intro_pattern_expr_to_glob_or_and_intro_pattern_expr
+    , raw_intro_pattern_expr_to_raw_intro_pattern_expr
+    , raw_intro_pattern_action_expr_to_raw_intro_pattern_action_expr
+    , raw_or_and_intro_pattern_expr_to_raw_or_and_intro_pattern_expr
+    ) :
   (O.glob_tactic_expr -> glob_tactic_expr) *
   (O.glob_tactic_arg -> glob_tactic_arg) *
   (O.glob_atomic_tactic_expr -> glob_atomic_tactic_expr) *
@@ -22,16 +29,73 @@ let ( glob_tactic_expr_to_glob_tactic_expr
   (O.raw_tactic_arg -> raw_tactic_arg) *
   (O.raw_atomic_tactic_expr -> raw_atomic_tactic_expr) *
   (O.g_trm -> g_trm) *
-  (O.g_pat -> g_pat) =
+  (O.g_pat -> g_pat) *
+  (O.g_trm Tactypes.intro_pattern_expr -> g_trm intro_pattern_expr) *
+  (O.g_trm Tactypes.intro_pattern_action_expr -> g_trm intro_pattern_action_expr) *
+  (O.g_trm Tactypes.or_and_intro_pattern_expr -> g_trm or_and_intro_pattern_expr) *
+  (Genredexpr.r_trm Tactypes.intro_pattern_expr -> r_trm intro_pattern_expr) *
+  (Genredexpr.r_trm Tactypes.intro_pattern_action_expr -> r_trm intro_pattern_action_expr) *
+  (Genredexpr.r_trm Tactypes.or_and_intro_pattern_expr -> r_trm or_and_intro_pattern_expr)
+  =
+
+  let rec intro_pattern_expr_to_intro_pattern_expr trm_to_trm (t : _ Tactypes.intro_pattern_expr)
+    : _ intro_pattern_expr =
+    match t with
+    | Tactypes.IntroForthcoming a ->
+      IntroForthcoming a
+    | Tactypes.IntroNaming x -> IntroNaming x
+    | Tactypes.IntroAction x -> IntroAction (intro_pattern_action_expr_to_intro_pattern_action_expr trm_to_trm x)
+  and intro_pattern_action_expr_to_intro_pattern_action_expr trm_to_trm = function
+    | Tactypes.IntroWildcard -> IntroWildcard
+    | Tactypes.IntroOrAndPattern x ->
+      IntroOrAndPattern (or_and_intro_pattern_expr_to_or_and_intro_pattern_expr trm_to_trm x)
+    | Tactypes.IntroInjection x ->
+      IntroInjection (List.map (CAst.map (intro_pattern_expr_to_intro_pattern_expr trm_to_trm)) x)
+    | Tactypes.IntroApplyOn (a, b) ->
+      IntroApplyOn (CAst.map trm_to_trm a, CAst.map (intro_pattern_expr_to_intro_pattern_expr trm_to_trm) b)
+    | Tactypes.IntroRewrite a -> IntroRewrite a
+  and or_and_intro_pattern_expr_to_or_and_intro_pattern_expr trm_to_trm = function
+    | Tactypes.IntroOrPattern a ->
+      IntroOrPattern (List.map (List.map (CAst.map (intro_pattern_expr_to_intro_pattern_expr trm_to_trm))) a)
+    | Tactypes.IntroAndPattern a ->
+      IntroAndPattern (List.map (CAst.map (intro_pattern_expr_to_intro_pattern_expr trm_to_trm)) a)
+  in
+
+  let induction_clause_to_induction_clause trm_to_trm ((a, (b, c), d) : (_, _) O.induction_clause)
+    : _ induction_clause =
+    M.destruction_arg_map (M.with_bindings_map trm_to_trm) a,
+    (b,
+    Option.map (M.or_var_map (CAst.map (or_and_intro_pattern_expr_to_or_and_intro_pattern_expr trm_to_trm))) c),
+    Option.map (M.clause_expr_map (fun x -> x)) d in
+
+  let induction_clause_list_to_induction_clause_list trm_to_trm ((a, b) : (_, _, _) O.induction_clause_list)
+    : _ induction_clause_list =
+    List.map (induction_clause_to_induction_clause trm_to_trm) a, Option.map (M.with_bindings_map trm_to_trm) b in
+
+  let inversion_strength_to_inversion_strength trm_to_trm (t : (_, _, _) O.inversion_strength) =
+    match t with
+    | O.NonDepInversion (a, b, c) ->
+      NonDepInversion (
+        a, b, Option.map (M.or_var_map (
+            CAst.map (or_and_intro_pattern_expr_to_or_and_intro_pattern_expr trm_to_trm))) c)
+    | O.DepInversion (a, b, c) ->
+      DepInversion (
+        a, Option.map trm_to_trm b,
+        Option.map (M.or_var_map (
+            CAst.map (or_and_intro_pattern_expr_to_or_and_intro_pattern_expr trm_to_trm))) c)
+    | O.InversionUsing (a, b) ->
+      InversionUsing (trm_to_trm a, b)
+  in
 
   (* These functions only exist to verify that the two `glob_tactic_expr` types are isomorphic *)
   let rec gen_atomic_tactic_expr_to_gen_atomic_tactic_expr trm_to_trm pat_to_pat t =
     match t with
     | O.TacIntroPattern (a, b) ->
-      TacIntroPattern (a, List.map (CAst.map (M.intro_pattern_expr_map trm_to_trm)) b)
+      TacIntroPattern (a, List.map (CAst.map (intro_pattern_expr_to_intro_pattern_expr trm_to_trm)) b)
     | O.TacApply (a, b, c, d) ->
       TacApply (a, b, List.map (M.with_bindings_arg_map trm_to_trm) c,
-                Option.map (fun (a, b) -> a, Option.map (CAst.map (M.intro_pattern_expr_map trm_to_trm)) b) d)
+                Option.map (fun (a, b) -> a, Option.map (CAst.map (
+                    intro_pattern_expr_to_intro_pattern_expr trm_to_trm)) b) d)
     | O.TacElim (a, b, c) ->
       TacElim (a, M.with_bindings_arg_map trm_to_trm b, Option.map (M.with_bindings_map trm_to_trm) c)
     | O.TacCase (a, b) ->
@@ -42,14 +106,14 @@ let ( glob_tactic_expr_to_glob_tactic_expr
       TacMutualCofix (a, List.map (fun (a, b) -> a, trm_to_trm b) b)
     | O.TacAssert (a, b, c, d, e) ->
       TacAssert (a, b, Option.map (Option.map (gen_tactic_expr_to_gen_tactic_expr trm_to_trm pat_to_pat)) c,
-                 Option.map (CAst.map (M.intro_pattern_expr_map trm_to_trm)) d,
+                 Option.map (CAst.map (intro_pattern_expr_to_intro_pattern_expr trm_to_trm)) d,
                  trm_to_trm e)
     | O.TacGeneralize a ->
       TacGeneralize (List.map (fun (a, b) -> M.with_occurrences_map trm_to_trm a, b) a)
     | O.TacLetTac (a, b, c, d, e, f) ->
       TacLetTac (a, b, trm_to_trm c, d, e, f)
     | O.TacInductionDestruct (a, b, c) ->
-      TacInductionDestruct (a, b, M.induction_clause_list_map trm_to_trm trm_to_trm (fun x -> x) c)
+      TacInductionDestruct (a, b, induction_clause_list_to_induction_clause_list trm_to_trm c)
     | O.TacReduce (a, b) ->
       TacReduce (M.red_expr_gen_map trm_to_trm (fun x -> x) pat_to_pat a, b)
     | O.TacChange (a, b, c, d) ->
@@ -58,7 +122,7 @@ let ( glob_tactic_expr_to_glob_tactic_expr
       TacRewrite (a, List.map (fun (a, b, c) -> a, b, M.with_bindings_arg_map trm_to_trm c) b, c,
                   Option.map (gen_tactic_expr_to_gen_tactic_expr trm_to_trm pat_to_pat) d)
     | O.TacInversion (a, b) ->
-      TacInversion (M.inversion_strength_map trm_to_trm trm_to_trm (fun x -> x) a, b)
+      TacInversion (inversion_strength_to_inversion_strength trm_to_trm a, b)
   and gen_tactic_arg_to_gen_tactic_arg trm_to_trm pat_to_pat t =
     match t with
     | O.TacGeneric a ->
@@ -207,6 +271,36 @@ let ( glob_tactic_expr_to_glob_tactic_expr
      let convert_slowly () = g_pat_to_g_pat t
      [@@ocaml.warning "-26"]
      in Obj.magic t)
+  ,
+  (fun t ->
+     let convert_slowly () = intro_pattern_expr_to_intro_pattern_expr g_trm_to_g_trm t
+     [@@ocaml.warning "-26"]
+     in Obj.magic t)
+  ,
+  (fun t ->
+     let convert_slowly () = intro_pattern_action_expr_to_intro_pattern_action_expr g_trm_to_g_trm t
+     [@@ocaml.warning "-26"]
+     in Obj.magic t)
+  ,
+  (fun t ->
+     let convert_slowly () = or_and_intro_pattern_expr_to_or_and_intro_pattern_expr g_trm_to_g_trm t
+     [@@ocaml.warning "-26"]
+     in Obj.magic t)
+  ,
+  (fun t ->
+     let convert_slowly () = intro_pattern_expr_to_intro_pattern_expr r_trm_to_r_trm t
+     [@@ocaml.warning "-26"]
+     in Obj.magic t)
+  ,
+  (fun t ->
+     let convert_slowly () = intro_pattern_action_expr_to_intro_pattern_action_expr r_trm_to_r_trm t
+     [@@ocaml.warning "-26"]
+     in Obj.magic t)
+  ,
+  (fun t ->
+     let convert_slowly () = or_and_intro_pattern_expr_to_or_and_intro_pattern_expr r_trm_to_r_trm t
+     [@@ocaml.warning "-26"]
+     in Obj.magic t)
 
 let ( glob_tactic_expr_to_glob_tactic_expr2
     , glob_tactic_arg_to_glob_tactic_arg2
@@ -215,7 +309,14 @@ let ( glob_tactic_expr_to_glob_tactic_expr2
     , raw_tactic_arg_to_raw_tactic_arg2
     , raw_atomic_tactic_to_raw_atomic_tactic2
     , g_trm_to_g_trm2
-    , g_pat_to_g_pat2 ) :
+    , g_pat_to_g_pat2
+    , glob_intro_pattern_expr_to_glob_intro_pattern_expr2
+    , glob_intro_pattern_action_expr_to_glob_intro_pattern_action_expr2
+    , glob_or_and_intro_pattern_expr_to_glob_or_and_intro_pattern_expr2
+    , raw_intro_pattern_expr_to_raw_intro_pattern_expr2
+    , raw_intro_pattern_action_expr_to_raw_intro_pattern_action_expr2
+    , raw_or_and_intro_pattern_expr_to_raw_or_and_intro_pattern_expr2
+    ) :
   (glob_tactic_expr -> O.glob_tactic_expr) *
   (glob_tactic_arg -> O.glob_tactic_arg) *
   (glob_atomic_tactic_expr -> O.glob_atomic_tactic_expr) *
@@ -223,16 +324,72 @@ let ( glob_tactic_expr_to_glob_tactic_expr2
   (raw_tactic_arg -> O.raw_tactic_arg) *
   (raw_atomic_tactic_expr -> O.raw_atomic_tactic_expr) *
   (g_trm -> O.g_trm) *
-  (g_pat -> O.g_pat) =
+  (g_pat -> O.g_pat) *
+  (g_trm intro_pattern_expr -> O.g_trm Tactypes.intro_pattern_expr) *
+  (g_trm intro_pattern_action_expr -> O.g_trm Tactypes.intro_pattern_action_expr) *
+  (g_trm or_and_intro_pattern_expr -> O.g_trm Tactypes.or_and_intro_pattern_expr) *
+  (r_trm intro_pattern_expr -> Genredexpr.r_trm Tactypes.intro_pattern_expr) *
+  (r_trm intro_pattern_action_expr -> Genredexpr.r_trm Tactypes.intro_pattern_action_expr) *
+  (r_trm or_and_intro_pattern_expr -> Genredexpr.r_trm Tactypes.or_and_intro_pattern_expr)
+  =
 
+  let rec intro_pattern_expr_to_intro_pattern_expr trm_to_trm (t : _ intro_pattern_expr)
+    : _ Tactypes.intro_pattern_expr =
+    match t with
+    | IntroForthcoming a ->
+      Tactypes.IntroForthcoming a
+    | IntroNaming x -> Tactypes.IntroNaming x
+    | IntroAction x -> Tactypes.IntroAction (intro_pattern_action_expr_to_intro_pattern_action_expr trm_to_trm x)
+  and intro_pattern_action_expr_to_intro_pattern_action_expr trm_to_trm = function
+    | IntroWildcard -> Tactypes.IntroWildcard
+    | IntroOrAndPattern x ->
+      Tactypes.IntroOrAndPattern (or_and_intro_pattern_expr_to_or_and_intro_pattern_expr trm_to_trm x)
+    | IntroInjection x ->
+      Tactypes.IntroInjection (List.map (CAst.map (intro_pattern_expr_to_intro_pattern_expr trm_to_trm)) x)
+    | IntroApplyOn (a, b) ->
+      Tactypes.IntroApplyOn (CAst.map trm_to_trm a, CAst.map (intro_pattern_expr_to_intro_pattern_expr trm_to_trm) b)
+    | IntroRewrite a -> Tactypes.IntroRewrite a
+  and or_and_intro_pattern_expr_to_or_and_intro_pattern_expr trm_to_trm = function
+    | IntroOrPattern a ->
+      Tactypes.IntroOrPattern (List.map (List.map (CAst.map (intro_pattern_expr_to_intro_pattern_expr trm_to_trm))) a)
+    | IntroAndPattern a ->
+      Tactypes.IntroAndPattern (List.map (CAst.map (intro_pattern_expr_to_intro_pattern_expr trm_to_trm)) a)
+  in
+
+  let induction_clause_to_induction_clause trm_to_trm ((a, (b, c), d) : _ induction_clause)
+    : (_, _) O.induction_clause =
+    M.destruction_arg_map (M.with_bindings_map trm_to_trm) a,
+    (b,
+    Option.map (M.or_var_map (CAst.map (or_and_intro_pattern_expr_to_or_and_intro_pattern_expr trm_to_trm))) c),
+    Option.map (M.clause_expr_map (fun x -> x)) d in
+
+  let induction_clause_list_to_induction_clause_list trm_to_trm ((a, b) : _ induction_clause_list)
+    : (_, _, _) O.induction_clause_list =
+    List.map (induction_clause_to_induction_clause trm_to_trm) a, Option.map (M.with_bindings_map trm_to_trm) b in
+
+  let inversion_strength_to_inversion_strength trm_to_trm (t : _ inversion_strength) =
+    match t with
+    | NonDepInversion (a, b, c) ->
+      O.NonDepInversion (
+        a, b, Option.map (M.or_var_map (
+            CAst.map (or_and_intro_pattern_expr_to_or_and_intro_pattern_expr trm_to_trm))) c)
+    | DepInversion (a, b, c) ->
+      O.DepInversion (
+        a, Option.map trm_to_trm b,
+        Option.map (M.or_var_map (
+            CAst.map (or_and_intro_pattern_expr_to_or_and_intro_pattern_expr trm_to_trm))) c)
+    | InversionUsing (a, b) ->
+      O.InversionUsing (trm_to_trm a, b)
+  in
   (* These functions only exist to verify that the two `glob_tactic_expr` types are isomorphic *)
   let rec gen_atomic_tactic_expr_to_gen_atomic_tactic_expr trm_to_trm pat_to_pat t =
     match t with
     | TacIntroPattern (a, b) ->
-      O.TacIntroPattern (a, List.map (CAst.map (M.intro_pattern_expr_map trm_to_trm)) b)
+      O.TacIntroPattern (a, List.map (CAst.map (intro_pattern_expr_to_intro_pattern_expr trm_to_trm)) b)
     | TacApply (a, b, c, d) ->
-      O.TacApply (a, b, List.map (M.with_bindings_arg_map trm_to_trm) c,
-                Option.map (fun (a, b) -> a, Option.map (CAst.map (M.intro_pattern_expr_map trm_to_trm)) b) d)
+      O.TacApply (
+        a, b, List.map (M.with_bindings_arg_map trm_to_trm) c,
+        Option.map (fun (a, b) -> a, Option.map (CAst.map (intro_pattern_expr_to_intro_pattern_expr trm_to_trm)) b) d)
     | TacElim (a, b, c) ->
       O.TacElim (a, M.with_bindings_arg_map trm_to_trm b, Option.map (M.with_bindings_map trm_to_trm) c)
     | TacCase (a, b) ->
@@ -243,14 +400,14 @@ let ( glob_tactic_expr_to_glob_tactic_expr2
       O.TacMutualCofix (a, List.map (fun (a, b) -> a, trm_to_trm b) b)
     | TacAssert (a, b, c, d, e) ->
       O.TacAssert (a, b, Option.map (Option.map (gen_tactic_expr_to_gen_tactic_expr trm_to_trm pat_to_pat)) c,
-                 Option.map (CAst.map (M.intro_pattern_expr_map trm_to_trm)) d,
+                 Option.map (CAst.map (intro_pattern_expr_to_intro_pattern_expr trm_to_trm)) d,
                  trm_to_trm e)
     | TacGeneralize a ->
       O.TacGeneralize (List.map (fun (a, b) -> M.with_occurrences_map trm_to_trm a, b) a)
     | TacLetTac (a, b, c, d, e, f) ->
       O.TacLetTac (a, b, trm_to_trm c, d, e, f)
     | TacInductionDestruct (a, b, c) ->
-      O.TacInductionDestruct (a, b, M.induction_clause_list_map trm_to_trm trm_to_trm (fun x -> x) c)
+      O.TacInductionDestruct (a, b, induction_clause_list_to_induction_clause_list trm_to_trm c)
     | TacReduce (a, b) ->
       O.TacReduce (M.red_expr_gen_map trm_to_trm (fun x -> x) pat_to_pat a, b)
     | TacChange (a, b, c, d) ->
@@ -259,7 +416,7 @@ let ( glob_tactic_expr_to_glob_tactic_expr2
       O.TacRewrite (a, List.map (fun (a, b, c) -> a, b, M.with_bindings_arg_map trm_to_trm c) b, c,
                     Option.map (gen_tactic_expr_to_gen_tactic_expr trm_to_trm pat_to_pat) d)
     | TacInversion (a, b) ->
-      O.TacInversion (M.inversion_strength_map trm_to_trm trm_to_trm (fun x -> x) a, b)
+      O.TacInversion (inversion_strength_to_inversion_strength trm_to_trm a, b)
   and gen_tactic_arg_to_gen_tactic_arg trm_to_trm pat_to_pat t =
     match t with
     | TacGeneric a ->
@@ -406,5 +563,35 @@ let ( glob_tactic_expr_to_glob_tactic_expr2
   ,
   (fun t ->
      let convert_slowly () = g_pat_to_g_pat t
+     [@@ocaml.warning "-26"]
+     in Obj.magic t)
+  ,
+  (fun t ->
+     let convert_slowly () = intro_pattern_expr_to_intro_pattern_expr g_trm_to_g_trm t
+     [@@ocaml.warning "-26"]
+     in Obj.magic t)
+  ,
+  (fun t ->
+     let convert_slowly () = intro_pattern_action_expr_to_intro_pattern_action_expr g_trm_to_g_trm t
+     [@@ocaml.warning "-26"]
+     in Obj.magic t)
+  ,
+  (fun t ->
+     let convert_slowly () = or_and_intro_pattern_expr_to_or_and_intro_pattern_expr g_trm_to_g_trm t
+     [@@ocaml.warning "-26"]
+     in Obj.magic t)
+  ,
+  (fun t ->
+     let convert_slowly () = intro_pattern_expr_to_intro_pattern_expr r_trm_to_r_trm t
+     [@@ocaml.warning "-26"]
+     in Obj.magic t)
+  ,
+  (fun t ->
+     let convert_slowly () = intro_pattern_action_expr_to_intro_pattern_action_expr r_trm_to_r_trm t
+     [@@ocaml.warning "-26"]
+     in Obj.magic t)
+  ,
+  (fun t ->
+     let convert_slowly () = or_and_intro_pattern_expr_to_or_and_intro_pattern_expr r_trm_to_r_trm t
      [@@ocaml.warning "-26"]
      in Obj.magic t)

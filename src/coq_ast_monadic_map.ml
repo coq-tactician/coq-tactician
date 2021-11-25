@@ -1,10 +1,10 @@
 open Ltac_plugin
 open Tacexpr
+open Tactypes
 open Tacexpr_functor
 open Glob_term_functor
 open Constrexpr_functor
 open Pattern_functor
-open Tactypes
 open Locus
 open Tactics
 open Genredexpr
@@ -47,31 +47,33 @@ module Mapper (M: Monad.Def) = struct
       let+ x =  g x in
       Util.Inr x
 
-  let rec intro_pattern_expr_map f = function
+  let intro_pattern_expr_map m = function
     | IntroForthcoming b -> return @@ IntroForthcoming b
     | IntroNaming ng -> return @@ IntroNaming ng
     | IntroAction a ->
-      let+ a  = intro_pattern_action_expr_map f a in
+      let+ a  = m#intro_pattern_action_expr a in
       IntroAction a
-  and intro_pattern_action_expr_map f = function
+
+  let intro_pattern_action_expr_map m = function
     | IntroWildcard -> return @@ IntroWildcard
     | IntroOrAndPattern oap ->
-      let+ oap = or_and_intro_pattern_expr_map f oap in
+      let+ oap = m#or_and_intro_pattern_expr oap in
       IntroOrAndPattern oap
     | IntroInjection ls ->
-      let+ ls = List.map (cast_map (intro_pattern_expr_map f)) ls in
+      let+ ls = List.map (cast_map m#intro_pattern_expr) ls in
       IntroInjection ls
     | IntroApplyOn (cstr, pat) ->
-      let+ cstr = cast_map f cstr
-      and+ pat = cast_map (intro_pattern_expr_map f) pat in
+      let+ cstr = cast_map m#constr cstr
+      and+ pat = cast_map m#intro_pattern_expr pat in
       IntroApplyOn (cstr, pat)
     | IntroRewrite d -> return @@ IntroRewrite d
-  and or_and_intro_pattern_expr_map f = function
+
+  let or_and_intro_pattern_expr_map m = function
     | IntroOrPattern pats ->
-      let+ pats = List.map (List.map (cast_map (intro_pattern_expr_map f))) pats in
+      let+ pats = List.map (List.map (cast_map m#intro_pattern_expr)) pats in
       IntroOrPattern pats
     | IntroAndPattern pats ->
-      let+ pats = List.map (cast_map (intro_pattern_expr_map f)) pats in
+      let+ pats = List.map (cast_map m#intro_pattern_expr) pats in
       IntroAndPattern pats
 
   let explicit_bindings_map f bndgs =
@@ -133,14 +135,14 @@ module Mapper (M: Monad.Def) = struct
     let+ da = core_destruction_arg_map f da in
     (cf, da)
 
-  let induction_clause_map f g ((da, (eqn, pat), ce) : ('a, 'b) induction_clause) =
+  let induction_clause_map f g m ((da, (eqn, pat), ce) : 'a induction_clause) =
     let+ da = destruction_arg_map (with_bindings_map f) da
-    and+ pat = option_map (or_var_map (cast_map (or_and_intro_pattern_expr_map f))) pat
+    and+ pat = option_map (or_var_map (cast_map m#or_and_intro_pattern_expr)) pat
     and+ ce = option_map (clause_expr_map g) ce in
     (da, (eqn, pat), ce)
 
-  let induction_clause_list_map f g h ((ics, using) : ('a, 'b, 'c) induction_clause_list) =
-    let+ ics = List.map (induction_clause_map g h) ics
+  let induction_clause_list_map f g h m ((ics, using) : 'a induction_clause_list) =
+    let+ ics = List.map (induction_clause_map g h m) ics
     and+ using = option_map (with_bindings_map f) using in
     (ics, using)
 
@@ -181,14 +183,14 @@ module Mapper (M: Monad.Def) = struct
       let+ occ = option_map (with_occurrences_map (union_map g h)) occ in
       CbvNative occ
 
-  let inversion_strength_map f g h = function
+  let inversion_strength_map f h m = function
     | NonDepInversion (ik, ids, pat) ->
       let+ ids = List.map h ids
-      and+ pat = option_map (or_var_map (cast_map (or_and_intro_pattern_expr_map g))) pat in
+      and+ pat = option_map (or_var_map (cast_map m#or_and_intro_pattern_expr)) pat in
       NonDepInversion (ik, ids, pat)
     | DepInversion (ik, id, pat) ->
       let+ id = option_map f id
-      and+ pat = option_map (or_var_map (cast_map (or_and_intro_pattern_expr_map g))) pat in
+      and+ pat = option_map (or_var_map (cast_map m#or_and_intro_pattern_expr)) pat in
       DepInversion (ik, id, pat)
     | InversionUsing (c, ids) ->
       let+ c = f c
@@ -198,13 +200,13 @@ module Mapper (M: Monad.Def) = struct
   let gen_atomic_tactic_expr_map m (t : 'a gen_atomic_tactic_expr) =
     match t with
     | TacIntroPattern (ef, ip) ->
-      let+ ip = List.map (cast_map (intro_pattern_expr_map m#dterm)) ip in
+      let+ ip = List.map (cast_map m#intro_pattern_expr) ip in
       TacIntroPattern (ef, ip)
     | TacApply (af, ef, apps, pat) ->
       let+ apps = List.map (with_bindings_arg_map m#term) apps
       and+ pat = option_map (fun (id, pat) ->
           let+ id = m#name id
-          and+ pat = option_map (cast_map (intro_pattern_expr_map m#dterm)) pat in
+          and+ pat = option_map (cast_map m#intro_pattern_expr) pat in
           id, pat) pat in
       TacApply (af, ef, apps, pat)
     | TacElim (ef, trm, using) ->
@@ -226,7 +228,7 @@ module Mapper (M: Monad.Def) = struct
       TacMutualCofix (id, funs)
     | TacAssert (ef, flg, by, pat, trm) ->
       let+ by = option_map (option_map m#tacexpr) by
-      and+ pat = option_map (cast_map (intro_pattern_expr_map m#dterm)) pat
+      and+ pat = option_map (cast_map m#intro_pattern_expr) pat
       and+ trm = m#term trm in
       TacAssert (ef, flg, by, pat, trm)
     | TacGeneralize trms ->
@@ -239,7 +241,7 @@ module Mapper (M: Monad.Def) = struct
       and+ ce = clause_expr_map m#name ce in
       TacLetTac (ef, id, trm, ce, lif, pat)
     | TacInductionDestruct (rf, ef, ics) ->
-      let+ ics = induction_clause_list_map m#term m#dterm m#name ics in
+      let+ ics = induction_clause_list_map m#term m#dterm m#name m ics in
       TacInductionDestruct (rf, ef, ics)
     | TacReduce (red, id) ->
       let+ red = red_expr_gen_map m#term m#constant m#pattern red
@@ -258,7 +260,7 @@ module Mapper (M: Monad.Def) = struct
       and+ by = option_map m#tacexpr by in
       TacRewrite (ef, rews, cls, by)
     | TacInversion (is, qh) ->
-      let+ is = inversion_strength_map m#term m#dterm m#name is in
+      let+ is = inversion_strength_map m#term m#name m is in
       TacInversion (is, qh)
 
   let may_eval_map f g h = function

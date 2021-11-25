@@ -16,6 +16,8 @@ module MapDef (M : Monad.Def) = struct
   open Tacexpr
   open Glob_term
   open Constrexpr
+  open Tactypes
+  open Genredexpr
 
   type generic_obj =
     < cases_pattern_g    : cases_pattern map
@@ -27,7 +29,14 @@ module MapDef (M : Monad.Def) = struct
     ; raw_tacarg         : raw_tactic_arg map
     ; raw_tacexpr        : raw_tactic_expr map
     ; g_term             : g_trm map
-    ; constr_expr        : constr_expr map >
+    ; constr_expr        : constr_expr map
+    ; raw_intro_pattern_expr : r_trm intro_pattern_expr map
+    ; glob_intro_pattern_expr : g_trm intro_pattern_expr map
+    ; raw_intro_pattern_action_expr : r_trm intro_pattern_action_expr map
+    ; glob_intro_pattern_action_expr : g_trm intro_pattern_action_expr map
+    ; raw_or_and_intro_pattern_expr : r_trm or_and_intro_pattern_expr map
+    ; glob_or_and_intro_pattern_expr : g_trm or_and_intro_pattern_expr map
+    >
 end
 
 module type GenMap = sig
@@ -172,7 +181,13 @@ module Cata (M: Monad.Def) = struct
     ; glob_tacarg     : glob_tactic_arg_t    -> glob_tactic_arg t
     ; glob_tacexpr    : glob_tactic_expr_t   -> glob_tactic_expr t
     ; raw_tacarg      : raw_tactic_arg_t     -> raw_tactic_arg t
-    ; raw_tacexpr     : raw_tactic_expr_t    -> raw_tactic_expr t }
+    ; raw_tacexpr     : raw_tactic_expr_t    -> raw_tactic_expr t
+    ; glob_intro_pattern_expr : g_trm intro_pattern_expr_t -> g_trm intro_pattern_expr t
+    ; glob_intro_pattern_action_expr : g_trm intro_pattern_action_expr_t -> g_trm intro_pattern_action_expr t
+    ; glob_or_and_intro_pattern_expr : g_trm or_and_intro_pattern_expr_t -> g_trm or_and_intro_pattern_expr t
+    ; raw_intro_pattern_expr : r_trm intro_pattern_expr_t -> r_trm intro_pattern_expr t
+    ; raw_intro_pattern_action_expr : r_trm intro_pattern_action_expr_t -> r_trm intro_pattern_action_expr t
+    ; raw_or_and_intro_pattern_expr : r_trm or_and_intro_pattern_expr_t -> r_trm or_and_intro_pattern_expr t }
 
   type sequence_obj =
     < cases_pattern_g : cases_pattern_t      -> cases_pattern t
@@ -183,7 +198,13 @@ module Cata (M: Monad.Def) = struct
     ; glob_tacarg     : glob_tactic_arg_t    -> glob_tactic_arg t
     ; glob_tacexpr    : glob_tactic_expr_t   -> glob_tactic_expr t
     ; raw_tacarg      : raw_tactic_arg_t     -> raw_tactic_arg t
-    ; raw_tacexpr     : raw_tactic_expr_t    -> raw_tactic_expr t >
+    ; raw_tacexpr     : raw_tactic_expr_t    -> raw_tactic_expr t
+    ; glob_intro_pattern_expr : g_trm intro_pattern_expr_t -> g_trm intro_pattern_expr t
+    ; glob_intro_pattern_action_expr : g_trm intro_pattern_action_expr_t -> g_trm intro_pattern_action_expr t
+    ; glob_or_and_intro_pattern_expr : g_trm or_and_intro_pattern_expr_t -> g_trm or_and_intro_pattern_expr t
+    ; raw_intro_pattern_expr : r_trm intro_pattern_expr_t -> r_trm intro_pattern_expr t
+    ; raw_intro_pattern_action_expr : r_trm intro_pattern_action_expr_t -> r_trm intro_pattern_action_expr t
+    ; raw_or_and_intro_pattern_expr : r_trm or_and_intro_pattern_expr_t -> r_trm or_and_intro_pattern_expr t >
 
   let default_sequence_record =
     { cases_pattern_g = cases_pattern_g_sequence
@@ -194,11 +215,18 @@ module Cata (M: Monad.Def) = struct
     ; glob_tacarg = glob_tacarg_sequence
     ; glob_tacexpr = glob_tacexpr_sequence
     ; raw_tacarg = raw_tacarg_sequence
-    ; raw_tacexpr = raw_tacexpr_sequence }
-
+    ; raw_tacexpr = raw_tacexpr_sequence
+    ; glob_intro_pattern_expr = intro_pattern_expr_sequence
+    ; glob_intro_pattern_action_expr = intro_pattern_action_expr_sequence
+    ; glob_or_and_intro_pattern_expr = or_and_intro_pattern_expr_sequence
+    ; raw_intro_pattern_expr = intro_pattern_expr_sequence
+    ; raw_intro_pattern_action_expr = intro_pattern_action_expr_sequence
+    ; raw_or_and_intro_pattern_expr = or_and_intro_pattern_expr_sequence }
   let mk_sequence_obj
       { cases_pattern_g; cases_pattern_r; constr_expr; constr_pattern
-      ; glob_constr; glob_tacarg; glob_tacexpr; raw_tacarg; raw_tacexpr }
+      ; glob_constr; glob_tacarg; glob_tacexpr; raw_tacarg; raw_tacexpr
+      ; glob_intro_pattern_expr; glob_intro_pattern_action_expr; glob_or_and_intro_pattern_expr
+      ; raw_intro_pattern_expr; raw_intro_pattern_action_expr; raw_or_and_intro_pattern_expr }
     : sequence_obj =
     object
       method cases_pattern_g = cases_pattern_g
@@ -210,6 +238,12 @@ module Cata (M: Monad.Def) = struct
       method glob_tacexpr = glob_tacexpr
       method raw_tacarg = raw_tacarg
       method raw_tacexpr = raw_tacexpr
+      method glob_intro_pattern_expr = glob_intro_pattern_expr
+      method glob_intro_pattern_action_expr = glob_intro_pattern_action_expr
+      method glob_or_and_intro_pattern_expr = glob_or_and_intro_pattern_expr
+      method raw_intro_pattern_expr = raw_intro_pattern_expr
+      method raw_intro_pattern_action_expr = raw_intro_pattern_action_expr
+      method raw_or_and_intro_pattern_expr = raw_or_and_intro_pattern_expr
     end
 
   let mk = mk_sequence_obj
@@ -226,6 +260,10 @@ module Cata (M: Monad.Def) = struct
     method genarg = generic_glob_map (generic_obj m);
     method cases_pattern_g = cases_pattern_g_cata' m;
     method glob_constr_g = glob_constr_cata' m;
+    method intro_pattern_expr = glob_intro_pattern_expr_cata' m;
+    method intro_pattern_action_expr = glob_intro_pattern_action_expr_cata' m;
+    method or_and_intro_pattern_expr = glob_or_and_intro_pattern_expr_cata' m;
+    method constr = g_trm_cata' m
   end
   and rawobj (m : sequence_obj) = object
     method term = constr_expr_cata' m
@@ -239,7 +277,23 @@ module Cata (M: Monad.Def) = struct
     method genarg = generic_raw_map (generic_obj m);
     method cases_pattern_expr = cases_pattern_r_cata' m;
     method constr_expr = constr_expr_cata' m
+    method intro_pattern_expr = raw_intro_pattern_expr_cata' m;
+    method intro_pattern_action_expr = raw_intro_pattern_action_expr_cata' m;
+    method or_and_intro_pattern_expr = raw_or_and_intro_pattern_expr_cata' m;
+    method constr = constr_expr_cata' m
   end
+  and glob_intro_pattern_expr_cata' (m : sequence_obj) (t : _ intro_pattern_expr) =
+    m#glob_intro_pattern_expr @@ IdM.intro_pattern_expr_map (globobj m) t
+  and glob_intro_pattern_action_expr_cata' (m : sequence_obj) (t : _ intro_pattern_action_expr) =
+    m#glob_intro_pattern_action_expr @@ IdM.intro_pattern_action_expr_map (globobj m) t
+  and glob_or_and_intro_pattern_expr_cata' (m : sequence_obj) (t : _ or_and_intro_pattern_expr) =
+    m#glob_or_and_intro_pattern_expr @@ IdM.or_and_intro_pattern_expr_map (globobj m) t
+  and raw_intro_pattern_expr_cata' (m : sequence_obj) (t : _ intro_pattern_expr) =
+    m#raw_intro_pattern_expr @@ IdM.intro_pattern_expr_map (rawobj m) t
+  and raw_intro_pattern_action_expr_cata' (m : sequence_obj) (t : _ intro_pattern_action_expr) =
+    m#raw_intro_pattern_action_expr @@ IdM.intro_pattern_action_expr_map (rawobj m) t
+  and raw_or_and_intro_pattern_expr_cata' (m : sequence_obj) (t : _ or_and_intro_pattern_expr) =
+    m#raw_or_and_intro_pattern_expr @@ IdM.or_and_intro_pattern_expr_map (rawobj m) t
   and glob_tactic_expr_cata' (m : sequence_obj) (t : glob_tactic_expr) =
     m#glob_tacexpr @@ IdM.gen_tactic_expr_map (globobj m) t
   and glob_tactic_arg_cata' m (t : glob_tactic_arg) =
@@ -278,7 +332,37 @@ module Cata (M: Monad.Def) = struct
     method raw_tacarg = raw_tactic_arg_cata m
     method g_term = g_trm_cata m
     method constr_expr = constr_expr_cata m
+    method glob_intro_pattern_expr = glob_intro_pattern_expr_cata m
+    method raw_intro_pattern_expr = raw_intro_pattern_expr_cata m
+    method glob_intro_pattern_action_expr = glob_intro_pattern_action_expr_cata m
+    method raw_intro_pattern_action_expr = raw_intro_pattern_action_expr_cata m
+    method glob_or_and_intro_pattern_expr = glob_or_and_intro_pattern_expr_cata m
+    method raw_or_and_intro_pattern_expr = raw_or_and_intro_pattern_expr_cata m
   end
+  and glob_intro_pattern_expr_cata m t =
+    let t = Tacexpr_convert.glob_intro_pattern_expr_to_glob_intro_pattern_expr t in
+    let+ t = glob_intro_pattern_expr_cata' m t in
+    Tacexpr_convert.glob_intro_pattern_expr_to_glob_intro_pattern_expr2 t
+  and glob_intro_pattern_action_expr_cata m t =
+    let t = Tacexpr_convert.glob_intro_pattern_action_expr_to_glob_intro_pattern_action_expr t in
+    let+ t = glob_intro_pattern_action_expr_cata' m t in
+    Tacexpr_convert.glob_intro_pattern_action_expr_to_glob_intro_pattern_action_expr2 t
+  and glob_or_and_intro_pattern_expr_cata m t =
+    let t = Tacexpr_convert.glob_or_and_intro_pattern_expr_to_glob_or_and_intro_pattern_expr t in
+    let+ t = glob_or_and_intro_pattern_expr_cata' m t in
+    Tacexpr_convert.glob_or_and_intro_pattern_expr_to_glob_or_and_intro_pattern_expr2 t
+  and raw_intro_pattern_expr_cata m t =
+    let t = Tacexpr_convert.raw_intro_pattern_expr_to_raw_intro_pattern_expr t in
+    let+ t = raw_intro_pattern_expr_cata' m t in
+    Tacexpr_convert.raw_intro_pattern_expr_to_raw_intro_pattern_expr2 t
+  and raw_intro_pattern_action_expr_cata m t =
+    let t = Tacexpr_convert.raw_intro_pattern_action_expr_to_raw_intro_pattern_action_expr t in
+    let+ t = raw_intro_pattern_action_expr_cata' m t in
+    Tacexpr_convert.raw_intro_pattern_action_expr_to_raw_intro_pattern_action_expr2 t
+  and raw_or_and_intro_pattern_expr_cata m t =
+    let t = Tacexpr_convert.raw_or_and_intro_pattern_expr_to_raw_or_and_intro_pattern_expr t in
+    let+ t = raw_or_and_intro_pattern_expr_cata' m t in
+    Tacexpr_convert.raw_or_and_intro_pattern_expr_to_raw_or_and_intro_pattern_expr2 t
   and glob_tactic_expr_cata m t =
     let t = Tacexpr_convert.glob_tactic_expr_to_glob_tactic_expr t in
     let+ t = glob_tactic_expr_cata' m t in
@@ -389,8 +473,8 @@ let at wit = register_generic_cata wit (module struct
     type glob = glob_constr_and_expr intro_pattern_expr CAst.t
     module M = functor (M : Monad.Def) -> struct
       module MM = Mapper(M)
-      let raw_map m = MM.cast_map (MM.intro_pattern_expr_map m#constr_expr)
-      let glob_map m = MM.cast_map (MM.intro_pattern_expr_map m#g_term)
+      let raw_map m = MM.cast_map m#raw_intro_pattern_expr
+      let glob_map m = MM.cast_map m#glob_intro_pattern_expr
     end
   end)
 let _ = [at wit_intro_pattern; at wit_simple_intropattern]
@@ -451,8 +535,8 @@ let _ = register_generic_cata wit_with_names (module struct
     type glob = glob_constr_and_expr intro_pattern_expr CAst.t option
     module M = functor (M : Monad.Def) -> struct
       module MM = Mapper(M)
-      let raw_map m = MM.option_map (MM.cast_map (MM.intro_pattern_expr_map m#constr_expr))
-      let glob_map m = MM.option_map (MM.cast_map (MM.intro_pattern_expr_map m#g_term))
+      let raw_map m = MM.option_map (MM.cast_map m#raw_intro_pattern_expr)
+      let glob_map m = MM.option_map (MM.cast_map m#glob_intro_pattern_expr)
     end
   end)
 
