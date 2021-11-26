@@ -50,7 +50,7 @@ Tactician Record ML Keep.
 Tactician Record Alias Keep.
 Tactician Record Call Keep.
 Tactician Record IntroPattern Keep.
-Tactician Record Apply Keep.
+Tactician Record Apply Decompose.
 Tactician Record Elim Keep.
 Tactician Record Case Keep.
 Tactician Record MutualFix Keep.
