@@ -903,8 +903,8 @@ let fail_strict_tac (tac : glob_tactic_expr) : glob_tactic_expr =
                     [TacGeneric enc]))
 
 let record_tac_complete orig tac : glob_tactic_expr =
-  let strict_tac = Tactic_normalize.tactic_strict tac in
-  TacThen (run_pushs_state_tac (), TacThen (TacFirst [strict_tac; TacThen (fail_strict_tac tac, tac)], run_record_tac orig))
+  (* let strict_tac = Tactic_normalize.tactic_strict tac in *)
+  TacThen (run_pushs_state_tac (), TacThen ((* TacFirst [strict_tac; TacThen (fail_strict_tac tac, *) tac, run_record_tac orig))
 
 let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO: Implement self-learning *)
   let open Proofview in

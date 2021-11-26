@@ -9,11 +9,11 @@ Declare ML Module "recdef_plugin".
 Declare ML Module "tactician_ltac1_record_plugin".
 Export Set Default Proof Mode "Tactician Ltac1".
 
-Tactician Record Then Keep.
-Tactician Record Dispatch Keep.
-Tactician Record Extend Keep.
-Tactician Record Thens Keep.
-Tactician Record Thens3parts Keep.
+Tactician Record Then Decompose.
+Tactician Record Dispatch Decompose.
+Tactician Record Extend Decompose.
+Tactician Record Thens Decompose.
+Tactician Record Thens3parts Decompose.
 Tactician Record First Keep.
 Tactician Record Complete Keep.
 Tactician Record Solve Keep.
@@ -43,8 +43,8 @@ Tactician Record Abstract Keep.
 Tactician Record LetIn Keep.
 Tactician Record Match Keep.
 Tactician Record MatchGoal Keep.
-Tactician Record Arg Keep.
-Tactician Record Select Keep. (* TODO: This setting should be kept like this until we implement
+Tactician Record Arg Decompose.
+Tactician Record Select Decompose. (* TODO: This setting should be kept like this until we implement
                                       an override in tactic_annotate in case we are in 'search with cache' *)
 Tactician Record ML Keep.
 Tactician Record Alias Keep.
@@ -61,6 +61,7 @@ Tactician Record LetTac Keep.
 Tactician Record InductionDestruct Keep.
 Tactician Record Reduce Keep.
 Tactician Record Change Keep.
-Tactician Record Rewrite Keep.
-Tactician Record RewriteMulti Keep.
+Tactician Record Rewrite Decompose.
+Tactician Record RewriteMulti Decompose.
 Tactician Record Inversion Keep.
+

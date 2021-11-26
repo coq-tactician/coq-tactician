@@ -19,20 +19,42 @@ module TacAstMap = Map.Make(struct
     let compare = compare
   end)
 type tac_ast_map = tac_decomposition TacAstMap.t
+type tac_alias_ast_map = tac_decomposition Names.KNmap.t
 
 let tac_ast_map_ref = Summary.ref TacAstMap.empty ~name:"DecompositionMap"
+let tac_ast_alias_map_ref = Summary.ref Names.KNmap.empty ~name:"AliasDecompositionMap"
 
 let get_ast_settings () = !tac_ast_map_ref
+let get_ast_alias_settings () = !tac_ast_alias_map_ref
 
 let tac_ast_setting : tac_ast_map -> obj =
   declare_object @@ global_object_nodischarge "TacticianDecompositionSetting"
     ~cache:(fun (_,m) -> tac_ast_map_ref := m)
     ~subst:None
 
+let tac_alias_ast_setting : tac_alias_ast_map -> obj =
+  declare_object @@ global_object_nodischarge "TacticianAliasDecompositionSetting"
+    ~cache:(fun (_,m) -> tac_ast_alias_map_ref := m)
+    ~subst:None
+
 let ast_setting_lookup ast = Option.default Keep (TacAstMap.find_opt ast (get_ast_settings ()))
+
+let ast_alias_setting_lookup kername = Option.default Keep (Names.KNmap.find_opt kername (get_ast_alias_settings ()))
 
 let modify_ast_setting ast dec = Lib.add_anonymous_leaf
     (tac_ast_setting (TacAstMap.add ast dec (get_ast_settings ())))
+
+let modify_ast_alias_setting tac dec =
+  (match tac with
+    | TacAlias CAst.{v=(kername, _); _} ->
+      Lib.add_anonymous_leaf
+        (tac_alias_ast_setting (Names.KNmap.add kername dec (get_ast_alias_settings ())))
+    | _ -> CErrors.user_err (Pp.str "A stub of a tactic alias was expected but not found"));
+  let tacstr = Pp.string_of_ppcmds @@
+    Sexpr.format_oneline @@ Pptactic.pr_raw_tactic (Global.env ()) Evd.empty @@ tac in
+  let tac = Tacintern.glob_tactic tac in
+  let tacsexpr = Sexpr.sexpr_to_string @@ Tactic_sexpr.tactic_sexpr @@ tac in
+  Feedback.msg_warning Pp.(str tacstr ++ str tacsexpr)
 
 let outer_record ast = match ast_setting_lookup ast with
   | Keep | Both -> true
@@ -126,14 +148,22 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
       let at = if inner_record Rewrite then decompose_rewrite a.loc flg1 i ts (Option.map annotate d) d else at in (* TODO: Normalize rewrite .. by t to rewrite ..; [| t] (or similar) *)
       router Rewrite at
     | TacInversion _ -> router Inversion at
-  and annotate_arg x = match x with
+  and annotate_arg x =
+    match x with
     | TacGeneric _ -> x, r (* TODO: Deal with ssreflect stuff *)
     | ConstrMayEval _ -> x, r
-    | Reference _ -> x, r
+    | Reference k ->
+      (match k with
+       | ArgArg _ -> x, r
+       | ArgVar _ ->
+         Feedback.msg_warning (Pp.str "reference encountered");
+         (* We intentionally do not record references. The assumption here is that the tactical expression
+            they reference has already been instrumented. *)
+         x, fun x _ -> x)
     | TacCall c -> (if inner_record Call then
         TacCall (CAst.map (fun (a, b) -> (a, List.map (fun a -> fst (annotate_arg x)) b)) c) else x), r
     | TacFreshId _ -> x, r
-    | Tacexp t -> Tacexp (annotate t), fun x _ -> x
+    | Tacexp t -> print_endline "boeba"; Tacexp (annotate t), fun x _ -> x
     | TacPretype _ -> x, r
     | TacNumgoals -> x, r
   (* TODO: Improve efficiency of the annotation recursion *)
@@ -175,6 +205,21 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
     | TacFail _         ->                 tac (* No need to record fail *)
     | TacInfo t         ->                 TacInfo (annotate t) (* No need to record info *)
     | TacLetIn (flg, ts, t) ->
+      (* let register tac name = *)
+      (*   let fullname = {mltac_plugin = "recording"; mltac_tactic = name} in *)
+      (*   Tacenv.register_ml_tactic fullname [| tac |] in *)
+      (* let internal_tac args is = *)
+      (*   Feedback.msg_warning (Pp.str "internal"); *)
+      (*   Tacinterp.eval_tactic_ist is t *)
+      (*   (\* (\\*let num = Tacinterp.Value.cast (Genarg.topwit Tacarg.wit_tactic) (List.hd args) in*\\) *\) *)
+      (*   (\* let tac = Tacinterp.Value.cast (Genarg.topwit wit_glbtactic) (List.hd args) in *\) *)
+      (*   (\* Feedback.msg_warning Pp.(str "Strict failure: " ++ Pptactic.pr_glob_tactic (Global.env ()) tac); *\) *)
+      (*   (\* Proofview.tclUNIT () *\) in *)
+
+      (* let () = register internal_tac "internal_tac" in *)
+      (* let t : glob_tactic_expr = *)
+      (*   TacML (CAst.make ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = "internal_tac"}; mltac_index = 0}, *)
+      (*                     [])) in *)
       let ts = if inner_record LetIn then List.map (fun (a, b) -> (a, fst (annotate_arg b))) ts else ts in
       router LetIn (TacLetIn (flg, ts, rinner LetIn t))
     | TacMatch (flg, t, ts) ->
@@ -187,8 +232,8 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
                                      | Pat (c, p, t) -> Pat (c, p, rinner MatchGoal t)) ts))
     | TacFun (args, t) -> TacFun (args, annotate t) (* Probably not outer-recordable *)
     | TacArg x ->
-      let x', r = if inner_record Arg then annotate_arg x.v else x.v, r in
-      let res = TacArg (CAst.make ?loc:x.loc x') in
+      let x', r2 = if inner_record Arg then annotate_arg x.v else x.v, r in
+      let res = r2 tac @@ TacArg (CAst.make ?loc:x.loc x') in
       if outer_record Arg then r tac res else res
     | TacSelect (i, t)       ->            router Select (TacSelect (i, rinner Select t))
     | TacML CAst.{loc; v=(e, args)} ->
@@ -197,14 +242,16 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
     | TacAlias CAst.{loc; v=(e, args)} ->
       let tactician_cache = CString.is_prefix "Tactician.Ltac1.Tactics.search_with_cache"
           (Names.KerName.to_string e) in
-      let args = if inner_record Alias || tactician_cache then
-          List.map (fun a -> fst (annotate_arg a)) args else args in
-      (* TODO: This is a possible decomposition *)
-      (* let al = Tacenv.interp_alias e in
-       * let t = TacLetIn (false, List.map2 (fun x y ->
-       *     (CAst.make (Names.Name.Name x)), y) al.Tacenv.alias_args args,
-       *                   al.Tacenv.alias_body) in *)
-      let t = TacAlias (CAst.make ?loc (e, args)) in
-      if outer_record Alias && not tactician_cache then r tac t else t
-      (* TODO: Decompose user-defined tactics *)
+      let al = Tacenv.interp_alias e in
+      match ast_alias_setting_lookup e with
+      | Decompose | Both ->
+        let args = List.map (fun a -> fst (annotate_arg a)) args in
+        TacLetIn (false, List.map2 (fun x y ->
+            (CAst.make (Names.Name.Name x)), y) al.Tacenv.alias_args args,
+                  annotate al.Tacenv.alias_body)
+      | Keep | Discard ->
+        let args = if inner_record Alias || tactician_cache then
+            List.map (fun a -> fst (annotate_arg a)) args else args in
+        let t = TacAlias (CAst.make ?loc (e, args)) in
+        if outer_record Alias && not tactician_cache then r tac t else t
   in annotate tac

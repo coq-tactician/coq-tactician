@@ -201,3 +201,8 @@ VERNAC COMMAND EXTEND TacticianDecompositionSetting CLASSIFIED AS SIDEFF
 | [ "Tactician" "Record" tac_ast(ta) tac_decomposition(td) ]
   -> { modify_ast_setting ta td }
 END
+
+VERNAC COMMAND EXTEND TacticianAliasDecompositionSetting CLASSIFIED AS SIDEFF
+| [ "Tactician" "Alias" "Record" tactic(tac) tac_decomposition(td) ]
+  -> { modify_ast_alias_setting tac td }
+END
