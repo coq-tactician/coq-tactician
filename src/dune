@@ -48,6 +48,7 @@
    coq_ast_cata
    coq_ast_sequence
    coq_ast_map_elements
+   extreme_tactic_normalize
  ))
  (libraries
    coq.plugins.ltac
