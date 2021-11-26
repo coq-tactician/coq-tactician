@@ -55,7 +55,7 @@ Tactician Record Elim Keep.
 Tactician Record Case Keep.
 Tactician Record MutualFix Keep.
 Tactician Record MutualCofix Keep.
-Tactician Record Assert Keep.
+Tactician Record Assert Decompose.
 Tactician Record Generalize Keep.
 Tactician Record LetTac Keep.
 Tactician Record InductionDestruct Keep.

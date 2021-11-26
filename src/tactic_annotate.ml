@@ -129,8 +129,18 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
     | TacMutualFix _ -> router MutualFix at
     | TacMutualCofix _ -> router MutualCofix at
     | TacAssert (flg, b, by, pat, term) ->
-      let by = if inner_record Assert then Option.map (Option.map annotate) by else by in
-      router Assert (TacAtom (CAst.make ?loc:a.loc (TacAssert (flg, b, by, pat, term))))
+      let rself x = r x x in
+      let tac = if inner_record Assert then
+          match by with
+          | None -> rself at (* pose proof *)
+          | Some by -> match by with  (* pose and assert *)
+            | None -> rself at (* Nothing to decompose *)
+            | Some by ->
+              let by = annotate by in
+              tacthenfirst (mkatom a.loc @@ TacAssert (flg, b, Some None, pat, term)) by
+        else
+          at in
+      router Assert tac
     | TacGeneralize gs ->
       let at = if inner_record Generalize then decompose_generalize a.loc (List.rev gs) else at in
       router Generalize at
@@ -145,7 +155,7 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
     | TacReduce _ -> router Reduce at
     | TacChange _ -> router Change at
     | TacRewrite (flg1, ts, i, d) ->
-      let at = if inner_record Rewrite then decompose_rewrite a.loc flg1 i ts (Option.map annotate d) d else at in (* TODO: Normalize rewrite .. by t to rewrite ..; [| t] (or similar) *)
+      let at = if inner_record Rewrite then decompose_rewrite a.loc flg1 i ts (Option.map annotate d) d else at in
       router Rewrite at
     | TacInversion _ -> router Inversion at
   and annotate_arg x =
@@ -156,7 +166,7 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
       (match k with
        | ArgArg _ -> x, r
        | ArgVar _ ->
-         Feedback.msg_warning (Pp.str "reference encountered");
+         (* Feedback.msg_warning (Pp.str "reference encountered"); *)
          (* We intentionally do not record references. The assumption here is that the tactical expression
             they reference has already been instrumented. *)
          x, fun x _ -> x)
