@@ -94,6 +94,7 @@ let pr_ltac_use_default b =
 open Attributes
 open Tacexpr
 open Libnames
+open Stdarg
 
 }
 
@@ -205,4 +206,9 @@ END
 VERNAC COMMAND EXTEND TacticianAliasDecompositionSetting CLASSIFIED AS SIDEFF
 | [ "Tactician" "Alias" "Record" tactic(tac) tac_decomposition(td) ]
   -> { modify_ast_alias_setting tac td }
+END
+
+VERNAC COMMAND EXTEND TacticianInternalTacticSetting CLASSIFIED AS SIDEFF
+| [ "Tactician" "Register" "Tactic" string(str) tactic(tac) ]
+  -> { modify_internal_tactics_setting str tac }
 END

@@ -7,6 +7,27 @@ Declare ML Module "ground_plugin".
 Declare ML Module "extraction_plugin".
 Declare ML Module "recdef_plugin".
 Declare ML Module "tactician_ltac1_record_plugin".
+
+Tactician Register Tactic "clear" clear.
+Tactician Register Tactic "injection_x_as" injection _ as.
+Tactician Register Tactic "discriminate_x" discriminate _.
+
+(* TODO: This is a hack to deal with the decomposition of 'intros [=]'. To be improved. *)
+Tactic Notation "intro_equality_hnf" hyp(H) :=
+hnf in H;
+match type of H with
+| _ ?x ?y => idtac x y;
+  let x' := eval hnf in x in
+  replace x with x' in H by reflexivity;
+  let y' := eval hnf in y in
+  replace y with y' in H by reflexivity;
+  let H' := fresh in rename H into H'
+end.
+Tactic Notation "intro_equality_clear" hyp(H) :=
+let p := fresh in let T := type of H in assert (p:T) by reflexivity; clear p H.
+Tactician Register Tactic "intro_equality_hnf" intro_equality_hnf X.
+Tactician Register Tactic "intro_equality_clear" intro_equality_clear X.
+
 Export Set Default Proof Mode "Tactician Ltac1".
 
 Tactician Record Then Decompose.
@@ -49,7 +70,7 @@ Tactician Record Select Decompose. (* TODO: This setting should be kept like thi
 Tactician Record ML Keep.
 Tactician Record Alias Keep.
 Tactician Record Call Keep.
-Tactician Record IntroPattern Keep.
+Tactician Record IntroPattern Decompose.
 Tactician Record Apply Decompose.
 Tactician Record Elim Keep.
 Tactician Record Case Keep.

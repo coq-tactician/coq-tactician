@@ -33,6 +33,8 @@ module Cata (M : Monad.Def) : sig
   open Glob_term
   open Constrexpr
   open Pattern
+  open Tactypes
+  open Genredexpr
 
   val glob_tactic_expr_cata : sequence_record -> glob_tactic_expr map
   val glob_tactic_arg_cata  : sequence_record -> glob_tactic_arg map
@@ -45,6 +47,12 @@ module Cata (M : Monad.Def) : sig
   val g_trm_cata            : sequence_record -> g_trm map
   val constr_pattern_cata   : sequence_record -> constr_pattern map
   val g_pat_cata            : sequence_record -> g_pat map
+  val glob_intro_pattern_expr_cata        : sequence_record -> g_trm intro_pattern_expr map
+  val glob_intro_pattern_action_expr_cata : sequence_record -> g_trm intro_pattern_action_expr map
+  val glob_or_and_intro_pattern_expr_cata : sequence_record -> g_trm or_and_intro_pattern_expr map
+  val raw_intro_pattern_expr_cata         : sequence_record -> r_trm intro_pattern_expr map
+  val raw_intro_pattern_action_expr_cata  : sequence_record -> r_trm intro_pattern_action_expr map
+  val raw_or_and_intro_pattern_expr_cata  : sequence_record -> r_trm or_and_intro_pattern_expr map
 end
 
 (** Used for extending the recursive structure with generic arguments defined in plugins *)

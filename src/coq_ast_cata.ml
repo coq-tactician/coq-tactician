@@ -408,6 +408,12 @@ module Cata (M: Monad.Def) = struct
     let+ t = g_pat_cata' m t in
     Tacexpr_convert.g_pat_to_g_pat2 t
 
+  let glob_intro_pattern_expr_cata m = glob_intro_pattern_expr_cata (mk m)
+  let glob_intro_pattern_action_expr_cata m = glob_intro_pattern_action_expr_cata (mk m)
+  let glob_or_and_intro_pattern_expr_cata m = glob_or_and_intro_pattern_expr_cata (mk m)
+  let raw_intro_pattern_expr_cata m = raw_intro_pattern_expr_cata (mk m)
+  let raw_intro_pattern_action_expr_cata m = raw_intro_pattern_action_expr_cata (mk m)
+  let raw_or_and_intro_pattern_expr_cata m = raw_or_and_intro_pattern_expr_cata (mk m)
   let glob_tactic_expr_cata m = glob_tactic_expr_cata (mk m)
   let glob_tactic_arg_cata m = glob_tactic_arg_cata (mk m)
   let raw_tactic_expr_cata m = raw_tactic_expr_cata (mk m)
