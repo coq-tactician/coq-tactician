@@ -16,7 +16,7 @@
  (section lib)
  (package coq-tactician)
 )
-(install
+(install ; TODO: Old location of injection flags. To be removed.
  (files injection-flags)
  (section etc)
  (package coq-tactician)
@@ -29,3 +29,6 @@
  (section share)
  (package coq-tactician)
 )
+(install
+ (section share)
+ (files (injection-flags as plugins/coq-tactician/injection-flags)))

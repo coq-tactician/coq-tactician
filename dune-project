@@ -21,6 +21,7 @@ about the next tactic to be executed or altogether takes over the burden of
 proof synthesis. Tactician's goal is to provide the user with a seamless,
 interactive, and intuitive experience together with strong, adaptive proof
 automation.")
+  (sites (share plugins))
   (depends
     (ocaml (>= 4.08))
     dune
