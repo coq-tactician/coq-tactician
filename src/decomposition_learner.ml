@@ -61,6 +61,7 @@ module DecompositionLearner : TacticianOnlineLearnerType = functor (TS : Tactici
     let tac = tactic_repr tac in
     let tac = Tactic_normalize.tactic_normalize tac in
     let tac = Tactic_normalize.tactic_strict tac in
+    let tac = Tactic_name_remove.tactic_name_remove tac in
     let tac = Extreme_tactic_normalize.tactic_normalize tac in
     let tachash = string_of_int @@ Hashtbl.hash_param 255 255 tac in
     let tacstr = Pp.string_of_ppcmds @@

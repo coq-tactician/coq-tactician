@@ -42,10 +42,10 @@ Tactician Record Or Keep.
 Tactician Record Once Keep.
 Tactician Record ExactlyOnce Keep.
 Tactician Record IfThenCatch Keep.
-Tactician Record Orelse Keep.
-Tactician Record Do Keep.
+Tactician Record Orelse Decompose.
+Tactician Record Do Decompose.
 Tactician Record Timeout Keep.
-Tactician Record Repeat Keep.
+Tactician Record Repeat Decompose.
 Tactician Record Progress Keep.
 
 (*
@@ -60,7 +60,7 @@ Tactician Record Progress Keep.
     Note that setting this to 'Decompose' will not keep Tactician from using 'abstract' ever, because it could be
     part of a more complex expression (or inside of an ltac definition). This is better than nothing though.
  *)
-Tactician Record Abstract Keep.
+Tactician Record Abstract Decompose.
 Tactician Record LetIn Keep.
 Tactician Record Match Keep.
 Tactician Record MatchGoal Keep.
@@ -79,8 +79,8 @@ Tactician Record MutualCofix Keep.
 Tactician Record Assert Decompose.
 Tactician Record Generalize Keep.
 Tactician Record LetTac Keep.
-Tactician Record InductionDestruct Keep.
-Tactician Record Reduce Keep.
+Tactician Record InductionDestruct Decompose.
+Tactician Record Reduce Decompose.
 Tactician Record Change Keep.
 Tactician Record Rewrite Decompose.
 Tactician Record RewriteMulti Decompose.
