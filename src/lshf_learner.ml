@@ -129,12 +129,6 @@ module LSHF =
     { forest; length; frequencies }
 
   let learn db (name, status) outcomes tac to_feats =
-    let status_str = match status with
-    | Original -> Pp.(str "Original" ++ Libnames.pr_path name)
-    | QedTime -> Pp.(str "QedTime" ++ Libnames.pr_path name)
-    | Substituted o -> Pp.(str "Substituted of " ++ Libnames.pr_path o ++ str " -> " ++ Libnames.pr_path name)
-    | Discharged o -> Pp.(str "Discharged of " ++ Libnames.pr_path o ++ str " -> " ++ Libnames.pr_path name) in
-    Feedback.msg_info status_str;
     List.fold_left (fun db out -> add db out.before tac to_feats) db outcomes
 
   let predict db f to_feats remove_kind tfidf =
