@@ -1,4 +1,4 @@
-(lang dune 2.5)
+(lang dune 2.8)
 (name coq-tactician)
 (using coq 0.2)
 
@@ -23,7 +23,7 @@ interactive, and intuitive experience together with strong, adaptive proof
 automation.")
   (depends
     (ocaml (>= 4.08))
-    (dune (and (>= 2.5) :build))
+    dune
     (opam-client (>= 2.1.0~beta2))
     cmdliner
     (coq (and (>= 8.11) (< 8.12~)))
