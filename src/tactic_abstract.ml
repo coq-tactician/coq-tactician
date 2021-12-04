@@ -35,3 +35,36 @@ let mapper = { AbstractDef.default_mapper with
 let tactic_abstract t =
   let args, t = M.run [] [] @@ AbstractMapper.glob_tactic_expr_map mapper t in
   List.rev args, t
+
+module M2 = WriterMonad
+  (struct type w = Constant.t list let comb = List.append let id = [] end)
+module ConstantsDef = struct
+  include MapDefTemplate(M2)
+  open M2
+  let map_sort = "abstract"
+  let warnProblem wit =
+    Feedback.msg_warning (Pp.(str "Tactician is having problems with " ++
+                              str "the following tactic. Please report. " ++
+                              pr_argument_type wit))
+  let default wit = { raw = (fun _ -> warnProblem (ArgumentType wit); id)
+                    ; glb = (fun _ -> warnProblem (ArgumentType wit); id)}
+
+  let with_binders ids x = x
+end
+module ConstantsMapper = MakeMapper(ConstantsDef)
+open ConstantsDef
+open M2
+
+let mapper = { ConstantsDef.default_mapper with
+               constant = (fun c ->
+                   let body = (Global.lookup_constant c).const_body in
+                   (match body with
+                    | Declarations.OpaqueDef _ ->
+                      tell [c] >> return c
+                    | _ -> return c)
+                 )
+             }
+
+let tactic_constants t =
+  let cs, _ = M2.run @@ ConstantsMapper.glob_tactic_expr_map mapper t in
+  List.rev cs
