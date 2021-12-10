@@ -202,9 +202,49 @@ let stdlib () =
     "Would you like to reinstall them?";
   `Ok ()
 
+(* Lookup a file in the directories *)
+let rec lookup_file filename = function
+  | [] -> raise Not_found
+  | dir::dirs ->
+    let filename' = Filename.concat dir filename in
+    if Sys.file_exists filename' then filename'
+    else lookup_file filename dirs
+
+let (/) = Filename.concat
+(* TODO: Currently this utility only works when installed through Opam. Ideally, it should also be runnable by building it locally using
+   dune. Unfortunately dune currently does not seem to support the required infrastructure for this. *)
+let coqc = "%{bin}%"/"coqc"
+let coqtop = "%{bin}%"/"coqtop"
+let tactician_lib = "%{coq-tactician:lib}%"
+
+let wrap_binary target wrapper placeholder =
+  ["--bind"; target; placeholder; "--bind"; wrapper; target]
+
+(* TODO: At some point we might consider using https://github.com/Chris00/ocaml-bwrap *)
+let inject_bwrap cmd args =
+  print_endline coqc;
+  let coqc_shim = tactician_lib/"coqc-shim" in
+  let coqtop_shim = tactician_lib/"coqtop-shim" in
+  let coqc_real = tactician_lib/"coqc.real" in
+  let coqtop_real = tactician_lib/"coqtop.real" in
+  print_endline coqc_real;
+  print_endline coqtop_real;
+  let bargs = ["bwrap"; "--dev-bind"; "/"; "/"] in
+  let bargs = bargs @ wrap_binary coqc coqc_shim coqc_real in
+  let bargs = bargs @ wrap_binary coqc coqtop_shim coqtop_real in
+  let bargs = bargs @ cmd::args in
+  print_endline (String.concat " " bargs);
+  print_endline "\n\n\n";
+  Unix.execvp "bwrap" (Array.of_list bargs)
+
+let bwrap_test () =
+  let ec = Sys.command "bwrap --dev-bind / / true &> /dev/null" in
+  ec = 0
+
 let exec_command cmd args =
-  let wt = "%{coq-tactician:lib}%/with-tactician" in
-  Unix.execv wt (Array.of_list (wt::cmd::args))
+  if bwrap_test () then inject_bwrap cmd args else `Ok ()
+  (* let wt = "%{coq-tactician:lib}%/with-tactician" in *)
+  (* Unix.execv wt (Array.of_list (wt::cmd::args)) *)
 
 (* Command line interface *)
 

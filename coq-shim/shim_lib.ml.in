@@ -1,0 +1,10 @@
+let (/) = Filename.concat
+let run_with_flags binary =
+  let tactician_lib = "%{coq-tactician:lib}%" in
+  let binary = tactician_lib/binary in
+  let tactician_dir = "%{coq:lib}%"/"user-contrib"/"Tactician" in
+  let tactician_flags = ["-q"; "-I"; tactician_dir; "-R"; tactician_dir; "Tactician"; "-rifrom"; "Tactician"; "Ltac1.Record"] in
+  let flags = List.tl @@ Array.to_list Sys.argv in
+  let flags = binary :: tactician_flags @ flags in
+  print_endline (String.concat " " flags);
+  Unix.execv binary (Array.of_list flags)
