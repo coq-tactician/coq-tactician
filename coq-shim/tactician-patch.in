@@ -13,7 +13,7 @@ patch() {
     echo "Package patched!"
 }
 
-TACTICIANLIB=%{coq-tactician:share}%
+TACTICIANLIB="%{share}%/coq-tactician"
 PACKAGE="$1"; shift
 VERSION="$1"; shift
 

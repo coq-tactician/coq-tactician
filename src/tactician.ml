@@ -4,6 +4,8 @@ open Cmdliner
 
 let coqrc_string = "From Tactician Require Import Ltac1.\n"
 
+let coq_tactician_lib = Findlib.package_directory "coq-tactician"
+
 let syscall cmd =
   let ic, oc = Unix.open_process cmd in
   let buf = Buffer.create 16 in
@@ -154,8 +156,12 @@ let config_add_remove gt ?st name value =
 (* TODO: Remove old commands once enough time has elapsed *)
 let old_wrap_command = "[\"with-tactician\"] {coq-tactician:installed}"
 let old_pre_build_command = "[\"tactician-patch\" name version] {coq-tactician:installed}"
-let wrap_command = "[\"%{coq-tactician:lib}%/with-tactician\"] {coq-tactician:installed}"
-let pre_build_command = "[\"%{coq-tactician:lib}%/tactician-patch\" name version] {coq-tactician:installed}"
+let wrap_command = "[\"" ^ coq_tactician_lib ^ "/with-tactician\"] {coq-tactician:installed}"
+let pre_build_command = "[\"" ^ coq_tactician_lib ^ "/tactician-patch\" name version] {coq-tactician:installed}"
+
+let () =
+  prerr_endline pre_build_command
+
 
 let inject () =
   opam_init_no_lock @@ fun gt ->
@@ -203,7 +209,7 @@ let stdlib () =
   `Ok ()
 
 let exec_command cmd args =
-  let wt = "%{coq-tactician:lib}%/with-tactician" in
+  let wt = coq_tactician_lib ^ "/with-tactician" in
   Unix.execv wt (Array.of_list (wt::cmd::args))
 
 (* Command line interface *)

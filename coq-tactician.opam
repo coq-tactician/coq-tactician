@@ -59,5 +59,4 @@ tags: [
 substs: [
   "coq-shim/with-tactician"
   "coq-shim/tactician-patch"
-  "src/tactician.ml"
 ]

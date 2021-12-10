@@ -9,11 +9,11 @@ then
 fi
 
 OPAMBIN=%{bin}%
-TACTICIANLIB=%{coq-tactician:lib}%
+TACTICIANLIB=%{lib}%/coq-tactician
 TACTICIANDIR=%{coq:lib}%/user-contrib/Tactician
 
-TACTICIANEXTRAFLAGS=$(cat %{coq-tactician:etc}%/injection-flags) # Old location, to be removed
-TACTICIANEXTRAFLAGS="$TACTICIANEXTRAFLAGS $(for f in %{coq-tactician:share}%/plugins/*/injection-flags; do (cat $f; printf ' '); done)"
+TACTICIANEXTRAFLAGS=$(cat %{etc}%/coq-tactician/injection-flags) # Old location, to be removed
+TACTICIANEXTRAFLAGS="$TACTICIANEXTRAFLAGS $(for f in %{share}%/coq-tactician/plugins/*/injection-flags; do (cat $f; printf ' '); done)"
 TACTICIANEXTRAFLAGS=$(echo $TACTICIANEXTRAFLAGS | xargs)
 TACTICIANFLAGS="-q -I $TACTICIANDIR -R $TACTICIANDIR Tactician -rifrom Tactician Ltac1.Record"
 
