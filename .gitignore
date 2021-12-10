@@ -59,3 +59,6 @@ _build/
 # Local OPAM switch
 _opam/
 opam
+
+# Emacs
+.emacs.desktop
