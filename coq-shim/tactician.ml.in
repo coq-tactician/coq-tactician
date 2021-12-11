@@ -229,13 +229,6 @@ let read_args name =
   String.concat " " @@ List.map String.trim @@ loop []
 
 let tactician_extra_flags () =
-  List.iter print_endline Coq_shim.Sites.plugins;
-  print_endline "BABABA";
-  let k =
-    List.filter_map (fun d -> if Sys.file_exists (d/"injection-flags") then Some (read_args (d/"injection-flags")) else None) @@
-    List.concat_map (fun (d, sds) -> List.map (fun sd -> d/sd) @@ Array.to_list sds) @@
-    List.map (fun d -> d, Sys.readdir d) Coq_shim.Sites.plugins in
-  List.iter print_endline k;
   String.concat " " @@
   List.filter_map (fun d -> if Sys.file_exists (d/"injection-flags") then Some (read_args (d/"injection-flags")) else None) @@
   List.concat @@
@@ -249,25 +242,15 @@ let inject_bwrap cmd args =
     let pin : int = Obj.magic pin in
     let flags = String.concat " " tactician_flags ^ " " ^ tactician_extra_flags () in
     let contents = "#!/bin/sh\nexec " ^ target ^ " " ^ flags ^ " \"$@\"\n" in
-    print_endline (string_of_int @@ pin);
-    print_endline "\n";
-    print_endline contents;
     output_string pout contents;
     close_out pout;
     ["--bind"; source; target; "--perms"; "0755"; "--ro-bind-data"; string_of_int pin; source] in
-  print_endline tactician_dir;
-  print_endline coqc;
   let coqc_real = tactician_lib/"coqc.real" in
   let coqtop_real = tactician_lib/"coqtop.real" in
-  print_endline coqc_real;
-  print_endline coqtop_real;
   let bargs = ["bwrap"; "--dev-bind"; "/"; "/"] in
   let bargs = bargs @ wrap_binary coqc coqc_real in
   let bargs = bargs @ wrap_binary coqtop coqtop_real in
   let bargs = bargs @ cmd::args in
-  (* let command = "cat /dev/fd/" ^ string_of_int pin in *)
-  print_endline (String.concat " " bargs);
-  print_endline "\n\n\n";
   Unix.execvp "bwrap" (Array.of_list bargs)
 
 (* TODO: Rewrite the rest of this file wit Bos *)
@@ -299,7 +282,6 @@ let inject_path cmd args =
             mk_wrapper "coqtop" >>= fun () ->
             OS.Env.current () >>= fun env ->
             let path = Astring.String.Map.get "PATH" env in
-            print_endline path;
             OS.Env.set_var "PATH" (Some (Fpath.to_string tmp ^ ":" ^ path)) >>= fun () ->
             (* We add a trailing slash because some scripts assume it *)
             OS.Env.set_var "COQBIN" (Some (Fpath.(to_string (tmp / "")))) >>= fun () ->
