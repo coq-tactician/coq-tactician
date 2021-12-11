@@ -1,11 +1,16 @@
 (rule
- (targets with-tactician tactician-patch tactician.ml shim_lib.ml)
+ (targets tactician-patch tactician.ml)
  ; When installed through opam, we perform substitutions through the 'substs' directive in the opam file.
  ; It also works using this rule, but running opam during an installation can be risky due to sandboxing issues.
  (mode fallback)
- (deps with-tactician.in tactician-patch.in tactician.ml.in shim_lib.ml.in)
+ (deps tactician-patch.in tactician.ml.in)
  (action (run opam config subst %{targets})))
 
+(install
+ (files tactician-patch)
+ (section libexec)
+ (package coq-tactician)
+)
 (install
  (files coqc.real coqtop.real) ; mount point for the real coq
  (section lib)
@@ -37,28 +42,11 @@
  (package coq-tactician)
  (public_name tactician)
  (flags :standard -warn-error -A)
- (modules ("tactician"))
+ (modules ("tactician") coq_shim)
  (libraries
    unix
    opam-client
    dune-site
+   bos
  )
-)
-(executables
- (names coqc_shim coqtop_shim)
- (flags :standard -warn-error -A)
- (modules ("coqc_shim" coqtop_shim shim_lib))
- (libraries
-   unix
-   dune-site
- )
-)
-(install
- (files
-   with-tactician
-   tactician-patch
-  (coqc_shim.exe as coqc-shim)
-  (coqtop_shim.exe as coqtop-shim))
- (section libexec)
- (package coq-tactician)
 )

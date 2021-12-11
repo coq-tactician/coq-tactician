@@ -152,9 +152,9 @@ let config_add_remove gt ?st name value =
   set_opt_switch gt ?st name (`Add value)
 
 (* TODO: Remove old commands once enough time has elapsed *)
-let old_wrap_command = "[\"with-tactician\"] {coq-tactician:installed}"
+let old_wrap_command = "[\"%{coq-tactician:lib}%/with-tactician\"] {coq-tactician:installed}"
 let old_pre_build_command = "[\"tactician-patch\" name version] {coq-tactician:installed}"
-let wrap_command = "[\"%{coq-tactician:lib}%/with-tactician\"] {coq-tactician:installed}"
+let wrap_command = "[\"tactician\" \"exec\" \"--\"] {coq-tactician:installed}"
 let pre_build_command = "[\"%{coq-tactician:lib}%/tactician-patch\" name version] {coq-tactician:installed}"
 
 let inject () =
@@ -216,35 +216,117 @@ let (/) = Filename.concat
 let coqc = "%{bin}%"/"coqc"
 let coqtop = "%{bin}%"/"coqtop"
 let tactician_lib = "%{coq-tactician:lib}%"
+let tactician_dir = "%{coq:lib}%"/"user-contrib"/"Tactician"
+let tactician_flags = ["-q"; "-I"; tactician_dir; "-R"; tactician_dir; "Tactician"; "-rifrom"; "Tactician"; "Ltac1.Record"]
 
-let wrap_binary target wrapper placeholder =
-  ["--bind"; target; placeholder; "--bind"; wrapper; target]
+let read_args name =
+  let ic = open_in name in
+  let try_read () =
+    try Some (input_line ic) with End_of_file -> None in
+  let rec loop acc = match try_read () with
+    | Some s -> loop (s :: acc)
+    | None -> close_in ic; List.rev acc in
+  String.concat " " @@ List.map String.trim @@ loop []
+
+let tactician_extra_flags () =
+  List.iter print_endline Coq_shim.Sites.plugins;
+  print_endline "BABABA";
+  let k =
+    List.filter_map (fun d -> if Sys.file_exists (d/"injection-flags") then Some (read_args (d/"injection-flags")) else None) @@
+    List.concat_map (fun (d, sds) -> List.map (fun sd -> d/sd) @@ Array.to_list sds) @@
+    List.map (fun d -> d, Sys.readdir d) Coq_shim.Sites.plugins in
+  List.iter print_endline k;
+  String.concat " " @@
+  List.filter_map (fun d -> if Sys.file_exists (d/"injection-flags") then Some (read_args (d/"injection-flags")) else None) @@
+  List.concat @@
+  List.map (fun d -> Array.to_list @@ Array.map (fun sd -> d/sd) @@ Sys.readdir d) Coq_shim.Sites.plugins
 
 (* TODO: At some point we might consider using https://github.com/Chris00/ocaml-bwrap *)
 let inject_bwrap cmd args =
+  let wrap_binary source target =
+    let pin, pout = Unix.pipe () in
+    let pout = Unix.out_channel_of_descr pout in
+    let pin : int = Obj.magic pin in
+    let flags = String.concat " " tactician_flags ^ " " ^ tactician_extra_flags () in
+    let contents = "#!/bin/sh\nexec " ^ target ^ " " ^ flags ^ " \"$@\"\n" in
+    print_endline (string_of_int @@ pin);
+    print_endline "\n";
+    print_endline contents;
+    output_string pout contents;
+    close_out pout;
+    ["--bind"; source; target; "--perms"; "0755"; "--ro-bind-data"; string_of_int pin; source] in
+  print_endline tactician_dir;
   print_endline coqc;
-  let coqc_shim = tactician_lib/"coqc-shim" in
-  let coqtop_shim = tactician_lib/"coqtop-shim" in
   let coqc_real = tactician_lib/"coqc.real" in
   let coqtop_real = tactician_lib/"coqtop.real" in
   print_endline coqc_real;
   print_endline coqtop_real;
   let bargs = ["bwrap"; "--dev-bind"; "/"; "/"] in
-  let bargs = bargs @ wrap_binary coqc coqc_shim coqc_real in
-  let bargs = bargs @ wrap_binary coqc coqtop_shim coqtop_real in
+  let bargs = bargs @ wrap_binary coqc coqc_real in
+  let bargs = bargs @ wrap_binary coqtop coqtop_real in
   let bargs = bargs @ cmd::args in
+  (* let command = "cat /dev/fd/" ^ string_of_int pin in *)
   print_endline (String.concat " " bargs);
   print_endline "\n\n\n";
   Unix.execvp "bwrap" (Array.of_list bargs)
+
+(* TODO: Rewrite the rest of this file wit Bos *)
+let inject_path cmd args =
+  let flags = String.concat " " tactician_flags ^ " " ^ tactician_extra_flags () in
+  let res =
+    let open Rresult in
+    let open Bos in
+    let run cmd =
+      OS.Dir.current () >>= fun dir ->
+      Sys.catch_break true;
+      try
+        OS.Dir.with_tmp ~dir "tactician_path_%s" (fun tmp () ->
+            let mk_wrapper name =
+              OS.File.write ~mode:0o755 Fpath.(tmp/name)
+                ("#!/bin/sh\nexec %{bin}%/" ^ name ^ " " ^ flags ^ "\"$@\"")
+            in
+            let link_binary name =
+              Fpath.of_string "%{bin}%" >>= fun bin ->
+              OS.Path.symlink ~target:Fpath.(bin/name) Fpath.(tmp/name) in
+            link_binary "coqchk" >>= fun () ->
+            link_binary "coqdep" >>= fun () ->
+            link_binary "coqdoc" >>= fun () ->
+            link_binary "coq_makefile" >>= fun () ->
+            link_binary "coqpp" >>= fun () ->
+            link_binary "coq-tex" >>= fun () ->
+            link_binary "coqwc" >>= fun () ->
+            mk_wrapper "coqc" >>= fun () ->
+            mk_wrapper "coqtop" >>= fun () ->
+            OS.Env.current () >>= fun env ->
+            let path = Astring.String.Map.get "PATH" env in
+            print_endline path;
+            OS.Env.set_var "PATH" (Some (Fpath.to_string tmp ^ ":" ^ path)) >>= fun () ->
+            (* We add a trailing slash because some scripts assume it *)
+            OS.Env.set_var "COQBIN" (Some (Fpath.(to_string (tmp / "")))) >>= fun () ->
+            OS.Cmd.run_status cmd
+          ) () >>= (fun x -> x) >>| function
+          (* NOTE: This exit has to occurs outside of `with_tmp` to ensure cleanup *)
+        | `Signaled i when i <> 0 -> Stdlib.exit i
+        | `Exited i when i <> 0 -> Stdlib.exit i
+        | _ -> ()
+      with Sys.Break ->
+        Stdlib.exit 1
+    in
+    let command = Bos.Cmd.of_list (cmd::args) in
+    Bos.OS.Cmd.exists command >>= fun exists ->
+    if exists then run command else (print_endline "Command does not exist!"; Stdlib.exit 1)
+  in
+    match res with
+  | Ok _ -> `Ok ()
+  (* TODO: Fix *)
+  | Error _ -> `Error (false, "internal error")
 
 let bwrap_test () =
   let ec = Sys.command "bwrap --dev-bind / / true &> /dev/null" in
   ec = 0
 
 let exec_command cmd args =
-  if bwrap_test () then inject_bwrap cmd args else `Ok ()
-  (* let wt = "%{coq-tactician:lib}%/with-tactician" in *)
-  (* Unix.execv wt (Array.of_list (wt::cmd::args)) *)
+  if bwrap_test () then inject_bwrap cmd args else inject_path cmd args
 
 (* Command line interface *)
 

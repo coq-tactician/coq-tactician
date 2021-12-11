@@ -14,8 +14,6 @@ tags: [
   "logpath:Tactician"
 ]
 substs: [
-  "coq-shim/with-tactician"
   "coq-shim/tactician-patch"
   "coq-shim/tactician.ml"
-  "coq-shim/shim_lib.ml"
 ]
