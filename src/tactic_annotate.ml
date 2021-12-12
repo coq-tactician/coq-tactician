@@ -495,6 +495,8 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
         | e, [TacGeneric id;] when Names.KerName.equal e @@ internal_tactics_ref_lookup "intro_x" ->
           let id = Genarg.out_gen (Genarg.glbwit Stdarg.wit_ident) id in
           mkatom loc (TacIntroPattern (false, [CAst.make (Tactypes.IntroNaming (Namegen.IntroIdentifier id))]))
+        | e, [] when Names.KerName.equal e @@ internal_tactics_ref_lookup "intro" ->
+          mkatom loc (TacIntroPattern (false, [CAst.make (Tactypes.IntroNaming Namegen.IntroAnonymous)]))
         | _ ->
           let args = if inner_record Alias || tactician_cache then
               List.map (fun a -> fst (annotate_arg a)) args else args in

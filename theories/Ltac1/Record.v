@@ -13,6 +13,7 @@ Tactician Register Tactic "injection_x_as" injection _ as.
 Tactician Register Tactic "injection_x" injection _.
 Tactician Register Tactic "discriminate_x" discriminate _.
 Tactician Register Tactic "intro_x" intro X.
+Tactician Register Tactic "intro" intro.
 
 (* TODO: This is a hack to deal with the decomposition of 'intros [=]'. To be improved. *)
 Tactic Notation "intro_equality_hnf" hyp(H) :=
