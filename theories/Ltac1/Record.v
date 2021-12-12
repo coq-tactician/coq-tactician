@@ -28,6 +28,22 @@ let p := fresh in let T := type of H in assert (p:T) by reflexivity; clear p H.
 Tactician Register Tactic "intro_equality_hnf" intro_equality_hnf X.
 Tactician Register Tactic "intro_equality_clear" intro_equality_clear X.
 
+(* TODO: Hack to decompose the '->' intropattern. To be improved. *)
+Tactic Notation "intropattern" "subst" "->" hyp(H) :=
+match type of H with
+| _ _ ?x _ => first [move H at top; subst x | rewrite >H]
+| _ ?x _ => first [move H at top; subst x | rewrite >H]
+| forall _, _ _ ?x _ => first [move H at top; subst x | rewrite >H]
+end.
+Tactic Notation "intropattern" "subst" "<-" hyp(H) :=
+match type of H with
+| _ _ _ ?x => first [move H at top; subst x | rewrite <- >H]
+| _ _ ?x => first [move H at top; subst x | rewrite <- >H]
+| forall _, _ _ _ ?x => first [move H at top; subst x | rewrite <- >H]
+end.
+Tactician Register Tactic "intropattern_subst_l" intropattern subst -> X.
+Tactician Register Tactic "intropattern_subst_r" intropattern subst <- X.
+
 Export Set Default Proof Mode "Tactician Ltac1".
 
 Tactician Record Then Decompose.

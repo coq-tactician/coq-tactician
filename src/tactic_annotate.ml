@@ -124,98 +124,108 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
     let clear = internal_tactics_ref_lookup "clear" in
     let xs = TacGeneric (Genarg.in_gen (Genarg.glbwit (Genarg.wit_list Stdarg.wit_var)) xs) in
     let tac = TacAlias (CAst.make (clear, [xs])) in
-    r tac tac in
-  let rec expand_intro_pattern loc i eflg (p : _ Tactypes.intro_pattern_expr)
-    : _ Tactypes.intro_pattern_expr * glob_tactic_expr option * int =
+    rself tac in
+  let rec expand_intro_pattern loc i eflg (p : _ Tactypes.intro_pattern_expr CAst.t)
+    : _ Tactypes.intro_pattern_expr CAst.t * int * ((int -> glob_tactic_expr) -> int -> glob_tactic_expr) =
     let open Tactypes in
-    match p with
-    | IntroForthcoming _ -> p, None, i
-    | IntroNaming _ -> p, None, i
+    match p.v with
+    | IntroForthcoming _ -> p, i, (fun cont i -> cont i)
+    | IntroNaming _ -> p, i, (fun cont i -> cont i)
     | IntroAction a -> (match a with
         | IntroWildcard ->
           let id = mktmp i in
-          let tac = clear [CAst.make id] in
-          IntroNaming (Namegen.IntroIdentifier id), Some tac, i+1
+          (* The try is needed because in some cases other actions like IntroRewrite will already have removed the hyp *)
+          let tac = TacTry (clear [CAst.make id]) in
+          CAst.make ?loc:p.loc @@ IntroNaming (Namegen.IntroIdentifier id), i+1, (fun cont i -> TacThen (cont i, tac))
         | IntroOrAndPattern ps ->
-          let ps, tacs = match ps with
-            | IntroOrPattern ps ->
-              let ps = List.map (expand_intro_patterns loc eflg i) ps in
-              let ps, tacs = List.split ps in
-              IntroOrPattern ps, tacs
-            | IntroAndPattern ps ->
-              let ps, tac = expand_intro_patterns loc eflg i ps in
-              IntroAndPattern ps, [tac]
-          in
-          let tacs = List.map (fun (_, tac) -> tac) tacs in
-          let tacs_empty = match List.filter_map (fun x -> x) tacs with
-            | [] -> true
-            | _ -> false in
           let id = mktmp i in
-          let destruct = mkatom loc @@ TacInductionDestruct
+          let destruct ps = mkatom loc @@ TacInductionDestruct
               (false, eflg, ([(None, Tactics.ElimOnIdent (CAst.make id)),
                               (None, Some (ArgArg (CAst.make ps))), None], None)) in
-          let tac = match tacs_empty with
-            | true -> destruct
-            | false -> TacThens3parts (destruct, Array.of_list [], TacId[],
-                                      Array.of_list @@ List.map (Option.default (TacId [])) tacs) in
-          IntroNaming (Namegen.IntroIdentifier id), Some tac, i+1
+          let destruct_then ps tacs =
+            TacThens3parts (destruct ps, Array.of_list [], TacId [],
+                            Array.of_list tacs) in
+            (* TacThen (destruct ps, cont (CAst.make ?loc:p.loc @@ IntroNaming (Namegen.IntroIdentifier id)) i) in *)
+          CAst.make ?loc:p.loc @@ IntroNaming (Namegen.IntroIdentifier id), i+1,
+          (fun cont_final i ->
+             match ps with
+             | IntroOrPattern ps ->
+               (match ps with
+                (* The special pattern `[]` is very nasty and there does not seem a way to properly decompose it.
+                   The reason is that we don't know how many subgoals it generates, and which of those are side-conditions.
+                   This is a partial attempt where we assume that no side-conditions occur *)
+                | [[]] ->
+                  TacThen (destruct (IntroOrPattern [[]]), cont_final i)
+                | _ ->
+                  let expanded = List.map (fun ps -> expand_intro_patterns loc eflg i ps) ps in
+                  let ps = IntroOrPattern (List.map (fun (ps, _, _) -> ps) expanded) in
+                  destruct_then ps @@ List.map (fun (_, i, cont) -> cont cont_final i) expanded)
+             | IntroAndPattern ps ->
+               let ps, i, cont = expand_intro_patterns loc eflg i ps in
+               let ps = IntroAndPattern ps in
+               destruct_then ps @@ [cont cont_final i]
+          )
         | IntroInjection ps ->
           let id = mktmp i in
           let tac = mk_intro_injection id ps in
-          IntroNaming (Namegen.IntroIdentifier id), Some tac, i+1
+          CAst.make ?loc:p.loc @@ IntroNaming (Namegen.IntroIdentifier id), i+1, (fun cont i -> TacThen(tac, cont i))
         | IntroApplyOn (t, p) ->
           let id = mktmp i in
           let apply = mkatom loc @@
             TacApply (true, eflg, [None, (t.v, NoBindings)], Some (CAst.make id, Some p)) in
           let tac = TacThen (apply, TacTry (clear [CAst.make id])) in
-          IntroNaming (Namegen.IntroIdentifier id), Some tac, i+1
+          CAst.make ?loc:p.loc @@ IntroNaming (Namegen.IntroIdentifier id), i+1, (fun cont i -> TacThen (tac, cont i))
         | IntroRewrite d ->
-          (* let id = mktmp i in *)
-          (* let idterm = (DAst.make (Glob_term.GVar id), *)
-          (*               Some (CAst.make @@ Constrexpr.CRef (Libnames.qualid_of_ident id, None))) in *)
-          (* let rewrite = mkatom loc @@ *)
-          (*   TacRewrite (eflg, [d, Equality.RepeatStar, (Some true, (idterm, NoBindings))], *)
-          (*               Locus.{ onhyps = None; concl_occs = AllOccurrences }, None) in *)
-          (* IntroNaming (Namegen.IntroIdentifier id), Some rewrite, i+1 *)
-          p, None, i
+          let id = mktmp i in
+          let rewrite = if d then internal_tactics_ref_lookup "intropattern_subst_l"
+            else internal_tactics_ref_lookup "intropattern_subst_r" in
+          let hyp = TacGeneric (Genarg.in_gen (Genarg.glbwit Stdarg.wit_var) (CAst.make id)) in
+          let rewrite = rself @@ TacAlias (CAst.make (rewrite, [hyp])) in
+          CAst.make ?loc:p.loc @@ IntroNaming (Namegen.IntroIdentifier id), i+1,
+          (fun cont i -> TacThen (rewrite, cont i))
       )
-  and expand_intro_patterns loc eflg i (p : _ Tactypes.intro_pattern_expr CAst.t list)
-    : g_trm Tactypes.intro_pattern_expr CAst.t list *
-    (int * glob_tactic_expr option) =
-    List.fold_right (fun CAst.{v=p; loc} (acc, (i, tac)) ->
-        let p, tac', i = expand_intro_pattern loc i eflg p in
-        let tac = match tac, tac' with
-          | None, None -> None
-          | None, Some tac' -> Some tac'
-          | Some tac, None -> Some tac
-          | Some tac, Some tac' -> Some (TacThen (tac', tac)) in
-        (CAst.make ?loc p)::acc, (i, tac))
-      p ([], (i, None)) in
+  and expand_intro_patterns loc eflg i (ps : _ Tactypes.intro_pattern_expr CAst.t list) :
+    _ Tactypes.intro_pattern_expr CAst.t list * int * ((int -> glob_tactic_expr) -> int -> glob_tactic_expr) =
+    let rec aux ps ps_acc expand_acc i =
+      match ps with
+      | [] -> List.rev ps_acc, i,
+              (fun (cont : int -> glob_tactic_expr) ->
+                 List.fold_left (fun acc expand ->
+                     expand acc
+                   ) cont expand_acc)
+      | p::ps ->
+        let (p, i, expand) = expand_intro_pattern loc i eflg p in
+        aux ps (p::ps_acc) (expand::expand_acc) i in
+    aux ps [] [] i
+        (* let k = List.fold_right (fun CAst.{v=p; loc} (acc, (i, tac)) -> *)
+    (*     let p, tac', i = expand_intro_pattern loc i eflg p cont in *)
+    (*     let tac = match tac, tac' with *)
+    (*       | None, None -> None *)
+    (*       | None, Some t c' -> Some tac' *)
+    (*       | Some tac, None -> Some tac *)
+    (*       | Some tac, Some tac' -> Some (TacThen (tac', tac)) in *)
+    (*     (CAst.make ?loc p)::acc, (i, tac)) *)
+    (*     p ([], (i, None)) in *)
+  in
   let decompose_single_destruct loc eflg (c, (eqn, asc), inc) =
     match eqn, inc, asc with
     | None, None, Some (ArgArg (CAst.{v=Tactypes.IntroAndPattern ps; _})) ->
-      let ps, (_, tac) = expand_intro_patterns loc eflg 0 ps in
+      let ps, i, cont = expand_intro_patterns loc eflg 0 ps in
       let destruct = mkatom loc @@
         TacInductionDestruct (false, eflg,
                               ([c, (eqn, Some (ArgArg (CAst.make (Tactypes.IntroAndPattern ps)))), inc], None)) in
-      (match tac with
-       | None -> destruct
-       | Some tac -> TacThens3parts (destruct, Array.of_list [], TacId[],
-                                     Array.of_list @@ [tac]))
+      let tac = cont (fun _ -> TacId []) i in
+      TacThens3parts (destruct, Array.of_list [], TacId[],
+                      Array.of_list @@ [tac])
     | None, None, Some (ArgArg (CAst.{v=Tactypes.IntroOrPattern ps; _})) ->
-      let ps = List.map (expand_intro_patterns loc eflg 0) ps in
-      let ps, tacs = List.split ps in
-      let tacs = List.map (fun (_, tac) -> tac) tacs in
-      let tacs_empty = match List.filter_map (fun x -> x) tacs with
-        | [] -> true
-        | _ -> false in
+      let expanded = List.map (expand_intro_patterns loc eflg 0) ps in
+      let ps = Tactypes.IntroOrPattern (List.map (fun (ps, _, _) -> ps) expanded) in
       let destruct =
         mkatom loc @@ TacInductionDestruct
-          (false, eflg, ([c, (eqn, Some (ArgArg (CAst.make (Tactypes.IntroOrPattern ps)))), inc], None)) in
-      (match tacs_empty with
-       | true -> destruct
-       | false -> TacThens3parts (destruct, Array.of_list [], TacId[],
-                                  Array.of_list @@ List.map (Option.default (TacId [])) tacs))
+          (false, eflg, ([c, (eqn, Some (ArgArg (CAst.make ps))), inc], None)) in
+      let tacs = List.map (fun (_, i, cont) -> cont (fun _ -> TacId []) i) expanded in
+      TacThens3parts (destruct, Array.of_list [], TacId[],
+                      Array.of_list tacs)
     | _ ->
       mkatom loc @@ TacInductionDestruct (false, eflg, ([c, (eqn, asc), inc], None)) in
   let decompose_destruct loc eflg ls =
@@ -255,53 +265,23 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
       | (b, mult, trm)::ls -> tacthenfirst (decompose_multi loc flg inc b trm by byorig mult) (aux ls)
     in aux ls in
   let intro_patterns_convert eflg loc (ps : _ Tactypes.intro_pattern_expr CAst.t list) =
-    let open Coq_ast_cata in
-    let open Tacexpr_functor in
-    let open Tactician_util in
-    let module M = StateMonad(struct type s = int end) in
-    let open M in
-    let open Cata(M) in
-    let open Coq_ast_monadic_map.Mapper(M) in
-    let open WithMonadNotations(M) in
-    let mktmp i = Names.Id.of_string ("_tmp_tactician" ^ string_of_int i) in
-    let intro_pattern_anon_convert (p : _ Tactypes.intro_pattern_expr) =
-      let sr =
-        { default_sequence_record with
-          glob_intro_pattern_expr = (fun t ->
-              let* t = default_sequence_record.glob_intro_pattern_expr t in
-              match t with
-              | IntroAction a ->
-                (match a with
-                 | IntroWildcard ->
-                   let* i = get in
-                   let+ () = put (i + 1) in
-                   let name = mktmp i in
-                   IntroNaming (Namegen.IntroIdentifier name)
-                 | x -> return @@ IntroAction a)
-              | x -> return x) } in
-      glob_intro_pattern_expr_cata sr p in
-    let intro_patterns_anon_convert (ps : _ Tactypes.intro_pattern_expr CAst.t list) =
-      List.fold_right (fun p (i, acc) ->
-          let i, p = cast_map (fun p i -> intro_pattern_anon_convert p i) p i in
-          i, (p::acc)
-        ) ps (0, []) in
-    let n, ps = intro_patterns_anon_convert ps in
     let open Tacexpr in
     let open Tactypes in
-    let clear =
-      let xs = List.init n (fun i -> CAst.make @@ mktmp i) in
-      clear xs in
-    let intros, _ = List.fold_left (fun (acc, i) p ->
-        let p, tac, i = expand_intro_pattern loc i eflg p.v in
-        let intro = mkatom loc @@ TacIntroPattern (eflg, [CAst.make p]) in
-        let tac = match tac with
-          | None -> intro
-          | Some tac -> TacThen (intro, tac) in
-        TacThen (acc, tac), i) (TacId [], n) ps in
-    if n > 0 then
-      (* TODO: The TacTry is not correct *)
-      TacThen (intros, TacTry clear)
-    else intros in
+    let rec aux ps i =
+      match ps with
+      | [] -> TacId []
+      | p::ps ->
+        let (p, i, expand) = expand_intro_pattern loc i eflg p in
+        let cont i =
+          aux ps i in
+        let tac = expand cont i in
+        let intro = mkatom loc @@ TacIntroPattern (eflg, [p]) in
+        TacThen (intro, tac) in
+    aux ps 0 in
+    (* if n > 0 then *)
+    (*   (\* TODO: The TacTry is not correct *\) *)
+    (*   TacThen (intros, TacTry clear) *)
+    (* else intros in *)
   let rec annotate_atomic a : glob_tactic_expr =
     let router ast t = if outer_record ast then r (TacAtom a) t else t in
     let at = TacAtom a in
