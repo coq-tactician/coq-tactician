@@ -10,13 +10,15 @@ Declare ML Module "tactician_ltac1_record_plugin".
 
 Tactician Register Tactic "clear" clear.
 Tactician Register Tactic "injection_x_as" injection _ as.
+Tactician Register Tactic "injection_x" injection _.
 Tactician Register Tactic "discriminate_x" discriminate _.
+Tactician Register Tactic "intro_x" intro X.
 
 (* TODO: This is a hack to deal with the decomposition of 'intros [=]'. To be improved. *)
 Tactic Notation "intro_equality_hnf" hyp(H) :=
 hnf in H;
 match type of H with
-| _ ?x ?y => idtac x y;
+| _ ?x ?y =>
   let x' := eval hnf in x in
   replace x with x' in H by reflexivity;
   let y' := eval hnf in y in

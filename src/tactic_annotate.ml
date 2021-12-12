@@ -90,57 +90,33 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
     rself t in
   let tacthenfirst t1 t2 = TacThens3parts (t1, Array.of_list [t2], TacId [], Array.of_list []) in
   let tacthenlast  t1 t2 = TacThens3parts (t1, Array.of_list [], TacId [], Array.of_list [t2]) in
-  let decompose_apply flg1 flg2 intro loc (ls : 'trm with_bindings_arg list) =
-    let intro' = Option.map (fun (n, _) -> (n, None)) intro in
-    let combiner = match intro with | None -> tacthenlast | Some _ -> tacthenfirst in
-    let rec aux = function
-      | [] -> assert false
-      | [s] -> mkatom loc (TacApply (flg1, flg2, [s], intro))
-      | s::ls -> combiner (mkatom loc (TacApply (flg1, flg2, [s], intro'))) (aux ls)
-    in aux ls in
-  let decompose_generalize loc ls =
-    let rec aux = function
-      | [] -> assert false
-      | [s] -> mkatom loc (TacGeneralize [s])
-      | s::ls -> TacThen (mkatom loc (TacGeneralize [s]), aux ls)
-    in aux ls in
   let mktmp i = Names.Id.of_string ("_tmp_tactician" ^ string_of_int i) in
-  let mk_intro_injection name ps =
-    let open Tactypes in
-    let destr_arg = None, Tactics.ElimOnIdent (CAst.make name) in
-    let destr_arg = TacGeneric (Genarg.in_gen (Genarg.glbwit Tacarg.wit_destruction_arg) destr_arg) in
-    let injection = internal_tactics_ref_lookup "injection_x_as" in
-    let ps = TacGeneric (Genarg.in_gen (Genarg.glbwit (Genarg.wit_list Tacarg.wit_simple_intropattern)) ps) in
-    let injection = rself @@ TacAlias (CAst.make (injection, [destr_arg; ps])) in
-    let discriminate = internal_tactics_ref_lookup "discriminate_x" in
-    let discriminate = rself @@ TacAlias (CAst.make (discriminate, [destr_arg])) in
-    let hyp = TacGeneric (Genarg.in_gen (Genarg.glbwit Stdarg.wit_var) (CAst.make name)) in
-    let intro_equality_clear = internal_tactics_ref_lookup "intro_equality_clear" in
-    let intro_equality_clear = rself @@ TacAlias (CAst.make (intro_equality_clear, [hyp])) in
-    let intro_equality_hnf = internal_tactics_ref_lookup "intro_equality_hnf" in
-    let intro_equality_hnf = rself @@ TacAlias (CAst.make (intro_equality_hnf, [hyp])) in
-    TacFirst [discriminate; injection; intro_equality_clear; intro_equality_hnf] in
   let clear xs =
     let clear = internal_tactics_ref_lookup "clear" in
     let xs = TacGeneric (Genarg.in_gen (Genarg.glbwit (Genarg.wit_list Stdarg.wit_var)) xs) in
     let tac = TacAlias (CAst.make (clear, [xs])) in
     rself tac in
-  let rec expand_intro_pattern loc i eflg (p : _ Tactypes.intro_pattern_expr CAst.t)
+  let rec expand_intro_pattern ?(def_name:Names.Id.t option) loc i eflg (p : _ Tactypes.intro_pattern_expr CAst.t)
     : _ Tactypes.intro_pattern_expr CAst.t * int * ((int -> glob_tactic_expr) -> int -> glob_tactic_expr) =
     let open Tactypes in
+    let mktmp i =
+      match def_name with
+      | None -> mktmp i, i+1
+      | Some id -> id, i in
     match p.v with
     | IntroForthcoming _ -> p, i, (fun cont i -> cont i)
     | IntroNaming _ -> p, i, (fun cont i -> cont i)
     | IntroAction a -> (match a with
         | IntroWildcard ->
-          let id = mktmp i in
+          let id, i = mktmp i in
           (* The try is needed because in some cases other actions like IntroRewrite will already have removed the hyp *)
           let tac = TacTry (clear [CAst.make id]) in
           CAst.make ?loc:p.loc @@ IntroNaming (Namegen.IntroIdentifier id), i+1, (fun cont i -> TacThen (cont i, tac))
         | IntroOrAndPattern ps ->
-          let id = mktmp i in
+          let id, i = mktmp i in
           let destruct ps = mkatom loc @@ TacInductionDestruct
-              (false, eflg, ([(None, Tactics.ElimOnIdent (CAst.make id)),
+              (false, false (* Intentionally set to false because edestruct does not delete the original variable *),
+               ([(None, Tactics.ElimOnIdent (CAst.make id)),
                               (None, Some (ArgArg (CAst.make ps))), None], None)) in
           let destruct_then ps tacs =
             TacThens3parts (destruct ps, Array.of_list [], TacId [],
@@ -166,17 +142,42 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
                destruct_then ps @@ [cont cont_final i]
           )
         | IntroInjection ps ->
-          let id = mktmp i in
-          let tac = mk_intro_injection id ps in
-          CAst.make ?loc:p.loc @@ IntroNaming (Namegen.IntroIdentifier id), i+1, (fun cont i -> TacThen(tac, cont i))
+          let id, i = mktmp i in
+          CAst.make ?loc:p.loc @@ IntroNaming (Namegen.IntroIdentifier id), i+1,
+          (fun cont_final i ->
+              let destr_arg = None, Tactics.ElimOnIdent (CAst.make id) in
+              let destr_arg = TacGeneric (Genarg.in_gen (Genarg.glbwit Tacarg.wit_destruction_arg) destr_arg) in
+              let injection =
+                let injection = internal_tactics_ref_lookup "injection_x_as" in
+                let ps, i, cont = expand_intro_patterns loc eflg i ps in
+                let cont i = cont cont_final i in
+                let ps = TacGeneric (Genarg.in_gen (Genarg.glbwit (Genarg.wit_list Tacarg.wit_simple_intropattern)) ps) in
+                let injection = rself @@ TacAlias (CAst.make (injection, [destr_arg; ps])) in
+                TacThen (injection, cont i) in
+              let discriminate = internal_tactics_ref_lookup "discriminate_x" in
+              let discriminate = rself @@ TacAlias (CAst.make (discriminate, [destr_arg])) in
+              let hyp = TacGeneric (Genarg.in_gen (Genarg.glbwit Stdarg.wit_var) (CAst.make id)) in
+              let intro_equality_clear = internal_tactics_ref_lookup "intro_equality_clear" in
+              let intro_equality_clear = rself @@ TacAlias (CAst.make (intro_equality_clear, [hyp])) in
+              let intro_equality_hnf = internal_tactics_ref_lookup "intro_equality_hnf" in
+              let intro_equality_hnf = rself @@ TacAlias (CAst.make (intro_equality_hnf, [hyp])) in
+              TacFirst
+                [ TacThen (discriminate, cont_final i)
+                ; injection (* Continuation already inserted *)
+                ; TacThen (intro_equality_clear, cont_final i)
+                ; TacThen (intro_equality_hnf, cont_final i)])
         | IntroApplyOn (t, p) ->
-          let id = mktmp i in
-          let apply = mkatom loc @@
-            TacApply (true, eflg, [None, (t.v, NoBindings)], Some (CAst.make id, Some p)) in
-          let tac = TacThen (apply, TacTry (clear [CAst.make id])) in
-          CAst.make ?loc:p.loc @@ IntroNaming (Namegen.IntroIdentifier id), i+1, (fun cont i -> TacThen (tac, cont i))
+          let id, i = mktmp i in
+          CAst.make ?loc:p.loc @@ IntroNaming (Namegen.IntroIdentifier id), i+1, (fun cont_final i -> 
+              let p, i, cont = expand_intro_pattern ~def_name:id loc 0 eflg p in
+              let cont = cont cont_final i in
+              let apply = mkatom loc @@
+                TacApply (true, eflg, [None, (t.v, NoBindings)], (Some (CAst.make id, Some p))) in
+              let apply = tacthenfirst apply cont in
+              let tac = TacThen (apply, TacTry (clear [CAst.make id])) in
+              tac)
         | IntroRewrite d ->
-          let id = mktmp i in
+          let id, i = mktmp i in
           let rewrite = if d then internal_tactics_ref_lookup "intropattern_subst_l"
             else internal_tactics_ref_lookup "intropattern_subst_r" in
           let hyp = TacGeneric (Genarg.in_gen (Genarg.glbwit Stdarg.wit_var) (CAst.make id)) in
@@ -207,6 +208,32 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
     (*     (CAst.make ?loc p)::acc, (i, tac)) *)
     (*     p ([], (i, None)) in *)
   in
+  let decompose_single_apply aflg eflg intro loc s =
+    let apply intro = mkatom loc @@
+      TacApply (aflg, eflg, [s], intro) in
+    match intro with
+    | None -> apply None
+    | Some (id, pat) -> (match pat with
+        | None -> apply (Some (id, None))
+        | Some ps ->
+          let ps, i, cont = expand_intro_pattern ~def_name:id.v loc 0 eflg ps in
+          let tac = cont (fun _ -> TacId []) i in
+          tacthenfirst (apply (Some (id, Some ps))) tac
+      ) in
+  let decompose_apply aflg eflg intro loc (ls : 'trm with_bindings_arg list) =
+    let intro' = Option.map (fun (n, _) -> (n, None)) intro in
+    let combiner = match intro with | None -> tacthenlast | Some _ -> tacthenfirst in
+    let rec aux = function
+      | [] -> assert false
+      | [s] -> decompose_single_apply aflg eflg intro loc s
+      | s::ls -> combiner (decompose_single_apply aflg eflg intro' loc s) (aux ls)
+    in aux ls in
+  let decompose_generalize loc ls =
+    let rec aux = function
+      | [] -> assert false
+      | [s] -> mkatom loc (TacGeneralize [s])
+      | s::ls -> TacThen (mkatom loc (TacGeneralize [s]), aux ls)
+    in aux ls in
   let decompose_single_destruct loc eflg (c, (eqn, asc), inc) =
     match eqn, inc, asc with
     | None, None, Some (ArgArg (CAst.{v=Tactypes.IntroAndPattern ps; _})) ->
@@ -292,8 +319,9 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
         else at in
       (* Feedback.msg_info (Pptactic.pr_glob_tactic (Global.env ()) at); *)
       router IntroPattern at
-    | TacApply (flg1, flg2, ls, intro) ->
-      let at = if (inner_record Apply) then decompose_apply flg1 flg2 intro a.loc ls else at in
+    | TacApply (aflg, eflg, ls, intro) ->
+      let at = if (inner_record Apply) then decompose_apply aflg eflg intro a.loc ls else at in
+      (* Feedback.msg_info (Pptactic.pr_glob_tactic (Global.env ()) at); *)
       router Apply at
     | TacElim _ -> router Elim at
     | TacCase _ -> router Case at
@@ -451,8 +479,25 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
             (CAst.make (Names.Name.Name x)), y) al.Tacenv.alias_args args,
                   annotate al.Tacenv.alias_body)
       | Keep | Discard ->
-        let args = if inner_record Alias || tactician_cache then
-            List.map (fun a -> fst (annotate_arg a)) args else args in
-        let t = TacAlias (CAst.make ?loc (e, args)) in
-        if outer_record Alias && not tactician_cache then r tac t else t
-  in annotate tac
+        match e, args with
+        | e, [TacGeneric term; TacGeneric pat] when Names.KerName.equal e @@ internal_tactics_ref_lookup "injection_x_as" ->
+          let pat = Genarg.out_gen (Genarg.glbwit (Genarg.wit_list Tacarg.wit_simple_intropattern)) pat in
+          let pat = match pat with
+            (* This seems to be some bizarre syntactical special case *)
+          | [CAst.{v=Tactypes.IntroAction (Tactypes.IntroInjection pat); loc}] -> pat
+          | _ -> pat in
+          let pat, i, cont = expand_intro_patterns loc false 0 pat in
+          let pat = Genarg.in_gen (Genarg.glbwit (Genarg.wit_list Tacarg.wit_simple_intropattern)) pat in
+          let cont = cont (fun _ -> TacId []) i in
+          let tac = TacAlias (CAst.make ?loc (e, [TacGeneric term; TacGeneric pat])) in
+          let tac = TacThen (rself tac, cont) in
+          tac
+        | e, [TacGeneric id;] when Names.KerName.equal e @@ internal_tactics_ref_lookup "intro_x" ->
+          let id = Genarg.out_gen (Genarg.glbwit Stdarg.wit_ident) id in
+          mkatom loc (TacIntroPattern (false, [CAst.make (Tactypes.IntroNaming (Namegen.IntroIdentifier id))]))
+        | _ ->
+          let args = if inner_record Alias || tactician_cache then
+              List.map (fun a -> fst (annotate_arg a)) args else args in
+          let t = TacAlias (CAst.make ?loc (e, args)) in
+          if outer_record Alias && not tactician_cache then r tac t else t
+    in annotate tac
