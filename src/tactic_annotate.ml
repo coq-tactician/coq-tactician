@@ -479,34 +479,40 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
             (CAst.make (Names.Name.Name x)), y) al.Tacenv.alias_args args,
                   annotate al.Tacenv.alias_body)
       | Keep | Discard ->
-        match e, args with
-        | e, [TacGeneric term; TacGeneric pat] when Names.KerName.equal e @@ internal_tactics_ref_lookup "injection_x_as" ->
-          let pat = Genarg.out_gen (Genarg.glbwit (Genarg.wit_list Tacarg.wit_simple_intropattern)) pat in
-          let pat = match pat with
-            (* This seems to be some bizarre syntactical special case *)
-          | [CAst.{v=Tactypes.IntroAction (Tactypes.IntroInjection pat); loc}] -> pat
-          | _ -> pat in
-          let pat, i, cont = expand_intro_patterns loc false 0 pat in
-          let pat = Genarg.in_gen (Genarg.glbwit (Genarg.wit_list Tacarg.wit_simple_intropattern)) pat in
-          let cont = cont (fun _ -> TacId []) i in
-          let tac = TacAlias (CAst.make ?loc (e, [TacGeneric term; TacGeneric pat])) in
-          let tac = TacThen (rself tac, cont) in
-          tac
-        | e, [s; t; cls; TacGeneric by] when Names.KerName.equal e @@ internal_tactics_ref_lookup "replace_with_by" ->
-          let by = Genarg.out_gen (Genarg.glbwit Extraargs.wit_by_arg_tac) by in
-          let by' = TacGeneric (Genarg.in_gen (Genarg.glbwit Extraargs.wit_by_arg_tac) None) in
-          let tac = TacAlias (CAst.make ?loc (e, [s; t; cls; by'])) in
-          (match by with
-          | None -> tac
-          | Some by -> tacthenlast (rself tac) (annotate by))
-        | e, [TacGeneric id;] when Names.KerName.equal e @@ internal_tactics_ref_lookup "intro_x" ->
-          let id = Genarg.out_gen (Genarg.glbwit Stdarg.wit_ident) id in
-          mkatom loc (TacIntroPattern (false, [CAst.make (Tactypes.IntroNaming (Namegen.IntroIdentifier id))]))
-        | e, [] when Names.KerName.equal e @@ internal_tactics_ref_lookup "intro" ->
-          mkatom loc (TacIntroPattern (false, [CAst.make (Tactypes.IntroNaming Namegen.IntroAnonymous)]))
-        | _ ->
+        let default () =
           let args = if inner_record Alias || tactician_cache then
               List.map (fun a -> fst (annotate_arg a)) args else args in
           let t = TacAlias (CAst.make ?loc (e, args)) in
-          if outer_record Alias && not tactician_cache then r tac t else t
+          if outer_record Alias && not tactician_cache then r tac t else t in
+        try
+          match e, args with
+          | e, [TacGeneric term; TacGeneric pat] when Names.KerName.equal e @@ internal_tactics_ref_lookup "injection_x_as" ->
+            let pat = Genarg.out_gen (Genarg.glbwit (Genarg.wit_list Tacarg.wit_simple_intropattern)) pat in
+            let pat = match pat with
+              (* This seems to be some bizarre syntactical special case *)
+              | [CAst.{v=Tactypes.IntroAction (Tactypes.IntroInjection pat); loc}] -> pat
+              | _ -> pat in
+            let pat, i, cont = expand_intro_patterns loc false 0 pat in
+            let pat = Genarg.in_gen (Genarg.glbwit (Genarg.wit_list Tacarg.wit_simple_intropattern)) pat in
+            let cont = cont (fun _ -> TacId []) i in
+            let tac = TacAlias (CAst.make ?loc (e, [TacGeneric term; TacGeneric pat])) in
+            let tac = TacThen (rself tac, cont) in
+            tac
+          | e, [s; t; cls; TacGeneric by] when Names.KerName.equal e @@ internal_tactics_ref_lookup "replace_with_by" ->
+            let by = Genarg.out_gen (Genarg.glbwit Extraargs.wit_by_arg_tac) by in
+            let by' = TacGeneric (Genarg.in_gen (Genarg.glbwit Extraargs.wit_by_arg_tac) None) in
+            let tac = TacAlias (CAst.make ?loc (e, [s; t; cls; by'])) in
+            (match by with
+             | None -> tac
+             | Some by -> tacthenlast (rself tac) (annotate by))
+          | e, [s; t; Tacexp by] when Names.KerName.equal e @@ internal_tactics_ref_lookup "setoid_replace_with_by" ->
+            let tac = TacAlias (CAst.make ?loc (internal_tactics_ref_lookup "setoid_replace_with", [s; t])) in
+            tacthenlast (rself tac) (annotate by)
+          | e, [TacGeneric id;] when Names.KerName.equal e @@ internal_tactics_ref_lookup "intro_x" ->
+            let id = Genarg.out_gen (Genarg.glbwit Stdarg.wit_ident) id in
+            mkatom loc (TacIntroPattern (false, [CAst.make (Tactypes.IntroNaming (Namegen.IntroIdentifier id))]))
+          | e, [] when Names.KerName.equal e @@ internal_tactics_ref_lookup "intro" ->
+            mkatom loc (TacIntroPattern (false, [CAst.make (Tactypes.IntroNaming Namegen.IntroAnonymous)]))
+          | _ -> default ()
+        with Not_found -> default ()
     in annotate tac
