@@ -198,15 +198,6 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
         let (p, i, expand) = expand_intro_pattern loc i eflg p in
         aux ps (p::ps_acc) (expand::expand_acc) i in
     aux ps [] [] i
-        (* let k = List.fold_right (fun CAst.{v=p; loc} (acc, (i, tac)) -> *)
-    (*     let p, tac', i = expand_intro_pattern loc i eflg p cont in *)
-    (*     let tac = match tac, tac' with *)
-    (*       | None, None -> None *)
-    (*       | None, Some t c' -> Some tac' *)
-    (*       | Some tac, None -> Some tac *)
-    (*       | Some tac, Some tac' -> Some (TacThen (tac', tac)) in *)
-    (*     (CAst.make ?loc p)::acc, (i, tac)) *)
-    (*     p ([], (i, None)) in *)
   in
   let decompose_single_apply aflg eflg intro loc s =
     let apply intro = mkatom loc @@
@@ -305,10 +296,6 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
         let intro = mkatom loc @@ TacIntroPattern (eflg, [p]) in
         TacThen (intro, tac) in
     aux ps 0 in
-    (* if n > 0 then *)
-    (*   (\* TODO: The TacTry is not correct *\) *)
-    (*   TacThen (intros, TacTry clear) *)
-    (* else intros in *)
   let rec annotate_atomic a : glob_tactic_expr =
     let router ast t = if outer_record ast then r (TacAtom a) t else t in
     let at = TacAtom a in

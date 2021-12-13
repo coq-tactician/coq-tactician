@@ -80,7 +80,7 @@ Tactician Record Progress Keep.
     Note that setting this to 'Decompose' will not keep Tactician from using 'abstract' ever, because it could be
     part of a more complex expression (or inside of an ltac definition). This is better than nothing though.
  *)
-Tactician Record Abstract Decompose.
+Tactician Record Abstract Keep.
 Tactician Record LetIn Keep.
 Tactician Record Match Keep.
 Tactician Record MatchGoal Keep.
