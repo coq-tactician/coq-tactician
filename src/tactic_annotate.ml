@@ -492,6 +492,13 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
           let tac = TacAlias (CAst.make ?loc (e, [TacGeneric term; TacGeneric pat])) in
           let tac = TacThen (rself tac, cont) in
           tac
+        | e, [s; t; cls; TacGeneric by] when Names.KerName.equal e @@ internal_tactics_ref_lookup "replace_with_by" ->
+          let by = Genarg.out_gen (Genarg.glbwit Extraargs.wit_by_arg_tac) by in
+          let by' = TacGeneric (Genarg.in_gen (Genarg.glbwit Extraargs.wit_by_arg_tac) None) in
+          let tac = TacAlias (CAst.make ?loc (e, [s; t; cls; by'])) in
+          (match by with
+          | None -> tac
+          | Some by -> tacthenlast (rself tac) (annotate by))
         | e, [TacGeneric id;] when Names.KerName.equal e @@ internal_tactics_ref_lookup "intro_x" ->
           let id = Genarg.out_gen (Genarg.glbwit Stdarg.wit_ident) id in
           mkatom loc (TacIntroPattern (false, [CAst.make (Tactypes.IntroNaming (Namegen.IntroIdentifier id))]))
