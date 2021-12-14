@@ -13,12 +13,12 @@ jobs:
       - uses: actions/checkout@v2
         with:
           repository: 'coq-tactician/coq-tactician-stdlib'
-          ref: 'coqdev'
+          ref: '8.15'
           path: 'coq-tactician-stdlib'
       - uses: coq-community/docker-coq-action@v1.2.3
         with:
           opam_file: 'coq-tactician.opam'
-          coq_version: 'dev'
+          coq_version: '8.15.dev'
           ocaml_version: '4.12-flambda'
           install: |
             startGroup "Install dependencies"
