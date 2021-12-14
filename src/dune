@@ -17,6 +17,7 @@
    knn
    find_tactic_syntax
    tactic_substitute
+   tactic_substitute2
    tactic_abstract
    search_strategy
    search_strategy_internal

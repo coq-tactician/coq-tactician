@@ -83,6 +83,36 @@ let inner_record ast = match ast_setting_lookup ast with
   | Decompose | Both -> true
   | Keep | Discard -> false
 
+let substitute_runtime_terms =
+  let wit_annotate : (Util.Empty.t, glob_tactic_expr -> glob_tactic_expr, glob_tactic_expr -> glob_tactic_expr) Genarg.genarg_type =
+    let wit = Genarg.create_arg "tactician_annotate" in
+    let () = Geninterp.register_val0 wit None in
+    Tactician_util.register_interp0 wit (fun ist v -> Ftactic.return v);
+    wit in
+  let implementation annotate tac is =
+    let open Proofview in
+    let open Proofview.Notations in
+    Proofview.tclENV >>= fun env ->
+    Proofview.tclEVARMAP >>= fun evd ->
+    let map = Tacinterp.extract_ltac_constr_values is env in
+    (* TODO: At some point deal with the binders *)
+    let map_f id = Option.map snd @@ Names.Id.Map.find_opt id map in
+    let tac = Tactic_substitute2.tactic_substitute env evd map_f tac in
+    let tac = annotate tac in
+    let lfun = Names.Id.Map.filter (fun id _ -> not @@ Names.Id.Map.mem id map) is.lfun in
+    Tacinterp.eval_tactic_ist { is with lfun } tac
+  in
+  let ml_implementation [annotate; tac] is =
+    let annotate = Tacinterp.Value.cast (Genarg.topwit wit_annotate) annotate in
+    let tac = Tacinterp.Value.cast (Genarg.topwit Tactician_util.wit_glbtactic) tac in
+    implementation annotate tac is in
+  let () = Tactician_util.register ml_implementation "substitute_runtime_terms" in
+  (fun annotate tac ->
+     let annotate = Genarg.in_gen (Genarg.glbwit wit_annotate) annotate in
+     let tac = Genarg.in_gen (Genarg.glbwit Tactician_util.wit_glbtactic) tac in
+     TacML (CAst.make ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = "substitute_runtime_terms"}; mltac_index = 0},
+                       [TacGeneric annotate; TacGeneric tac])))
+
 let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_tactic_expr -> glob_tactic_expr) : glob_tactic_expr =
   let rself t = r t t in
   let mkatom loc atom =
@@ -114,10 +144,13 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
           CAst.make ?loc:p.loc @@ IntroNaming (Namegen.IntroIdentifier id), i+1, (fun cont i -> TacThen (cont i, tac))
         | IntroOrAndPattern ps ->
           let id, i = mktmp i in
-          let destruct ps = mkatom loc @@ TacInductionDestruct
+          let destruct ps =
+            let c = (DAst.make (Glob_term.GVar id),
+                     Some (CAst.make @@ Constrexpr.CRef (Libnames.qualid_of_ident id, None))), Tactypes.NoBindings in
+            mkatom loc @@ TacInductionDestruct
               (false, false (* Intentionally set to false because edestruct does not delete the original variable *),
-               ([(None, Tactics.ElimOnIdent (CAst.make id)),
-                              (None, Some (ArgArg (CAst.make ps))), None], None)) in
+               ([(None, Tactics.ElimOnConstr c),
+                 (None, Some (ArgArg (CAst.make ps))), None], None)) in
           let destruct_then ps tacs =
             TacThens3parts (destruct ps, Array.of_list [], TacId [],
                             Array.of_list tacs) in
@@ -225,8 +258,19 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
       | [s] -> mkatom loc (TacGeneralize [s])
       | s::ls -> TacThen (mkatom loc (TacGeneralize [s]), aux ls)
     in aux ls in
+  let preprocess_term (flg, trm) =
+    match flg with
+    | Some _ -> None, (flg, trm)
+    | None ->
+      match trm with
+      | Tactics.ElimOnIdent id ->
+        let c = (DAst.make (Glob_term.GVar id.v),
+                 Some (CAst.make @@ Constrexpr.CRef (Libnames.qualid_of_ident ?loc:id.loc id.v, None))), Tactypes.NoBindings in
+           Some id, (flg, Tactics.ElimOnConstr c)
+      | _ -> None, (flg, trm) in
   let decompose_single_destruct loc eflg (c, (eqn, asc), inc) =
-    match eqn, inc, asc with
+    let do_intro, c = preprocess_term c in
+    let tac = match eqn, inc, asc with
     | None, None, Some (ArgArg (CAst.{v=Tactypes.IntroAndPattern ps; _})) ->
       let ps, i, cont = expand_intro_patterns loc eflg 0 ps in
       let destruct = mkatom loc @@
@@ -246,6 +290,14 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
                       Array.of_list tacs)
     | _ ->
       mkatom loc @@ TacInductionDestruct (false, eflg, ([c, (eqn, asc), inc], None)) in
+    match do_intro with
+    | Some id ->
+      let intro = internal_tactics_ref_lookup "intros_until" in
+      let id = TacGeneric (Genarg.in_gen (Genarg.glbwit Tacarg.wit_quantified_hypothesis) (NamedHyp id.v)) in
+      let intro = rself @@ TacAlias (CAst.make (intro, [id])) in
+      TacThen (TacTry intro, tac)
+    | None -> tac
+  in
   let decompose_destruct loc eflg ls =
     let rec aux = function
       | [] -> assert false
@@ -314,17 +366,34 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
     | TacCase _ -> router Case at
     | TacMutualFix _ -> router MutualFix at
     | TacMutualCofix _ -> router MutualCofix at
-    | TacAssert (flg, b, by, pat, term) ->
+    | TacAssert (eflg, b, by, pat, term) ->
       let tac = if inner_record Assert then
+          let pat, i, expand = match pat with
+            | None -> None, 0, (fun cont i -> cont i)
+            | Some pat ->
+              let pat, i, expand = expand_intro_pattern a.loc 0 eflg pat in
+              Some pat, i, expand in
           match by with
-          | None -> rself at (* pose proof *)
-          | Some by -> match by with  (* pose and assert *)
-            | None -> rself at (* Nothing to decompose *)
-            | Some by ->
-              let by = annotate by in
-              tacthenfirst (mkatom a.loc @@ TacAssert (flg, b, Some None, pat, term)) by
+          | None -> (* pose proof *)
+            let action pat = mkatom a.loc @@ TacAssert (eflg, b, None, pat, term) in
+            let cont = expand (fun _ -> TacId []) i in
+            TacThen (action pat, cont)
+          | Some by ->
+            let by = Option.default (TacId []) by in
+            let by = annotate by in
+            let action pat = mkatom a.loc @@ TacAssert (eflg, b, Some None, pat, term) in
+            match b with
+            | true -> (* assert *)
+              let cont = expand (fun _ -> TacId []) i in
+              TacThens3parts (action pat,
+                              Array.of_list [by], cont, Array.of_list [])
+            | false -> (* enough *)
+              let cont = expand (fun _ -> by) i in
+              TacThens3parts (action pat,
+                              Array.of_list [cont], TacId [], Array.of_list [])
         else
           at in
+      (* Feedback.msg_notice (Pptactic.pr_glob_tactic (Global.env ()) tac); *)
       router Assert tac
     | TacGeneralize gs ->
       let at = if inner_record Generalize then decompose_generalize a.loc (List.rev gs) else at in
@@ -443,9 +512,11 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
                               List.map (function | All t -> All (rinner Match t)
                                                  | Pat (c, p, t) -> Pat (c, p, rinner Match t)) ts))
     | TacMatchGoal (flg, d, ts) ->
-      router MatchGoal (TacMatchGoal (
-          flg, d, List.map (function | All t -> All (rinner MatchGoal t)
-                                     | Pat (c, p, t) -> Pat (c, p, rinner MatchGoal t)) ts))
+      let ts = if inner_record MatchGoal then
+          List.map (function | All t -> All (substitute_runtime_terms annotate t)
+                             | Pat (c, p, t) -> Pat (c, p, substitute_runtime_terms annotate t)) ts
+        else ts in
+      router MatchGoal (TacMatchGoal (flg, d, ts))
     | TacFun (args, t) -> TacFun (args, annotate t) (* Probably not outer-recordable *)
     | TacArg x ->
       let x', r2 = if inner_record Arg then annotate_arg x.v else x.v, r in

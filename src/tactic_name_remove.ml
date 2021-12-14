@@ -28,6 +28,8 @@ let tactic_name_remove (t : glob_tactic_expr) : glob_tactic_expr = match t with
             c, (eqn, asc), inc
           ) cls in
         TacInductionDestruct (rflg, eflg, (cls, None))
+      | TacAssert (flg, b, by, Some pat, term) when no_nested_pattern pat.v ->
+        TacAssert (flg, b, by, None, term)
       | _ -> v))
   | TacAlias CAst.{loc; v=(e, args)} ->
     (match e, args with

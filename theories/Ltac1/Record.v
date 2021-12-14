@@ -15,6 +15,7 @@ Tactician Register Tactic "discriminate_x" discriminate _.
 Tactician Register Tactic "intro_x" intro X.
 Tactician Register Tactic "intro" intro.
 Tactician Register Tactic "replace_with_by" replace _ with _ by idtac.
+Tactician Register Tactic "intros_until" intros until X.
 
 (* TODO: This is a hack to deal with the decomposition of 'intros [=]'. To be improved. *)
 Tactic Notation "intro_equality_hnf" hyp(H) :=
@@ -38,12 +39,14 @@ match type of H with
 | _ _ ?x _ => first [move H at top; subst x | rewrite >H]
 | _ ?x _ => first [move H at top; subst x | rewrite >H]
 | forall _, _ _ ?x _ => first [move H at top; subst x | rewrite >H]
+| _ => rewrite >H
 end.
 Tactic Notation "intropattern" "subst" "<-" hyp(H) :=
 match type of H with
 | _ _ _ ?x => first [move H at top; subst x | rewrite <- >H]
 | _ _ ?x => first [move H at top; subst x | rewrite <- >H]
 | forall _, _ _ _ ?x => first [move H at top; subst x | rewrite <- >H]
+| _ => rewrite >H
 end.
 Tactician Register Tactic "intropattern_subst_l" intropattern subst -> X.
 Tactician Register Tactic "intropattern_subst_r" intropattern subst <- X.
@@ -55,7 +58,7 @@ Tactician Record Dispatch Decompose.
 Tactician Record Extend Decompose.
 Tactician Record Thens Decompose.
 Tactician Record Thens3parts Decompose.
-Tactician Record First Keep.
+Tactician Record First Decompose.
 Tactician Record Complete Keep.
 Tactician Record Solve Keep.
 Tactician Record Or Keep.
@@ -83,7 +86,7 @@ Tactician Record Progress Keep.
 Tactician Record Abstract Keep.
 Tactician Record LetIn Keep.
 Tactician Record Match Keep.
-Tactician Record MatchGoal Keep.
+Tactician Record MatchGoal Decompose.
 Tactician Record Arg Decompose.
 Tactician Record Select Decompose. (* TODO: This setting should be kept like this until we implement
                                       an override in tactic_annotate in case we are in 'search with cache' *)
