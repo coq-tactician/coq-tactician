@@ -26,6 +26,9 @@ jobs:
           - branch: coq8.14
             coq_version: 8.14
             ocaml_version: 4.12-flambda
+          - branch: coq8.15
+            coq_version: 8.15
+            ocaml_version: 4.12-flambda
           - branch: coqdev
             coq_version: dev
             ocaml_version: 4.12-flambda
