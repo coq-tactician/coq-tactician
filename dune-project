@@ -1,4 +1,4 @@
-(lang dune 2.5)
+(lang dune 2.8)
 (name coq-tactician)
 (using coq 0.2)
 
@@ -21,9 +21,10 @@ about the next tactic to be executed or altogether takes over the burden of
 proof synthesis. Tactician's goal is to provide the user with a seamless,
 interactive, and intuitive experience together with strong, adaptive proof
 automation.")
+  (sites (share plugins))
   (depends
     (ocaml (>= 4.08))
-    (dune (and (>= 2.5) :build))
+    dune
     (opam-client (>= 2.1.0~beta2))
     cmdliner
     (coq (and (>= 8.11) (< 8.12~)))

@@ -8,7 +8,8 @@ open Ltac_plugin
 open Tacexpr
 
 module SubstituteDef = struct
-  include MapDefTemplate (ReaderMonad(struct type r = Id.t list end))
+  module M = ReaderMonad(struct type r = Id.t list end)
+  include MapDefTemplate (M)
   let map_sort = "substitute2"
   let warnProblem wit =
     Feedback.msg_warning (Pp.(str "Tactician is having problems with " ++
@@ -17,7 +18,7 @@ module SubstituteDef = struct
   let default wit = { raw = (fun _ -> warnProblem (ArgumentType wit); id)
                     ; glb = (fun _ -> warnProblem (ArgumentType wit); id)}
 
-  let with_binders ids f = fun ids' -> f (ids@ids')
+  let with_binders ids = M.local (fun ids' -> (ids@ids'))
 end
 module SubstituteMapper = MakeMapper(SubstituteDef)
 open SubstituteDef
@@ -26,6 +27,7 @@ open ReaderMonad(struct type r = Id.t list end)
 type 'a k = (Id.t list -> 'a)
 
 let mapper env evd f =
+  let open M in
   { SubstituteDef.default_mapper with
     variable = (fun id ->
         ask >>= fun bound ->
@@ -93,4 +95,4 @@ let mapper env evd f =
     )
   }
 
-let tactic_substitute env evd f t = SubstituteMapper.glob_tactic_expr_map (mapper env evd f) t []
+let tactic_substitute env evd f t = M.run [] @@ SubstituteMapper.glob_tactic_expr_map (mapper env evd f) t

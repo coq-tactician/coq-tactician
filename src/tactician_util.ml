@@ -40,7 +40,14 @@ module IdentityMonad = struct
   let map f x = f x
 end
 
-module ReaderMonad (R : sig type r end) = struct
+module type ReaderMonadType = functor (R : sig type r end) -> sig
+  open R
+  include Monad.Def
+  val ask : r t
+  val local : (r -> r) -> 'a t -> 'a t
+  val run : r -> 'a t -> 'a
+  end
+module ReaderMonad : ReaderMonadType = functor (R : sig type r end) -> struct
   open R
   type 'a t = r -> 'a
   let return x = fun _ -> x
@@ -50,9 +57,19 @@ module ReaderMonad (R : sig type r end) = struct
 
   let ask = fun r -> r
   let local f x = fun r -> x (f r)
+
+  let run r x = x r
 end
 
-module WriterMonad (R : sig type w val id : w val comb : w -> w -> w end) = struct
+module type WriterMonadType = functor (R : sig type w val id : w val comb : w -> w -> w end) -> sig
+  open R
+  include Monad.Def
+  val tell : w -> unit t
+  val pass : ('a * (w -> w)) t -> 'a t
+  val censor : (w -> w) -> 'a t -> 'a t
+  val run : 'a t -> w * 'a
+end
+module WriterMonad : WriterMonadType = functor (R : sig type w val id : w val comb : w -> w -> w end) -> struct
   open R
   type 'a t = w * 'a
   let return x = (id, x)
@@ -60,11 +77,22 @@ module WriterMonad (R : sig type w val id : w val comb : w -> w -> w end) = stru
   let (>>) (w, ()) (w', x) = (comb w w', x)
   let map f (w, x) = w, f x
 
-  let tell l = ([l], ())
-  let censor f (w, x) = (f w, x)
+  let tell l = comb id l, ()
+  let pass (w, (x, f)) = f w, x
+  let censor f (w, x) = f w, x
+
+  let run x = x
 end
 
-module StateMonad (R : sig type s end) = struct
+module type StateMonadType = functor (R : sig type s end) -> sig
+  open R
+  include Monad.Def
+  val get : s t
+  val put : s -> unit t
+  val modify : (s -> s) -> unit t
+  val run : s -> 'a t -> s * 'a
+end
+module StateMonad : StateMonadType = functor (R : sig type s end) -> struct
   open R
   type 'a t = s -> s * 'a
   let return x = fun s -> (s, x)
@@ -74,10 +102,23 @@ module StateMonad (R : sig type s end) = struct
 
   let get = fun s -> s, s
   let put s = fun _ -> s, ()
+  let modify f = fun s -> f s, ()
+
+  let run s x = x s
 end
 
-module ReaderWriterMonad
-  (R : sig type r type w val id : w val comb : w -> w -> w end) = struct
+module type ReaderWriterMonadType = functor (R : sig type r type w val id : w val comb : w -> w -> w end) -> sig
+  open R
+  include Monad.Def
+  val ask : r t
+  val local : (r -> r) -> 'a t -> 'a t
+  val tell : w -> unit t
+  val pass : ('a * (w -> w)) t -> 'a t
+  val censor : (w -> w) -> 'a t -> 'a t
+  val run : r -> 'a t -> w * 'a
+end
+module ReaderWriterMonad : ReaderWriterMonadType =
+  functor (R : sig type r type w val id : w val comb : w -> w -> w end) -> struct
   open R
   type 'a t = r -> w * 'a
   let return x = fun _ -> (id, x)
@@ -91,15 +132,31 @@ module ReaderWriterMonad
   let map f k = fun r ->
     let (w, x) = k r in w, f x
 
-  let tell l = fun _ -> ([l], ())
-  let censor f (w, x) = fun _ -> (f w, x)
+  let tell l = fun _ -> (comb id l, ())
+  let pass x = fun r ->
+    let (w, (v, f)) = x r in
+    f w, v
+  let censor f x = fun r ->
+    let (w, x) = x r in (f w, x)
 
   let ask = fun r -> id, r
   let local f x = fun r -> x (f r)
+
+  let run s x = x s
 end
 
-module ReaderStateMonad
-  (R : sig type r type s end) = struct
+module type ReaderStateMonadType = functor (R : sig type r type s end) -> sig
+  open R
+  include Monad.Def
+  val ask : r t
+  val local : (r -> r) -> 'a t -> 'a t
+  val get : s t
+  val put : s -> unit t
+  val modify : (s -> s) -> unit t
+  val run : r -> s -> 'a t -> s * 'a
+end
+module ReaderStateMonad : ReaderStateMonadType =
+  functor (R : sig type r type s end) -> struct
   open R
   type 'a t = r -> s -> s * 'a
   let return x = fun _ s -> (s, x)
@@ -114,10 +171,98 @@ module ReaderStateMonad
 
   let get = fun _ s -> s, s
   let put s = fun _ _ -> s, ()
+  let modify f = fun _ s -> f s, ()
 
   let ask = fun r s -> s, r
   let local f x = fun r s -> x (f r) s
+
+  let run r s x = x r s
 end
+
+module type StateWriterMonadType = functor (R : sig type s type w val id : w val comb : w -> w -> w end) -> sig
+  open R
+  include Monad.Def
+  val get : s t
+  val put : s -> unit t
+  val modify : (s -> s) -> unit t
+  val tell : w -> unit t
+  val pass : ('a * (w -> w)) t -> 'a t
+  val censor : (w -> w) -> 'a t -> 'a t
+  val run : s -> 'a t -> s * w * 'a
+end
+module StateWriterMonad : StateWriterMonadType =
+  functor (R : sig type s type w val id : w val comb : w -> w -> w end) -> struct
+    open R
+    type 'a t = s -> s * w * 'a
+    let return x = fun s -> (s, id, x)
+    let (>>=) k f = fun s ->
+      let (s, w, x) = k s in
+      let (s, w', y) = f x s in (s, comb w w', y)
+    let (>>) k l = fun s ->
+      let (s, w, ()) = k s in
+      let (s, w', x) = l s in
+      (s, comb w w', x)
+    let map f k = fun s ->
+      let (s, w, x) = k s in s, w, f x
+
+    let get = fun s -> s, id, s
+    let put s = fun _ -> s, id, ()
+    let modify f = fun s -> f s, id, ()
+
+    let tell l = fun s -> (s, comb id l, ())
+    let pass x = fun s ->
+      let (s, w, (v, f)) = x s in
+      s, f w, v
+    let censor f x = fun s ->
+      let (s, w, x) = x s in (s, f w, x)
+
+    let run s x = x s
+  end
+
+module type ReaderStateWriterMonadType =
+  functor (R : sig type r type s type w val id : w val comb : w -> w -> w end) -> sig
+  open R
+  include Monad.Def
+  val ask : r t
+  val local : (r -> r) -> 'a t -> 'a t
+  val get : s t
+  val put : s -> unit t
+  val modify : (s -> s) -> unit t
+  val tell : w -> unit t
+  val pass : ('a * (w -> w)) t -> 'a t
+  val censor : (w -> w) -> 'a t -> 'a t
+  val run : r -> s -> 'a t -> s * w * 'a
+end
+module ReaderStateWriterMonad : ReaderStateWriterMonadType =
+  functor (R : sig type r type s type w val id : w val comb : w -> w -> w end) -> struct
+    open R
+    type 'a t = r -> s -> s * w * 'a
+    let return x = fun _ s -> (s, id, x)
+    let (>>=) k f = fun r s ->
+      let (s, w, x) = k r s in
+      let (s, w', x) = f x r s in s, comb w w', x
+    let (>>) k l = fun r s ->
+      let (s, w, ()) = k r s in
+      let (s, w', x) = l r s in s, comb w w', x
+    let map f k = fun r s ->
+      let (s, w, x) = k r s in s, w, f x
+
+    let get = fun _ s -> s, id, s
+    let put s = fun _ _ -> s, id, ()
+    let modify f = fun _ s -> f s, id, ()
+
+    let ask = fun r s -> s, id, r
+    let local f x = fun r s -> x (f r) s
+
+    let tell w = fun r s -> s, (comb id w), ()
+    let pass x = fun r s ->
+      let (s, w, (v, f)) = x r s in
+      s, f w, v
+    let censor f x = fun r s ->
+      let (s, w, k) = x r s in s, f w, k
+
+    let run r s x = x r s
+  end
 
 let record_map (f : Proofview.Goal.t -> 'a)
     (gls : Proofview.Goal.t Proofview.tactic list) : 'a list Proofview.tactic =
