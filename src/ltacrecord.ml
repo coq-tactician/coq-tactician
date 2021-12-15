@@ -522,10 +522,6 @@ let get_k_str ranking comp =
 
 let mk_ml_tac tac = fun args is -> tac
 
-let register tac name =
-  let fullname = {mltac_plugin = "recording"; mltac_tactic = name} in
-  register_ml_tactic fullname [| tac |]
-
 let run_ml_tac name = TacML (CAst.make ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = name}; mltac_index = 0}, []))
 
 (* Running predicted tactics *)
