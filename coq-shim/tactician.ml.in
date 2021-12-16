@@ -226,6 +226,12 @@ let tactician_extra_flags () =
   List.concat @@
   List.map (fun d -> Array.to_list @@ Array.map (fun sd -> d/sd) @@ Sys.readdir d) Coq_shim.Sites.plugins
 
+let tactician_wrappers () =
+  String.concat " " @@
+  List.filter_map (fun d -> if Sys.file_exists (d/"injection-wrappers") then Some (read_args (d/"injection-wrappers")) else None) @@
+  List.concat @@
+  List.map (fun d -> Array.to_list @@ Array.map (fun sd -> d/sd) @@ Sys.readdir d) Coq_shim.Sites.plugins
+
 (* TODO: At some point we might consider using https://github.com/Chris00/ocaml-bwrap *)
 let inject_bwrap cmd args =
   let wrap_binary source target =
@@ -233,7 +239,8 @@ let inject_bwrap cmd args =
     let pout = Unix.out_channel_of_descr pout in
     let pin : int = Obj.magic pin in
     let flags = String.concat " " tactician_flags ^ " " ^ tactician_extra_flags () in
-    let contents = "#!/bin/sh\nexec " ^ target ^ " " ^ flags ^ " \"$@\"\n" in
+    let wrappers = tactician_wrappers () in
+    let contents = "#!/bin/sh\nexec " ^ wrappers ^ " " ^ target ^ " " ^ flags ^ " \"$@\"\n" in
     output_string pout contents;
     close_out pout;
     ["--bind"; source; target; "--perms"; "0755"; "--ro-bind-data"; string_of_int pin; source] in
@@ -248,6 +255,7 @@ let inject_bwrap cmd args =
 (* TODO: Rewrite the rest of this file wit Bos *)
 let inject_path cmd args =
   let flags = String.concat " " tactician_flags ^ " " ^ tactician_extra_flags () in
+  let wrappers = tactician_wrappers () in
   let res =
     let open Rresult in
     let open Bos in
@@ -258,7 +266,7 @@ let inject_path cmd args =
         OS.Dir.with_tmp ~dir "tactician_path_%s" (fun tmp () ->
             let mk_wrapper name =
               OS.File.write ~mode:0o755 Fpath.(tmp/name)
-                ("#!/bin/sh\nexec %{bin}%/" ^ name ^ " " ^ flags ^ "\"$@\"")
+                ("#!/bin/sh\nexec " ^ wrappers ^ " %{bin}%/" ^ name ^ " " ^ flags ^ "\"$@\"")
             in
             let link_binary name =
               Fpath.of_string "%{bin}%" >>= fun bin ->
