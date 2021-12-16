@@ -306,7 +306,8 @@ let in_db : data_in -> Libobject.obj =
                               cache_function = (fun (n,({ outcomes; tactic; name; status; path } : data_in)) ->
                                   learner_learn (path, status) outcomes tactic)
                             ; load_function = (fun i (n, { outcomes; tactic; name; status; path }) ->
-                                  if !global_record then learner_learn (path, status) outcomes tactic else ())
+                                  if Names.KerName.equal (Names.Constant.canonical name) (Names.Constant.user name) then
+                                    if !global_record then learner_learn (path, status) outcomes tactic else ())
                             ; open_function = (fun i (_, data) -> ())
                             ; classify_function = (fun data -> Libobject.Substitute data)
                             ; subst_function = (fun x ->
