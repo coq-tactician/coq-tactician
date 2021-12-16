@@ -218,6 +218,7 @@ let coqc = "%{bin}%"/"coqc"
 let coqtop = "%{bin}%"/"coqtop"
 let tactician_lib = "%{coq-tactician:lib}%"
 let tactician_dir = "%{coq:lib}%"/"user-contrib"/"Tactician"
+let plugin_dir = "%{coq-tactician:share}%"/"plugins"
 let tactician_flags = ["-q"; "-I"; tactician_dir; "-R"; tactician_dir; "Tactician"; "-rifrom"; "Tactician"; "Ltac1.Record"]
 
 let read_args name =
@@ -229,17 +230,21 @@ let read_args name =
     | None -> close_in ic; List.rev acc in
   String.concat " " @@ List.map String.trim @@ loop []
 
-let tactician_extra_flags () =
-  String.concat " " @@
-  List.filter_map (fun d -> if Sys.file_exists (d/"injection-flags") then Some (read_args (d/"injection-flags")) else None) @@
-  List.concat @@
-  List.map (fun d -> Array.to_list @@ Array.map (fun sd -> d/sd) @@ Sys.readdir d) Coq_shim.Sites.plugins
+(* Hack to work around https://github.com/ocaml/dune/issues/4198
+   This pr has been merged, but as far as I can see it still does not work. *)
+let plugins = match Coq_shim.Sites.plugins with
+  | [] -> [plugin_dir]
+  | x -> x
 
-let tactician_wrappers () =
+let retrieve_flags file =
   String.concat " " @@
-  List.filter_map (fun d -> if Sys.file_exists (d/"injection-wrappers") then Some (read_args (d/"injection-wrappers")) else None) @@
+  List.filter_map (fun d -> if Sys.file_exists (d/file) then Some (read_args (d/file)) else None) @@
   List.concat @@
-  List.map (fun d -> Array.to_list @@ Array.map (fun sd -> d/sd) @@ Sys.readdir d) Coq_shim.Sites.plugins
+  List.map (fun d -> Array.to_list @@ Array.map (fun sd -> d/sd) @@ Sys.readdir d) plugins
+
+let tactician_extra_flags () = retrieve_flags "injection-flags"
+
+let tactician_wrappers () = retrieve_flags "injection-wrappers"
 
 (* TODO: At some point we might consider using https://github.com/Chris00/ocaml-bwrap *)
 let inject_bwrap cmd args =
