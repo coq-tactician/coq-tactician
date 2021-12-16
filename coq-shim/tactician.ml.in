@@ -273,7 +273,7 @@ let inject_bwrap cmd args =
     let open Rresult in
     let open Bos in
     let wrap_binary source target cont =
-      Rresult.R.join @@ OS.File.with_tmp_oc "tactician_shim_%s" (fun file oc cont ->
+      Rresult.R.join @@ OS.File.with_tmp_oc ~mode:0o755 "tactician_shim_%s" (fun file oc cont ->
           let contents = wrapper_contents target in
           output_string oc contents;
           close_out oc;
