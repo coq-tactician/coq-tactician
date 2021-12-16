@@ -202,6 +202,15 @@ let stdlib () =
     "Would you like to reinstall them?";
   `Ok ()
 
+let with_catch_break f x =
+  Sys.catch_break true;
+  let res = try
+      f x
+    with Sys.Break ->
+      Stdlib.exit 1 in
+  Sys.catch_break true;
+  res
+
 let (/) = Filename.concat
 (* TODO: Currently this utility only works when installed through Opam. Ideally, it should also be runnable by building it locally using
    dune. Unfortunately dune currently does not seem to support the required infrastructure for this. *)
@@ -234,23 +243,60 @@ let tactician_wrappers () =
 
 (* TODO: At some point we might consider using https://github.com/Chris00/ocaml-bwrap *)
 let inject_bwrap cmd args =
-  let wrap_binary source target =
-    let pin, pout = Unix.pipe () in
-    let pout = Unix.out_channel_of_descr pout in
-    let pin : int = Obj.magic pin in
-    let flags = String.concat " " tactician_flags ^ " " ^ tactician_extra_flags () in
-    let wrappers = tactician_wrappers () in
-    let contents = "#!/bin/sh\nexec " ^ wrappers ^ " " ^ target ^ " " ^ flags ^ " \"$@\"\n" in
-    output_string pout contents;
-    close_out pout;
-    ["--bind"; source; target; "--perms"; "0755"; "--ro-bind-data"; string_of_int pin; source] in
+  let perms_supported =
+    let ec = Sys.command ("bwrap --dev-bind / / --perms 0755 --tmpfs " ^ Sys.getcwd () ^ " true &> /dev/null") in
+    ec = 0 in
   let coqc_real = tactician_lib/"coqc.real" in
   let coqtop_real = tactician_lib/"coqtop.real" in
-  let bargs = ["bwrap"; "--dev-bind"; "/"; "/"] in
-  let bargs = bargs @ wrap_binary coqc coqc_real in
-  let bargs = bargs @ wrap_binary coqtop coqtop_real in
-  let bargs = bargs @ cmd::args in
-  Unix.execvp "bwrap" (Array.of_list bargs)
+  let wrapper_contents target =
+    let flags = String.concat " " tactician_flags ^ " " ^ tactician_extra_flags () in
+    let wrappers = tactician_wrappers () in
+    "#!/bin/sh\nexec " ^ wrappers ^ " " ^ target ^ " " ^ flags ^ " \"$@\"\n" in
+  match perms_supported with
+  | true ->
+    (* Happy path for bwrap >= 0.5.0 *)
+    let wrap_binary source target =
+        let contents = wrapper_contents target in
+        let pin, pout = Unix.pipe () in
+        let pout = Unix.out_channel_of_descr pout in
+        let pin : int = Obj.magic pin in
+        output_string pout contents;
+        close_out pout;
+        ["--bind"; source; target; "--perms"; "0755"; "--ro-bind-data"; string_of_int pin; source] in
+    let bargs = ["bwrap"; "--dev-bind"; "/"; "/"] in
+    let bargs = bargs @ wrap_binary coqc coqc_real in
+    let bargs = bargs @ wrap_binary coqtop coqtop_real in
+    let bargs = bargs @ cmd::args in
+    Unix.execvp "bwrap" (Array.of_list bargs)
+  | false ->
+    (* Legacy path for bwrap < 0.5.0; to be removed when newer bwrap's are common enough *)
+    let open Rresult in
+    let open Bos in
+    let wrap_binary source target cont =
+      Rresult.R.join @@ OS.File.with_tmp_oc "tactician_shim_%s" (fun file oc cont ->
+          let contents = wrapper_contents target in
+          output_string oc contents;
+          close_out oc;
+          let flags = ["--bind"; source; target; "--bind"; Fpath.to_string file; source] in
+          cont flags
+        ) cont in
+    let res =
+      with_catch_break (fun () ->
+          wrap_binary coqc coqc_real (fun flags1 -> wrap_binary coqtop coqtop_real (fun flags2 ->
+              let bargs = ["bwrap"; "--dev-bind"; "/"; "/"] in
+              let bargs = bargs @ flags1 @ flags2 in
+              let bargs = bargs @ cmd::args in
+              let command = Bos.Cmd.of_list bargs in
+              OS.Cmd.run_status command))) () in
+    let res = res >>| function
+      (* NOTE: This exit has to occurs outside of `with_tmp` to ensure cleanup *)
+    | `Signaled i when i <> 0 -> Stdlib.exit i
+    | `Exited i when i <> 0 -> Stdlib.exit i
+    | _ -> () in
+    match res with
+    | Ok _ -> `Ok ()
+    (* TODO: Fix *)
+    | Error _ -> `Error (false, "internal error")
 
 (* TODO: Rewrite the rest of this file wit Bos *)
 let inject_path cmd args =
@@ -261,44 +307,41 @@ let inject_path cmd args =
     let open Bos in
     let run cmd =
       OS.Dir.current () >>= fun dir ->
-      Sys.catch_break true;
-      try
-        OS.Dir.with_tmp ~dir "tactician_path_%s" (fun tmp () ->
-            let mk_wrapper name =
-              OS.File.write ~mode:0o755 Fpath.(tmp/name)
-                ("#!/bin/sh\nexec " ^ wrappers ^ " %{bin}%/" ^ name ^ " " ^ flags ^ "\"$@\"")
-            in
-            let link_binary name =
-              Fpath.of_string "%{bin}%" >>= fun bin ->
-              OS.Path.symlink ~target:Fpath.(bin/name) Fpath.(tmp/name) in
-            link_binary "coqchk" >>= fun () ->
-            link_binary "coqdep" >>= fun () ->
-            link_binary "coqdoc" >>= fun () ->
-            link_binary "coq_makefile" >>= fun () ->
-            link_binary "coqpp" >>= fun () ->
-            link_binary "coq-tex" >>= fun () ->
-            link_binary "coqwc" >>= fun () ->
-            mk_wrapper "coqc" >>= fun () ->
-            mk_wrapper "coqtop" >>= fun () ->
-            OS.Env.current () >>= fun env ->
-            let path = Astring.String.Map.get "PATH" env in
-            OS.Env.set_var "PATH" (Some (Fpath.to_string tmp ^ ":" ^ path)) >>= fun () ->
-            (* We add a trailing slash because some scripts assume it *)
-            OS.Env.set_var "COQBIN" (Some (Fpath.(to_string (tmp / "")))) >>= fun () ->
-            OS.Cmd.run_status cmd
-          ) () >>= (fun x -> x) >>| function
-          (* NOTE: This exit has to occurs outside of `with_tmp` to ensure cleanup *)
-        | `Signaled i when i <> 0 -> Stdlib.exit i
-        | `Exited i when i <> 0 -> Stdlib.exit i
-        | _ -> ()
-      with Sys.Break ->
-        Stdlib.exit 1
+      with_catch_break (fun () ->
+          OS.Dir.with_tmp ~dir "tactician_path_%s" (fun tmp () ->
+              let mk_wrapper name =
+                OS.File.write ~mode:0o755 Fpath.(tmp/name)
+                  ("#!/bin/sh\nexec " ^ wrappers ^ " %{bin}%/" ^ name ^ " " ^ flags ^ "\"$@\"")
+              in
+              let link_binary name =
+                Fpath.of_string "%{bin}%" >>= fun bin ->
+                OS.Path.symlink ~target:Fpath.(bin/name) Fpath.(tmp/name) in
+              link_binary "coqchk" >>= fun () ->
+              link_binary "coqdep" >>= fun () ->
+              link_binary "coqdoc" >>= fun () ->
+              link_binary "coq_makefile" >>= fun () ->
+              link_binary "coqpp" >>= fun () ->
+              link_binary "coq-tex" >>= fun () ->
+              link_binary "coqwc" >>= fun () ->
+              mk_wrapper "coqc" >>= fun () ->
+              mk_wrapper "coqtop" >>= fun () ->
+              OS.Env.current () >>= fun env ->
+              let path = Astring.String.Map.get "PATH" env in
+              OS.Env.set_var "PATH" (Some (Fpath.to_string tmp ^ ":" ^ path)) >>= fun () ->
+              (* We add a trailing slash because some scripts assume it *)
+              OS.Env.set_var "COQBIN" (Some (Fpath.(to_string (tmp / "")))) >>= fun () ->
+              OS.Cmd.run_status cmd
+            ) () >>= (fun x -> x) >>| function
+            (* NOTE: This exit has to occurs outside of `with_tmp` to ensure cleanup *)
+          | `Signaled i when i <> 0 -> Stdlib.exit i
+          | `Exited i when i <> 0 -> Stdlib.exit i
+          | _ -> ()) ()
     in
     let command = Bos.Cmd.of_list (cmd::args) in
     Bos.OS.Cmd.exists command >>= fun exists ->
     if exists then run command else (print_endline "Command does not exist!"; Stdlib.exit 1)
   in
-    match res with
+  match res with
   | Ok _ -> `Ok ()
   (* TODO: Fix *)
   | Error _ -> `Error (false, "internal error")
