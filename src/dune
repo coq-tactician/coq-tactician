@@ -13,7 +13,6 @@
    naiveknn_subst_learner
    trivial_learners
    lshf_learner
-   naiveknn_subst_learner
    forest_data_generator
    knn
    find_tactic_syntax
@@ -44,7 +43,7 @@
    coq.plugins.ssreflect
    coq.plugins.firstorder
    coq.plugins.funind
-   coq-serapi.serlib.ltac
+   sexplib
  )
  (preprocess (staged_pps ppx_import ppx_sexp_conv ppx_deriving_yojson))
 )

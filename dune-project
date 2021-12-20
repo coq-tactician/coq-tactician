@@ -29,5 +29,4 @@ automation.")
     cmdliner
     (coq (= 8.11~dev-neg))
     conf-git
-    coq-serapi
     (coq-tactician-dummy (and (= 1.0~beta1) :with-test))))

@@ -1,9 +1,8 @@
 open Tactic_learner
-open Serlib
-open Sexplib
 open Ltac_plugin
 open Learner_helper
 open Features
+open Sexplib
 
 let data_file =
   let file = ref None in
@@ -104,17 +103,6 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
     last_model := new_database; {database = new_database; lshf = lshfnew}
   let predict db situations = LSHF.predict db.lshf situations
   let evaluate db _ _ = 0., db
-
-  let output_sexpr (ps, tac) =
-    let term_to_sexpr t = Ser_constr.sexp_of_constr (term_repr t) in
-    let named_context_to_sexpr = Sexplib.Std.sexp_of_list
-        (Ser_context.Named.Declaration.sexp_of_pt term_to_sexpr term_to_sexpr) in
-    let proof_state_to_sexpr ps =
-      let hyps = proof_state_hypotheses ps in
-      let goal = proof_state_goal ps in
-      Sexplib.Pre_sexp.List [named_context_to_sexpr hyps; term_to_sexpr goal] in
-    let line = Sexplib.Pre_sexp.List [proof_state_to_sexpr ps; Std.sexp_of_int (tactic_hash tac)] in
-    output_string (data_file ()) (Sexp.to_string line ^ "\n")
 
   let syntactic_feats tac =
     let str = Pp.string_of_ppcmds @@ Sexpr.format_oneline @@

@@ -15,8 +15,6 @@ Declare ML Module "biniou".
 Declare ML Module "yojson".
 Declare ML Module "ppx_deriving_runtime".
 Declare ML Module "ppx_deriving_yojson_runtime".
-Declare ML Module "serlib".
-Declare ML Module "serlib_ltac".
 
 Declare ML Module "tactician_ltac1_record_plugin".
 Export Set Default Proof Mode "Tactician Ltac1".
