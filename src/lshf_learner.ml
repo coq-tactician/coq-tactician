@@ -152,7 +152,7 @@ module SimpleLSHF : TacticianOnlineLearnerType =
     include LSHF
     module FH = F(TS)
     open FH
-  let learn db origin outcomes tac = learn db origin outcomes tac proof_state_to_simple_ints
+  let learn db _status outcomes tac = learn db _status outcomes tac proof_state_to_simple_ints
   let predict db f = predict db f proof_state_to_simple_ints (fun x -> x) tfidf
 end
 
@@ -162,7 +162,7 @@ module ComplexLSHF : TacticianOnlineLearnerType =
     include LSHF
     module FH = F(TS)
     open FH
-    let learn db origin outcomes tac = learn db origin outcomes tac
+    let learn db _status outcomes tac = learn db _status outcomes tac
         (fun x -> remove_feat_kind @@ proof_state_to_complex_ints x)
     let predict db f = predict db f proof_state_to_complex_ints remove_feat_kind manually_weighed_tfidf
   end
