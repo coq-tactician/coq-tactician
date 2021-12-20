@@ -147,7 +147,7 @@ module type TacticianOfflineLearnerType =
     type model
     val add      : origin -> outcome list -> tactic -> unit (* TODO: Add lemma dependencies *)
     val train    : unit -> model
-    val predict  : model -> Constant.t -> situation list -> prediction IStream.t (* TODO: Add global environment *)
+    val predict  : model -> situation list -> prediction IStream.t (* TODO: Add global environment *)
     val evaluate : model -> outcome -> tactic -> float
   end
 
