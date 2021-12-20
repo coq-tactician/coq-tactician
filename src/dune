@@ -68,21 +68,3 @@
    coq-tactician.record-plugin
  )
 )
-(rule
- (targets tactician.ml)
- ; When installed through opam, we perform substitutions through the 'substs' directive in the opam file.
- ; It also works using this rule, but running opam during an installation can be risky due to sandboxing issues.
- (mode fallback)
- (deps tactician.ml.in)
- (action (run opam config subst %{targets})))
-(executable
- (name tactician)
- (package coq-tactician)
- (public_name tactician)
- (flags :standard -warn-error -A)
- (modules ("tactician"))
- (libraries
-   unix
-   opam-client
- )
-)
