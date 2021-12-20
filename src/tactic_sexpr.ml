@@ -111,40 +111,42 @@ let gen_atomic_tactic_expr_name (tac : 'a gen_atomic_tactic_expr) = match tac wi
   | TacRewrite (_, _, _, _) -> ["TacRewrite"]
   | TacInversion (_, _) -> ["TacInversion"]
 
-let gen_tactic_expr_name (tac : 'a gen_tactic_expr) = match tac with
-  | TacAtom _ -> ["TacAtom"]
-  | TacThen (_, _) -> ["TacThen"]
-  | TacDispatch _ -> ["TacDispatch"]
-  | TacExtendTac (_, _, _) -> ["TacExtendTac"]
-  | TacThens (_, _) -> ["TacThens"]
-  | TacThens3parts (_, _, _, _) -> ["TacThens3parts"]
-  | TacFirst _ -> ["TacFirst"]
-  | TacComplete _ -> ["TacComplete"]
-  | TacSolve _ -> ["TacSolve"]
-  | TacTry _ -> ["TacTry"]
-  | TacOr (_, _) -> ["TacOr"]
-  | TacOnce _ -> ["TacOnce"]
-  | TacExactlyOnce _ -> ["TacExactlyOnce"]
-  | TacIfThenCatch (_, _, _) -> ["TacIfThenCatch"]
-  | TacOrelse (_, _) -> ["TacOrelse"]
-  | TacDo (_, _) -> ["TacDo"]
-  | TacTimeout (_, _) -> ["TacTimeout"]
-  | TacTime (_, _) -> ["TacTime"]
-  | TacRepeat _ -> ["TacRepeat"]
-  | TacProgress _ -> ["TacProgress"]
-  | TacShowHyps _ -> ["TacShowHyps"]
-  | TacAbstract (_, _) -> ["TacAbstract"]
-  | TacId _ -> ["TacId"]
-  | TacFail (_, _, _) -> ["TacFail"]
-  | TacInfo _ -> ["TacInfo"]
-  | TacLetIn (_, _, _) -> ["TacLetIn"]
-  | TacMatch (_, _, _) -> ["TacMatch"]
-  | TacMatchGoal (_, _, _) -> ["TacMatchGoal"]
-  | TacFun _ -> ["TacFun"]
-  | TacArg _ -> ["TacArg"]
-  | TacSelect (_, _) -> ["TacSelect"]
-  | TacML _ -> ["TacML"]
-  | TacAlias CAst.{v=(c, _); _} -> ["TacAlias"; Names.KerName.debug_to_string c]
+let gen_tactic_expr_name r (tac : 'a gen_tactic_expr) = match tac with
+  | TacAtom _ -> [s2s "TacAtom"]
+  | TacThen (_, _) -> [s2s "TacThen"]
+  | TacDispatch _ -> [s2s "TacDispatch"]
+  | TacExtendTac (_, _, _) -> [s2s "TacExtendTac"]
+  | TacThens (_, _) -> [s2s "TacThens"]
+  | TacThens3parts (_, _, _, _) -> [s2s "TacThens3parts"]
+  | TacFirst _ -> [s2s "TacFirst"]
+  | TacComplete _ -> [s2s "TacComplete"]
+  | TacSolve _ -> [s2s "TacSolve"]
+  | TacTry _ -> [s2s "TacTry"]
+  | TacOr (_, _) -> [s2s "TacOr"]
+  | TacOnce _ -> [s2s "TacOnce"]
+  | TacExactlyOnce _ -> [s2s "TacExactlyOnce"]
+  | TacIfThenCatch (_, _, _) -> [s2s "TacIfThenCatch"]
+  | TacOrelse (_, _) -> [s2s "TacOrelse"]
+  | TacDo (_, _) -> [s2s "TacDo"]
+  | TacTimeout (_, _) -> [s2s "TacTimeout"]
+  | TacTime (_, _) -> [s2s "TacTime"]
+  | TacRepeat _ -> [s2s "TacRepeat"]
+  | TacProgress _ -> [s2s "TacProgress"]
+  | TacShowHyps _ -> [s2s "TacShowHyps"]
+  | TacAbstract (_, _) -> [s2s "TacAbstract"]
+  | TacId _ -> [s2s "TacId"]
+  | TacFail (_, _, _) -> [s2s "TacFail"]
+  | TacInfo _ -> [s2s "TacInfo"]
+  | TacLetIn (_, _, _) -> [s2s "TacLetIn"]
+  | TacMatch (_, _, _) -> [s2s "TacMatch"]
+  | TacMatchGoal (_, _, _) -> [s2s "TacMatchGoal"]
+  | TacFun _ -> [s2s "TacFun"]
+  | TacArg _ -> [s2s "TacArg"]
+  | TacSelect (_, _) -> [s2s "TacSelect"]
+  | TacML _ -> [s2s "TacML"]
+  | TacAlias CAst.{v=(c, _); _} ->
+    let al = Tacenv.interp_alias c in
+    [s2s "TacAlias"; s2s @@ Names.KerName.debug_to_string c; r al.alias_body]
 
 module SexprDef = struct
   module M = WriterMonad
@@ -164,14 +166,14 @@ open Helpers(SexprDef)
 
 type 'a k = 'a SexprDef.t
 
-let mapper =
+let mapper r =
   { SexprDef.default_mapper with
     glob_tactic = (fun t g ->
-        let name = gen_tactic_expr_name t in
-        M.censor (fun ls -> [Node (List.map s2s name @ ls)]) (g t))
+        let name = gen_tactic_expr_name r t in
+        M.censor (fun ls -> [Node (name @ ls)]) (g t))
   ; raw_tactic = (fun t g ->
-        let name = gen_tactic_expr_name t in
-        M.censor (fun ls -> [Node (List.map s2s name @ ls)]) (g t))
+        let name = gen_tactic_expr_name r t in
+        M.censor (fun ls -> [Node (name @ ls)]) (g t))
   ; glob_tactic_arg = (fun t g ->
         let name = glob_tactic_arg_name t in
         M.censor (fun ls -> [Node (List.map s2s name @ ls)]) (g t))
@@ -185,13 +187,13 @@ let mapper =
         let name = gen_atomic_tactic_expr_name t in
         M.censor (fun ls -> [Node (List.map s2s name @ ls)]) (g t))
   ; cast = (fun c -> M.censor (fun ls -> [Node (s2s "CAst" :: ls)]) c)
-  ; constant = (fun c -> M.tell (s2s @@ Names.Constant.to_string c) >> return c)
-  ; mutind = (fun c -> M.tell (s2s @@ Names.MutInd.to_string c) >> return c)
+  ; constant = (fun c -> M.tell [s2s @@ Names.Constant.to_string c] >> return c)
+  ; mutind = (fun c -> M.tell [s2s @@ Names.MutInd.to_string c] >> return c)
   (* ; short_name = (fun c -> M.tell (s2s "short_name") >> return c) *)
-  ; located = (fun c -> M.tell (s2s "Located") >> c)
-  ; variable = (fun c -> M.tell (s2s @@ Names.Id.to_string c) >> return c)
+  ; located = (fun c -> M.tell [s2s "Located"] >> c)
+  ; variable = (fun c -> M.tell [s2s @@ Names.Id.to_string c] >> return c)
   ; qualid = (fun (p, id) ->
-      M.tell (s2s @@ Libnames.string_of_path @@ Libnames.make_path p id) >> return (p, id))
+      M.tell [s2s @@ Libnames.string_of_path @@ Libnames.make_path p id] >> return (p, id))
   ; constr_pattern = (fun t g ->
         let name = constr_pattern_name t in
         M.censor (fun ls -> [Node (List.map s2s name @ ls)]) (g t))
@@ -212,4 +214,4 @@ let mapper =
 (* TODO: For now, this function is only for debugging purposes. Many syntactic elements from the AST
    are missing. In particular, non-recursive information is mostly not included. This includes no-recursive
    tactic extensions, binders, etc. *)
-let tactic_sexpr t = Node (fst @@ SexprMapper.glob_tactic_expr_map mapper t)
+let rec tactic_sexpr t = Node (fst @@ M.run @@ SexprMapper.glob_tactic_expr_map (mapper tactic_sexpr) t)

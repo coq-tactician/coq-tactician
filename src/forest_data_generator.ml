@@ -24,7 +24,7 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
   open FH
   module LSHF = Naiveknn_learner.ComplexNaiveKnn(TS)
 
-  type ownmodel = (data_status * Names.Constant.t * (outcome list * tactic) list) list
+  type ownmodel = (data_status * Libnames.full_path * (outcome list * tactic) list) list
   type model = {database : ownmodel; lshf : LSHF.model}
 
   module IntSet = Set.Make(struct type t = feature let compare = compare end)
@@ -93,12 +93,12 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
 
   let cache_type name =
     let dirp = Global.current_dirpath () in
-    if Libnames.is_dirpath_prefix_of dirp (Names.ModPath.dp @@ Names.Constant.modpath name) then `File else `Dependency
+    if Libnames.is_dirpath_prefix_of dirp (Libnames.dirpath name) then `File else `Dependency
 
-  let learn db status name outcomes tac =
-    let lshfnew = LSHF.learn db.lshf status name outcomes tac in
+  let learn db (name, status) outcomes tac =
+    let lshfnew = LSHF.learn db.lshf (name, status) outcomes tac in
     let new_database = match db.database with
-      | (pstatus, pname, ls)::data when Names.Constant.equal name pname ->
+      | (pstatus, pname, ls)::data when Libnames.eq_full_path name pname ->
         (pstatus, pname, (outcomes, tac)::ls)::data
       | _ -> (status, name, [outcomes, tac])::db.database in
     last_model := new_database; {database = new_database; lshf = lshfnew}

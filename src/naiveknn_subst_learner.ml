@@ -74,7 +74,7 @@ module NaiveKnnSubst (SF : sig type second_feat end) = functor (TS : TacticianSt
       let l = if db.length >= max then db.length else db.length + 1 in
       {entries = comb::purgedentries; length = l; frequencies = newfreq}
 
-    let learn db _status _loc outcomes tac ps_to_feat ctx_to_feat =
+    let learn db _status outcomes tac ps_to_feat ctx_to_feat =
       List.fold_left (fun db out -> add db out.before tac ps_to_feat ctx_to_feat) db outcomes
 
     let remove_dups ranking =
@@ -95,7 +95,7 @@ module NaiveKnnSubst (SF : sig type second_feat end) = functor (TS : TacticianSt
       in
       List.map (fun (_hash, (score, tac)) -> (score, tac)) (IntMap.bindings ranking_map)
 
-    let predict db _ f ps_to_feat ctx_to_feat tfidf =
+    let predict db f ps_to_feat ctx_to_feat tfidf =
       if f = [] then IStream.empty else
         let ps = (List.hd f).state in
         let ctx = ctx_to_feat (proof_state_hypotheses ps) in
@@ -140,8 +140,8 @@ module SimpleNaiveSubstKnn : TacticianOnlineLearnerType = functor (TS : Tacticia
   include NaiveKnnSubst
   module FH = F(TS)
   open FH
-  let learn db _status _loc outcomes tac = learn db _status _loc outcomes tac proof_state_to_simple_ints context_simple_ints
-  let predict db name f = predict db name f proof_state_to_simple_ints context_simple_ints tfidf
+  let learn db _status outcomes tac = learn db _status outcomes tac proof_state_to_simple_ints context_simple_ints
+  let predict db f = predict db f proof_state_to_simple_ints context_simple_ints tfidf
 end
 
 module ComplexNaiveSubstKnn : TacticianOnlineLearnerType = functor (TS : TacticianStructures) -> struct
@@ -151,10 +151,10 @@ module ComplexNaiveSubstKnn : TacticianOnlineLearnerType = functor (TS : Tactici
   module LH = L(TS)
   open FH
   open LH
-  let learn db _status _loc outcomes tac = learn db _status _loc outcomes tac
+  let learn db _status outcomes tac = learn db _status outcomes tac
       (fun x -> remove_feat_kind @@ proof_state_to_complex_ints x)
       context_complex_ints
-  let predict db name f = predict db name f proof_state_to_complex_ints
+  let predict db f = predict db f proof_state_to_complex_ints
       (fun x -> context_map remove_feat_kind remove_feat_kind @@ context_complex_ints x)
       manually_weighed_tfidf
 

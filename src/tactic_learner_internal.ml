@@ -121,17 +121,23 @@ let goal_to_proof_state ps =
   let hyps = EConstr.Unsafe.to_named_context (Proofview.Goal.hyps ps) in
   (hyps, goal)
 
-type data_status = Original | Substituted | Discharged
+type data_status =
+  | Original
+  | QedTime
+  | Substituted of Libnames.full_path (* path of the substituted constant (does not exist) *)
+  | Discharged of Libnames.full_path (* path of the substituted constant (does not exist) *)
 
-type data_in = { outcomes : TS.outcome list; name : Names.Constant.t; tactic : TS.tactic ; status : data_status }
+type origin = Libnames.full_path * data_status
+
+type data_in = { outcomes : TS.outcome list; tactic : TS.tactic ; name : Constant.t; status : data_status; path : Libnames.full_path }
 
 module type TacticianOnlineLearnerType =
   functor (TS : TacticianStructures) -> sig
     open TS
     type model
     val empty    : unit -> model
-    val learn    : model -> data_status -> Constant.t -> outcome list -> tactic -> model (* TODO: Add lemma dependencies *)
-    val predict  : model -> Constant.t -> situation list -> prediction IStream.t (* TODO: Add global environment *)
+    val learn    : model -> origin -> outcome list -> tactic -> model (* TODO: Add lemma dependencies *)
+    val predict  : model -> situation list -> prediction IStream.t (* TODO: Add global environment *)
     val evaluate : model -> outcome -> tactic -> float * model
   end
 
@@ -139,22 +145,22 @@ module type TacticianOfflineLearnerType =
   functor (TS : TacticianStructures) -> sig
     open TS
     type model
-    val add      : data_status -> Constant.t -> outcome list -> tactic -> unit (* TODO: Add lemma dependencies *)
+    val add      : origin -> outcome list -> tactic -> unit (* TODO: Add lemma dependencies *)
     val train    : unit -> model
     val predict  : model -> Constant.t -> situation list -> prediction IStream.t (* TODO: Add global environment *)
     val evaluate : model -> outcome -> tactic -> float
   end
 
 type dynamic_learner =
-  { learn : data_status -> Constant.t -> TS.outcome list -> TS.tactic -> dynamic_learner
-  ; predict : Constant.t -> TS.situation list -> TS.prediction IStream.t
+  { learn : origin -> TS.outcome list -> TS.tactic -> dynamic_learner
+  ; predict : TS.situation list -> TS.prediction IStream.t
   ; evaluate : TS.outcome -> TS.tactic -> dynamic_learner * float }
 
 let new_learner (module Learner : TacticianOnlineLearnerType) =
   let module Learner = Learner(TS) in
   let rec recurse model =
-    { learn = (fun status loc exes tac ->
-          recurse @@ Lazy.from_val @@ Learner.learn (Lazy.force model) status loc exes tac)
+    { learn = (fun origin exes tac ->
+          recurse @@ Lazy.from_val @@ Learner.learn (Lazy.force model) origin exes tac)
     ; predict = (fun t ->
           Learner.predict (Lazy.force model) t)
     ; evaluate = (fun outcome tac ->
@@ -166,8 +172,8 @@ let new_learner (module Learner : TacticianOnlineLearnerType) =
 module NullLearner : TacticianOnlineLearnerType = functor (_ : TacticianStructures) -> struct
   type model = unit
   let empty () = ()
-  let learn  () _ _ _ _ = ()
-  let predict () _ _ = IStream.empty
+  let learn  () _ _ _ = ()
+  let predict () _ = IStream.empty
   let evaluate () _ _ = 0., ()
 end
 
@@ -176,21 +182,21 @@ let current_learner = Summary.ref ~name:("tactician-db") (new_learner (module Nu
 let queue_enabled = Summary.ref ~name: "tactician-queue-enabled" true
 let queue = Summary.ref ~name:"tactician-queue" []
 
-let learner_learn status name outcomes tactic =
-  current_learner := !current_learner.learn status name outcomes tactic
+let learner_learn status outcomes tactic =
+  current_learner := !current_learner.learn status outcomes tactic
 
 let process_queue () =
-  List.iter (fun (s, l, o, t) -> learner_learn s l o t) (List.rev !queue); queue := []
+  List.iter (fun (s, o, t) -> learner_learn s o t) (List.rev !queue); queue := []
 
 let learner_get () =
   process_queue ();
   !current_learner
 
-let learner_learn s l o t =
+let learner_learn s o t =
   if !queue_enabled then
-    queue := (s, l, o, t)::!queue
+    queue := (s, o, t)::!queue
   else
-    learner_learn s l o t
+    learner_learn s o t
 
 let disable_queue () =
   process_queue (); queue_enabled := false

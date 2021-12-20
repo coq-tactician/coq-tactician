@@ -107,7 +107,7 @@ module LSHF =
   let random = Random.State.make [||]
 
   type model =
-    { forest : (tactic * Names.Constant.t) forest
+    { forest : tactic forest
     ; length : int
     ; frequencies : int Frequencies.t }
 
@@ -128,17 +128,16 @@ module LSHF =
     let forest = insert db.forest feats obj in
     { forest; length; frequencies }
 
-  let learn db _status name outcomes tac to_feats =
-    List.fold_left (fun db out -> add db out.before (tac, name) to_feats) db outcomes
+  let learn db (name, status) outcomes tac to_feats =
+    List.fold_left (fun db out -> add db out.before tac to_feats) db outcomes
 
-  let predict db name f to_feats remove_kind tfidf =
+  let predict db f to_feats remove_kind tfidf =
     if f = [] then IStream.of_list [] else
       let feats = to_feats (List.hd f).state in
       let candidates, _ = query db.forest (remove_kind feats) !sort_window in
       let tdidfs = List.map
           (fun (o, f) -> let x = tfidf db.length db.frequencies feats f in (x, o))
           candidates in
-      let tdidfs = List.map (fun (a, (b, n)) -> (a, b)) tdidfs in
       let out = remove_dups_and_sort tdidfs in
       let out = List.map (fun (a, c) -> { confidence = a; focus = 0; tactic = c }) out in
       IStream.of_list out
@@ -153,8 +152,8 @@ module SimpleLSHF : TacticianOnlineLearnerType =
     include LSHF
     module FH = F(TS)
     open FH
-  let learn db _status _loc outcomes tac = learn db _status _loc outcomes tac proof_state_to_simple_ints
-  let predict db name f = predict db name f proof_state_to_simple_ints (fun x -> x) tfidf
+  let learn db origin outcomes tac = learn db origin outcomes tac proof_state_to_simple_ints
+  let predict db f = predict db f proof_state_to_simple_ints (fun x -> x) tfidf
 end
 
 module ComplexLSHF : TacticianOnlineLearnerType =
@@ -163,9 +162,9 @@ module ComplexLSHF : TacticianOnlineLearnerType =
     include LSHF
     module FH = F(TS)
     open FH
-    let learn db _status _loc outcomes tac = learn db _status _loc outcomes tac
+    let learn db origin outcomes tac = learn db origin outcomes tac
         (fun x -> remove_feat_kind @@ proof_state_to_complex_ints x)
-    let predict db name f = predict db name f proof_state_to_complex_ints remove_feat_kind manually_weighed_tfidf
+    let predict db f = predict db f proof_state_to_complex_ints remove_feat_kind manually_weighed_tfidf
   end
 
 (* let () = register_online_learner "SimpleLSHF" (module SimpleLSHF) *)

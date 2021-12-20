@@ -52,7 +52,7 @@ let inline_tactic env t =
                } in
   TacticFinderMapper.glob_tactic_expr_map mapper t
 
-let inline env { outcomes; name; tactic; status } =
+let inline env { outcomes; tactic; name; status; path } =
   let inline_tactic t = tactic_make @@ inline_tactic env @@ tactic_repr t in
   let rec inline_constr c = match Constr.kind c with
     | Const (const, u) ->
@@ -80,9 +80,8 @@ let inline env { outcomes; name; tactic; status } =
         let preds = CEphemeron.default preds [] in
         CEphemeron.create @@ List.map (fun (t, ps) -> inline_tactic t, Option.map (List.map inline_proof_state) ps) preds} in
   { outcomes = List.map inline_outcome outcomes
-  ; name
   ; tactic = inline_tactic tactic
-  ; status }
+  ; name; status; path }
 
 let inline env sideff t =
   if sideff = Safe_typing.empty_private_constants then t else inline env t
