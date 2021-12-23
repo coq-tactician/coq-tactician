@@ -316,7 +316,7 @@ let inject_path cmd args =
           OS.Dir.with_tmp ~dir "tactician_path_%s" (fun tmp () ->
               let mk_wrapper name =
                 OS.File.write ~mode:0o755 Fpath.(tmp/name)
-                  ("#!/bin/sh\nexec " ^ wrappers ^ " %{bin}%/" ^ name ^ " " ^ flags ^ "\"$@\"")
+                  ("#!/bin/sh\nexec " ^ wrappers ^ " %{bin}%/" ^ name ^ " " ^ flags ^ " \"$@\"")
               in
               let link_binary name =
                 Fpath.of_string "%{bin}%" >>= fun bin ->
