@@ -912,7 +912,7 @@ let run_predictions () =
   let open Notations in
   let individual_prediction =
     predict () >>= fun (learner, cont) -> cont >>= fun p ->
-    runTactics 10 p >>= fun s ->
+    runTactics 200 p >>= fun s ->
     Goal.enter_one @@ fun gl -> tclUNIT (get_state_id_goal_top gl, s) in
   tclLIFT (NonLogical.make (fun () -> CWarnings.get_flags ())) >>= fun oldFlags ->
   let setFlags () = tclLIFT (NonLogical.make (fun () ->
