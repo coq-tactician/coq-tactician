@@ -334,7 +334,7 @@ let add_to_db (x : data_in) =
 (* Types and accessors for state in the proof monad *)
 type localdb = ((Proofview.Goal.t * Proofview.Goal.t list * (tactic * Proofview.Goal.t list option) list) list * glob_tactic_expr) list
 type goal_stack = Proofview.Goal.t list list
-type prediction_stack = (tactic * Proofview.Goal.t list option) list list
+type prediction_stack = (int * (tactic * Proofview.Goal.t list option) list) list list
 type tactic_trace = glob_tactic_expr list
 type state_id_stack = int list
 
@@ -907,50 +907,50 @@ let runTactics n (tacs : Tactic_learner_internal.TS.prediction IStream.t) =
   (*      aux n tacs [] else tclUNIT []) *)
   (* else tclUNIT [] *)
 
-let run_predictions learner name =
+let run_predictions () =
   let open Proofview in
   let open Notations in
-  predict () >>= fun (learner, cont) -> cont >>= fun p ->
+  let individual_prediction =
+    predict () >>= fun (learner, cont) -> cont >>= fun p ->
+    runTactics 10 p >>= fun s ->
+    Goal.enter_one @@ fun gl -> tclUNIT (get_state_id_goal_top gl, s) in
   tclLIFT (NonLogical.make (fun () -> CWarnings.get_flags ())) >>= fun oldFlags ->
   let setFlags () = tclLIFT (NonLogical.make (fun () ->
       Dumpglob.continue (); CWarnings.set_flags (oldFlags))) in
   (tclLIFT (NonLogical.make (fun () ->
-       Dumpglob.pause(); CWarnings.set_flags ("-all"))))
-  <*> runTactics 200 p >>= push_prediction_stack <*> setFlags ()
+       Dumpglob.pause(); CWarnings.set_flags ("-all")))) <*>
+  tclINDEPENDENTL individual_prediction
+  >>= push_prediction_stack <*> setFlags ()
 
 let push_state_tac () =
   let open Proofview in
   let open Notations in
-  let learner = learner_get () in
   get_record () >>= fun b -> if not (should_record b) then tclUNIT () else
     get_name () >>= fun name ->
     push_state_id_stack () <*> Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
-    push_goal_stack gls <*> run_predictions learner name
+    push_goal_stack gls <*> run_predictions ()
 
 let record_tac (tac2 : glob_tactic_expr) : unit Proofview.tactic =
   let open Proofview in
   let open Notations in
-  let collect_states before_gls after_gls prediction_after_gls =
+  let collect_states before_gls after_gls
+      (prediction_after_gls : (int * ((glob_tactic_expr * int lazy_t) * Goal.t list option) list) list) =
     List.map (fun gl_before ->
         let i = get_state_id_goal_top gl_before in
         let after_gls = List.filter_map (fun (j, gl_after) ->
             if i = j then Some gl_after else None) after_gls in
-        let prediction_after_gls = List.map (fun (tac, gls) ->
-            tac, Option.map (List.filter_map (fun (j, gl_after) ->
-                if i = j then Some gl_after else None)) gls) prediction_after_gls in
+        let prediction_after_gls = List.find_map (fun (j, preds) ->
+          if i = j then Some preds else None) prediction_after_gls in
         (gl_before, after_gls, prediction_after_gls)) before_gls  in
   get_record () >>= fun b -> if not (should_record b) then tclUNIT () else
     tclENV >>= fun env ->
     pop_goal_stack () >>= fun before_gls ->
     pop_prediction_stack () >>= fun prediction_after_goals ->
-    let prediction_after_goals =
-      List.map (fun (tac, gls) ->
-          tac, Option.map (List.map (fun gl -> get_state_id_goal_top gl, gl)) gls) prediction_after_goals in
-    Goal.goals >>= record_map (fun x -> x) >>= (fun after_gls ->
-        let after_gls = List.map (fun gl -> get_state_id_goal_top gl, gl) after_gls in
-        push_localdb (collect_states before_gls after_gls prediction_after_goals, tac2)
-      ) >>= (fun () -> pop_state_id_stack tac2 <*> (* TODO: This is a strange way of doing things, see todo above. *)
-                       push_tactic_trace tac2)
+    Goal.goals >>= record_map (fun x -> x) >>= fun after_gls ->
+    let after_gls = List.map (fun gl -> get_state_id_goal_top gl, gl) after_gls in
+    push_localdb (collect_states before_gls after_gls prediction_after_goals, tac2)
+    >>= fun () -> pop_state_id_stack tac2 <*> (* TODO: This is a strange way of doing things, see todo above. *)
+                  push_tactic_trace tac2
 
         (* Make predictions *)
         (*let r = Predictor.knn db feat in
