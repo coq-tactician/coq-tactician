@@ -110,7 +110,7 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
     let split = String.split_on_char ' ' str in
     List.map Hashtbl.hash split
 
-  let generate_step (status, name, ls) =
+  let generate_step ((name, status), ls) =
     match cache_type name with
     | `File ->
       output_string (data_file ()) "#lemma\n";
@@ -146,7 +146,7 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
 
   (* We have to do some reversals before the evaluation *)
   let preprocess model =
-    List.rev_map (fun (state, name, ls) -> state, name, List.rev ls) model
+    List.rev_map (fun (origin, ls) -> origin, List.rev ls) model
 
   let endline_hook () = print_endline "writing";
     let data = preprocess !last_model in
