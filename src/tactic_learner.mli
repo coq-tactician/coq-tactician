@@ -48,7 +48,7 @@ module type TacticianStructures = sig
     ; siblings : proof_dag
     ; before   : proof_state
     ; after    : proof_state list
-    ; preds    : (tactic * proof_state list option) list CEphemeron.key }
+    ; preds    : (tactic * proof_state list option) list }
 
   type prediction =
     { confidence : float

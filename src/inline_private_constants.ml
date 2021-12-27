@@ -77,8 +77,7 @@ let inline env { outcomes; tactic; name; status; path } =
     ; before = inline_proof_state before
     ; after = List.map inline_proof_state after
     ; preds =
-        let preds = CEphemeron.default preds [] in
-        CEphemeron.create @@ List.map (fun (t, ps) -> inline_tactic t, Option.map (List.map inline_proof_state) ps) preds} in
+        List.map (fun (t, ps) -> inline_tactic t, Option.map (List.map inline_proof_state) ps) preds} in
   { outcomes = List.map inline_outcome outcomes
   ; tactic = inline_tactic tactic
   ; name; status; path }

@@ -185,8 +185,7 @@ let subst_outcomes (s, { outcomes; tactic; name; status; path }) =
       ; before = subst_pf before
       ; after = List.map subst_pf after
       ; preds =
-          let preds = CEphemeron.default preds [] in
-          CEphemeron.create @@ List.map (fun (t, ps) -> subst_tac t, Option.map (List.map subst_pf) ps) preds
+          List.map (fun (t, ps) -> subst_tac t, Option.map (List.map subst_pf) ps) preds
       }) outcomes in
   let name = Mod_subst.subst_constant s name in
   let path' = (* TODO: This is a bit of a hack, improve *)
@@ -232,8 +231,7 @@ let rebuild_outcomes { outcomes; tactic; name; status; path } =
       ; siblings = rebuild_pd siblings
       ; before; after
       ; preds =
-          let preds = CEphemeron.default preds [] in
-          CEphemeron.create @@ List.map (fun (t, ps) -> rebuild_tac t, ps) preds
+          List.map (fun (t, ps) -> rebuild_tac t, ps) preds
       }) outcomes in
   { outcomes; tactic = rebuild_tac tactic
   ; name; status = Discharged path; path = Lib.make_path @@ Libnames.basename path }
@@ -254,8 +252,7 @@ let discharge_outcomes env { outcomes; tactic; name; status; path } =
         ; siblings = genarg_print_pd siblings
         ; before; after
         ; preds =
-            let preds = CEphemeron.default preds [] in
-            CEphemeron.create @@ List.map (fun (t, ps) -> genarg_print_tac t, ps) preds
+            List.map (fun (t, ps) -> genarg_print_tac t, ps) preds
         }) outcomes in
     { outcomes; tactic = genarg_print_tac tactic; name; status; path }
 
@@ -481,7 +478,7 @@ let mk_outcome (st, sts, preds) =
   ; siblings = End
   ; before = st
   ; after = List.map goal_to_proof_state sts
-  ; preds = CEphemeron.create @@ List.map (fun (t, sts) -> t, Option.map (List.map goal_to_proof_state) sts) preds}
+  ; preds = List.map (fun (t, sts) -> t, Option.map (List.map goal_to_proof_state) sts) preds}
 
 let mk_data_in outcomes tactic name path =
   let tactic = TS.tactic_make tactic in
