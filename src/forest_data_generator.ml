@@ -21,8 +21,8 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
   open TS
   open LH
   open FH
-  (* module LSHF = Naiveknn_learner.ComplexNaiveKnn(TS) *)
-  module LSHF = Naiveknn_learner.SimpleNaiveKnn(TS)
+  module LSHF = Naiveknn_learner.ComplexNaiveKnn(TS)
+  (* module LSHF = Naiveknn_learner.SimpleNaiveKnn(TS) *)
 
   type ownmodel = (origin * (outcome list * tactic) list) list
   type model = {database : ownmodel; lshf : LSHF.model}
