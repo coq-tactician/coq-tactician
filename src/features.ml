@@ -286,7 +286,7 @@ module F (TS: TacticianStructures) = struct
     in
     let features = aux init_features oterm "Root" 0 in
     (* We use tail-recursive rev_map instead of map to avoid stack overflows on large proof states *)
-    let add_feature_kind features kind = List.map (fun feature -> kind, feature) features in
+    let add_feature_kind features kind = List.rev_map (fun feature -> kind, feature) features in
     List.rev_map (fun (feat_kind, feats) -> feat_kind, String.concat "-" feats) (
       (Struct, features.structure) :: 
       ((add_feature_kind features.semantic.acc Seman) @ 
@@ -296,17 +296,17 @@ module F (TS: TacticianStructures) = struct
       let hyps = proof_state_hypotheses ps in
       let goal = proof_state_goal ps in
       let mkfeats t = term_sexpr_to_complex_features max_length (term_sexpr t) in
-      let hyp_id_typ_feats = List.map (function
+      let hyp_id_typ_feats = List.rev_map (function
           | Named.Declaration.LocalAssum (id, typ) ->
             (Names.Id.to_string id.binder_name), (sexpr_to_string (term_sexpr typ)), (mkfeats typ)
           | Named.Declaration.LocalDef (id, term, typ) ->
             (Names.Id.to_string id.binder_name),(sexpr_to_string (term_sexpr typ)), (mkfeats typ @ mkfeats term))
           hyps in
-      let hyp_feats = List.map (fun (_, _, feats) -> feats) hyp_id_typ_feats in
+      let hyp_feats = List.rev_map (fun (_, _, feats) -> feats) hyp_id_typ_feats in
       let goal_feats = mkfeats goal in
       (* seperate the goal from the local context *)  
-      (List.map (fun (kind, feat) -> kind, "GOAL-"^ feat) goal_feats) @  
-      (List.map (fun (kind, feat) -> kind, "HYPS-"^ feat) (List.flatten hyp_feats)) 
+      (List.rev_map (fun (kind, feat) -> kind, "GOAL-"^ feat) goal_feats) @  
+      (List.rev_map (fun (kind, feat) -> kind, "HYPS-"^ feat) (List.flatten hyp_feats)) 
 
   let proof_state_to_complex_ints ps =
     let complex_feats = proof_state_to_complex_features 2 ps in
@@ -345,7 +345,7 @@ module F (TS: TacticianStructures) = struct
          inter)
 
   let remove_feat_kind l =
-    List.map Stdlib.snd l
+    List.rev_map Stdlib.snd l
 
   let manually_weighed_tfidf size freq ls1 ls2 =
     let inter = intersect (fun x y -> compare (snd x) y) ls1 ls2 in
