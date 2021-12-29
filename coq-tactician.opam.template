@@ -15,7 +15,6 @@ tags: [
 ]
 substs: [
   "includes"
-  "coq-shim/with-tactician"
   "coq-shim/tactician-patch"
-  "src/tactician.ml"
+  "coq-shim/tactician.ml"
 ]
