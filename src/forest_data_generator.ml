@@ -216,7 +216,7 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
                   Sexplib.Pre_sexp.List [ Std.sexp_of_int @@ tactic_hash tac
                                         ; Std.sexp_of_list (Conv.sexp_of_pair Std.sexp_of_int Std.sexp_of_int) df
                                         ; Std.sexp_of_list (Conv.sexp_of_pair Std.sexp_of_int Std.sexp_of_int) af
-                                        (* ; Std.sexp_of_list Std.sexp_of_int @@ syntactic_feats tac *)]) preds in
+                                        ; Std.sexp_of_list Std.sexp_of_int @@ syntactic_feats tac]) preds in
               let tac' = tactic_hash tac in
               (* let neg = List.filter (fun neg_tac -> tac != neg_tac) neg in *)
               let parent_tacs = List.map (fun (_, { executions; tactic }) -> tactic_hash tactic) parents in
@@ -225,7 +225,7 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
                                                ; Sexplib.Pre_sexp.List preds
                                                ; Std.sexp_of_list (Conv.sexp_of_pair Std.sexp_of_int Std.sexp_of_int) disappear_feats
                                                ; Std.sexp_of_list (Conv.sexp_of_pair Std.sexp_of_int Std.sexp_of_int) appear_feats
-                                               (* ; Std.sexp_of_list Std.sexp_of_int @@ syntactic_feats tac *)
+                                               ; Std.sexp_of_list Std.sexp_of_int @@ syntactic_feats tac
                                                ; Std.sexp_of_list Std.sexp_of_int @@ parent_tacs ] in
               output_string (data_file ()) (Sexp.to_string line ^ "\n")
             ) outcomes
