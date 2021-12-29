@@ -65,6 +65,7 @@ module type WriterMonadType = functor (R : sig type w val id : w val comb : w ->
   include Monad.Def
   val tell : w -> unit t
   val pass : ('a * (w -> w)) t -> 'a t
+  val listen : 'a t -> ('a * w) t
   val censor : (w -> w) -> 'a t -> 'a t
   val run : 'a t -> w * 'a
 end
@@ -78,6 +79,7 @@ module WriterMonad : WriterMonadType = functor (R : sig type w val id : w val co
 
   let tell l = comb id l, ()
   let pass (w, (x, f)) = f w, x
+  let listen (w, x) = w, (x, w)
   let censor f (w, x) = f w, x
 
   let run x = x
@@ -113,6 +115,7 @@ module type ReaderWriterMonadType = functor (R : sig type r type w val id : w va
   val local : (r -> r) -> 'a t -> 'a t
   val tell : w -> unit t
   val pass : ('a * (w -> w)) t -> 'a t
+  val listen : 'a t -> ('a * w) t
   val censor : (w -> w) -> 'a t -> 'a t
   val run : r -> 'a t -> w * 'a
 end
@@ -135,6 +138,9 @@ module ReaderWriterMonad : ReaderWriterMonadType =
   let pass x = fun r ->
     let (w, (v, f)) = x r in
     f w, v
+  let listen x = fun r ->
+    let (w, v) = x r in
+    w, (v, w)
   let censor f x = fun r ->
     let (w, x) = x r in (f w, x)
 
@@ -186,6 +192,7 @@ module type StateWriterMonadType = functor (R : sig type s type w val id : w val
   val modify : (s -> s) -> unit t
   val tell : w -> unit t
   val pass : ('a * (w -> w)) t -> 'a t
+  val listen : 'a t -> ('a * w) t
   val censor : (w -> w) -> 'a t -> 'a t
   val run : s -> 'a t -> s * w * 'a
 end
@@ -212,6 +219,9 @@ module StateWriterMonad : StateWriterMonadType =
     let pass x = fun s ->
       let (s, w, (v, f)) = x s in
       s, f w, v
+    let listen x = fun s ->
+      let (s, w, v) = x s in
+      s, w, (v, w)
     let censor f x = fun s ->
       let (s, w, x) = x s in (s, f w, x)
 
@@ -229,6 +239,7 @@ module type ReaderStateWriterMonadType =
   val modify : (s -> s) -> unit t
   val tell : w -> unit t
   val pass : ('a * (w -> w)) t -> 'a t
+  val listen : 'a t -> ('a * w) t
   val censor : (w -> w) -> 'a t -> 'a t
   val run : r -> s -> 'a t -> s * w * 'a
 end
@@ -257,6 +268,9 @@ module ReaderStateWriterMonad : ReaderStateWriterMonadType =
     let pass x = fun r s ->
       let (s, w, (v, f)) = x r s in
       s, f w, v
+    let listen x = fun r s ->
+      let (s, w, v) = x r s in
+      s, w, (v, w)
     let censor f x = fun r s ->
       let (s, w, k) = x r s in s, f w, k
 
