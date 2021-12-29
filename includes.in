@@ -1,1 +1,0 @@
--I %{lib}%/sexplib0 -I %{lib}%/parsexp -I %{lib}%/sexplib -I %{lib}%/easy-format -I %{lib}%/biniou -I %{lib}%/yojson -I %{lib}%/sexplib -I %{lib}%/ppx_deriving/runtime -I %{lib}%/ppx_deriving_yojson/runtime -I %{lib}%/coq-serapi/serlib -I %{lib}%/coq-serapi/serlib/ltac

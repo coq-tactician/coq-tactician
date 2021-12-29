@@ -14,7 +14,7 @@ tags: [
   "logpath:Tactician"
 ]
 substs: [
-  "includes"
+  "coq-shim/injection-flags"
   "coq-shim/tactician-patch"
   "coq-shim/tactician.ml"
 ]

@@ -1,9 +1,9 @@
 (rule
- (targets tactician-patch tactician.ml)
+ (targets injection-flags tactician-patch tactician.ml)
  ; When installed through opam, we perform substitutions through the 'substs' directive in the opam file.
  ; It also works using this rule, but running opam during an installation can be risky due to sandboxing issues.
  (mode fallback)
- (deps tactician-patch.in tactician.ml.in)
+ (deps injection-flags.in tactician-patch.in tactician.ml.in)
  (action (run opam config subst %{targets})))
 
 (install
