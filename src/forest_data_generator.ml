@@ -204,7 +204,7 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
     let hash = Hashtbl.hash_param 255 255 tac in
     Sexplib.Pre_sexp.List
       [ Std.sexp_of_int hash
-      ; Std.sexp_of_string (Pp.string_of_ppcmds @@ Pptactic.pr_glob_tactic (Global.env ()) tac)
+      (* ; Std.sexp_of_string (Pp.string_of_ppcmds @@ Pptactic.pr_glob_tactic (Global.env ()) tac) *)
       ; Std.sexp_of_list Std.sexp_of_int @@ syntactic_feats tac
       ; Std.sexp_of_list Std.sexp_of_int @@ args ]
 
