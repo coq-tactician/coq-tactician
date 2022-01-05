@@ -18,15 +18,18 @@ homepage: "https://coq-tactician.github.io"
 bug-reports: "https://github.com/coq-tactician/coq-tactician/issues"
 depends: [
   "ocaml" {>= "4.08"}
-  "dune" {>= "2.5" & build}
+  "dune" {>= "2.8"}
+  "dune-site" {>= "2.9.1"}
   "opam-client" {>= "2.1.0~beta2"}
   "cmdliner"
   "coq" {= "dev"}
   "conf-git"
+  "bos" {>= "0.2.1"}
   "coq-tactician-dummy" {= "1.0~beta1" & with-test}
+  "odoc" {with-doc}
 ]
 build: [
-  ["dune" "subst"] {pinned}
+  ["dune" "subst"] {dev}
   [
     "dune"
     "build"
@@ -56,7 +59,6 @@ tags: [
   "logpath:Tactician"
 ]
 substs: [
-  "coq-shim/with-tactician"
   "coq-shim/tactician-patch"
-  "src/tactician.ml"
+  "coq-shim/tactician.ml"
 ]
