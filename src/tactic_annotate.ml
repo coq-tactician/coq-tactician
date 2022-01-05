@@ -26,12 +26,12 @@ let get_ast_settings () = !tac_ast_map_ref
 
 let tac_ast_setting : tac_ast_map -> obj =
   declare_object @@ global_object_nodischarge "TacticianDecompositionSetting"
-    ~cache:(fun (_,m) -> tac_ast_map_ref := m)
+    ~cache:(fun m -> tac_ast_map_ref := m)
     ~subst:None
 
 let ast_setting_lookup ast = Option.default Keep (TacAstMap.find_opt ast (get_ast_settings ()))
 
-let modify_ast_setting ast dec = Lib.add_anonymous_leaf
+let modify_ast_setting ast dec = Lib.add_leaf
     (tac_ast_setting (TacAstMap.add ast dec (get_ast_settings ())))
 
 let outer_record ast = match ast_setting_lookup ast with

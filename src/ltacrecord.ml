@@ -185,8 +185,8 @@ let subst_outcomes (s, { outcomes;  name; tactic; _ }) =
 let tmp_ltac_defs = Summary.ref ~name:"TACTICIANTMPSECTION" []
 let in_section_ltac_defs : (Names.KerName.t * glob_tactic_expr) list -> Libobject.obj =
   Libobject.(declare_object (local_object "LTACRECORDSECTIONLTACS"
-                               ~cache:(fun (obj, p) -> tmp_ltac_defs := p::!tmp_ltac_defs)
-                               ~discharge:(fun (obj, p) -> Some p)))
+                               ~cache:(fun p -> tmp_ltac_defs := p::!tmp_ltac_defs)
+                               ~discharge:(fun p -> Some p)))
 
 let rec with_let_prefix ltac_defs tac =
   let names = List.fold_right Names.KNset.add
@@ -248,7 +248,7 @@ let section_ltac_helper bodies =
     | TacticRedefinition (id, tac) ->
       Tacenv.locate_tactic id, intern tac in
   if not (Global.sections_are_opened ()) then () else
-    Lib.add_anonymous_leaf (in_section_ltac_defs (List.map def_trans bodies))
+    Lib.add_leaf (in_section_ltac_defs (List.map def_trans bodies))
 
 (* TODO: Ugly hack. It seems impossible to obtain the Kername that a notation
    was assigned from outside Tacentries or Tacenv. Therefore we simulate the
@@ -281,7 +281,7 @@ let section_notation_helper prods e =
     let id = find_last_key prods in
     let alias = Tacenv.interp_alias id in
     let func = CAst.make @@ TacFun (List.map Names.Name.mk_name alias.alias_args, alias.alias_body) in
-    Lib.add_anonymous_leaf (in_section_ltac_defs [id, func])
+    Lib.add_leaf (in_section_ltac_defs [id, func])
 
 (* TODO: Determining where we have to call this exactly is tricky business *)
 let load_plugins () =
@@ -294,15 +294,15 @@ let load_plugins () =
 
 let in_db : data_in -> Libobject.obj =
   Libobject.(declare_object { (default_object "LTACRECORD") with
-                              cache_function = (fun (n,({ outcomes; name; tactic; status } : data_in)) ->
+                              cache_function = (fun ({ outcomes; name; tactic; status } : data_in) ->
                                   learner_learn status name outcomes tactic)
-                            ; load_function = (fun i (n, { outcomes; name; tactic; status }) ->
+                            ; load_function = (fun i { outcomes; name; tactic; status } ->
                                   if !global_record then learner_learn status name outcomes tactic else ())
-                            ; open_function = (fun _ _ (_, data) -> ())
-                            ; classify_function = (fun data -> Libobject.Substitute data)
+                            ; open_function = (fun _ _ data -> ())
+                            ; classify_function = (fun data -> Libobject.Substitute)
                             ; subst_function = (fun x ->
                                 load_plugins (); subst_outcomes x)
-                            ; discharge_function = (fun (obj, data) ->
+                            ; discharge_function = (fun data ->
                                 load_plugins ();
                                 let env = Global.env () in
                                 Some (discharge_outcomes env data))
@@ -311,7 +311,7 @@ let in_db : data_in -> Libobject.obj =
                             })
 
 let add_to_db (x : data_in) =
-  Lib.add_anonymous_leaf (in_db x)
+  Lib.add_leaf (in_db x)
 
 (* Types and accessors for state in the proof monad *)
 type localdb = ((Proofview.Goal.t * Proofview.Goal.t list) list * glob_tactic_expr) list
