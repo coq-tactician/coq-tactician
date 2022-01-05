@@ -187,13 +187,13 @@ let mapper r =
         let name = gen_atomic_tactic_expr_name t in
         M.censor (fun ls -> [Node (List.map s2s name @ ls)]) (g t))
   ; cast = (fun c -> M.censor (fun ls -> [Node (s2s "CAst" :: ls)]) c)
-  ; constant = (fun c -> M.tell (s2s @@ Names.Constant.to_string c) >> return c)
-  ; mutind = (fun c -> M.tell (s2s @@ Names.MutInd.to_string c) >> return c)
+  ; constant = (fun c -> M.tell [s2s @@ Names.Constant.to_string c] >> return c)
+  ; mutind = (fun c -> M.tell [s2s @@ Names.MutInd.to_string c] >> return c)
   (* ; short_name = (fun c -> M.tell (s2s "short_name") >> return c) *)
-  ; located = (fun c -> M.tell (s2s "Located") >> c)
-  ; variable = (fun c -> M.tell (s2s @@ Names.Id.to_string c) >> return c)
+  ; located = (fun c -> M.tell [s2s "Located"] >> c)
+  ; variable = (fun c -> M.tell [s2s @@ Names.Id.to_string c] >> return c)
   ; qualid = (fun (p, id) ->
-      M.tell (s2s @@ Libnames.string_of_path @@ Libnames.make_path p id) >> return (p, id))
+      M.tell [s2s @@ Libnames.string_of_path @@ Libnames.make_path p id] >> return (p, id))
   ; constr_pattern = (fun t g ->
         let name = constr_pattern_name t in
         M.censor (fun ls -> [Node (List.map s2s name @ ls)]) (g t))
@@ -214,4 +214,4 @@ let mapper r =
 (* TODO: For now, this function is only for debugging purposes. Many syntactic elements from the AST
    are missing. In particular, non-recursive information is mostly not included. This includes no-recursive
    tactic extensions, binders, etc. *)
-let rec tactic_sexpr t = Node (fst @@ SexprMapper.glob_tactic_expr_map (mapper tactic_sexpr) t)
+let rec tactic_sexpr t = Node (fst @@ M.run @@ SexprMapper.glob_tactic_expr_map (mapper tactic_sexpr) t)

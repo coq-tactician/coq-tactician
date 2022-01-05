@@ -52,7 +52,7 @@ let inline_tactic env t =
                } in
   TacticFinderMapper.glob_tactic_expr_map mapper t
 
-let inline env { outcomes; name; tactic; status } =
+let inline env { outcomes; tactic; name; status; path } =
   let rec inline_constr c = match Constr.kind c with
     | Const (const, u) ->
       if Environ.mem_constant const env then c else
@@ -76,9 +76,8 @@ let inline env { outcomes; name; tactic; status } =
     ; before = inline_proof_state before
     ; after = List.map inline_proof_state after } in
   { outcomes = List.map inline_outcome outcomes
-  ; name
   ; tactic = tactic_make @@ inline_tactic env @@ tactic_repr tactic
-  ; status }
+  ; name; status; path }
 
 let inline env sideff t =
   if sideff = Safe_typing.empty_private_constants then t else inline env t
