@@ -155,7 +155,7 @@ type semilocaldb = data_in list
 let int64_to_knn : (Int64.t, semilocaldb * exn option * Safe_typing.private_constants) Hashtbl.t =
   Hashtbl.create 10
 
-let subst_outcomes (s, { outcomes;  name; tactic; _ }) =
+let subst_outcomes (s, { outcomes; tactic; name; status; path }) =
   let subst_tac tac =
     let tac = tactic_repr tac in
     TS.tactic_make (Tacsubst.subst_tactic s tac) in
@@ -180,7 +180,11 @@ let subst_outcomes (s, { outcomes;  name; tactic; _ }) =
       ; siblings = subst_pd siblings
       ; before = subst_pf before
       ; after = List.map subst_pf after }) outcomes in
-  { outcomes; name = Mod_subst.subst_constant s name; tactic = subst_tac tactic; status = Substituted }
+  let name = Mod_subst.subst_constant s name in
+  let path' = (* TODO: This is a bit of a hack, improve *)
+    Libnames.path_of_string @@ Names.Constant.to_string name in
+  { outcomes; name; tactic = subst_tac tactic
+  ; status = Substituted path; path = path' }
 
 let tmp_ltac_defs = Summary.ref ~name:"TACTICIANTMPSECTION" []
 let in_section_ltac_defs : (Names.KerName.t * glob_tactic_expr) list -> Libobject.obj =
@@ -207,7 +211,7 @@ let rec with_let_prefix ltac_defs tac =
         prefix acc rem in
   prefix tac ltac_defs
 
-let rebuild_outcomes { outcomes; name; tactic; _ } =
+let rebuild_outcomes { outcomes; tactic; name; status; path } =
   let rebuild_tac tac = tactic_make (with_let_prefix !tmp_ltac_defs (tactic_repr tac)) in
   let rec rebuild_pd = function
     | End -> End
@@ -219,10 +223,11 @@ let rebuild_outcomes { outcomes; name; tactic; _ } =
       { parents = List.map (fun (psa, pse) -> (psa, rebuild_ps pse)) parents
       ; siblings = rebuild_pd siblings
       ; before; after }) outcomes in
-  { outcomes; name; tactic = rebuild_tac tactic; status = Discharged }
+  { outcomes; tactic = rebuild_tac tactic
+  ; name; status = Discharged path; path = Lib.make_path @@ Libnames.basename path }
 
-let discharge_outcomes env { outcomes; name; tactic; _ } =
-  if !tmp_ltac_defs = [] then {outcomes; name; tactic; status = Discharged } else
+let discharge_outcomes env { outcomes; tactic; name; status; path } =
+  if !tmp_ltac_defs = [] then {outcomes; tactic; name; status; path } else
     let genarg_print_tac tac =
     let tac = tactic_repr tac in
     TS.tactic_make (discharge env tac) in
@@ -236,7 +241,7 @@ let discharge_outcomes env { outcomes; name; tactic; _ } =
         { parents = List.map (fun (psa, pse) -> (psa, genarg_print_ps pse)) parents
         ; siblings = genarg_print_pd siblings
         ; before; after }) outcomes in
-    { outcomes; name; tactic = genarg_print_tac tactic; status = Discharged }
+    { outcomes; tactic = genarg_print_tac tactic; name; status; path }
 
 let section_ltac_helper bodies =
   tmp_ltac_defs := []; (* Safe to discard tmp state from old section discharge *)
@@ -294,10 +299,11 @@ let load_plugins () =
 
 let in_db : data_in -> Libobject.obj =
   Libobject.(declare_object { (default_object "LTACRECORD") with
-                              cache_function = (fun (n,({ outcomes; name; tactic; status } : data_in)) ->
-                                  learner_learn status name outcomes tactic)
-                            ; load_function = (fun i (n, { outcomes; name; tactic; status }) ->
-                                  if !global_record then learner_learn status name outcomes tactic else ())
+                              cache_function = (fun (n,({ outcomes; tactic; name; status; path } : data_in)) ->
+                                  learner_learn (path, status) outcomes tactic)
+                            ; load_function = (fun i (n, { outcomes; tactic; name; status; path }) ->
+                                  if Names.KerName.equal (Names.Constant.canonical name) (Names.Constant.user name) then
+                                    if !global_record then learner_learn (path, status) outcomes tactic else ())
                             ; open_function = (fun _ _ (_, data) -> ())
                             ; classify_function = (fun data -> Libobject.Substitute data)
                             ; subst_function = (fun x ->
@@ -327,13 +333,13 @@ let mk_outcome (st, sts) =
   ; before = st
   ; after = [] (* List.map goal_to_proof_state sts *) }
 
-let mk_data_in outcomes tactic name =
+let mk_data_in outcomes tactic name path =
   let tactic = TS.tactic_make tactic in
   let outcomes = List.map mk_outcome outcomes in
-  { outcomes; name; tactic; status = Original }
+  { outcomes; tactic; name; status = Original; path }
 
 let record_field : bool Evd.Store.field = Evd.Store.field ()
-let name_field : Names.Constant.t Evd.Store.field = Evd.Store.field ()
+let name_field : (Names.Constant.t * Libnames.full_path) Evd.Store.field = Evd.Store.field ()
 let localdb_field : localdb Evd.Store.field = Evd.Store.field ()
 let goal_stack_field : goal_stack Evd.Store.field = Evd.Store.field ()
 let tactic_trace_field : tactic_trace Proofview_monad.StateStore.field = Proofview_monad.StateStore.field ()
@@ -381,14 +387,18 @@ let set_record b =
 
 let set_name n =
   modify_field name_field (fun _ -> n, ())
-    (fun i -> Names.Constant.make2 Names.ModPath.initial (Names.Label.of_id @@ Names.Id.of_string "__tactician__"))
+    (fun i ->
+       let id = Names.Id.of_string "__tactician__" in
+       Names.Constant.make2 (Global.current_modpath ()) (Names.Label.of_id id), Lib.make_path @@ id)
 
 let get_record () =
   modify_field record_field (fun b -> b, b) (fun i -> true)
 
 let get_name () =
   modify_field name_field (fun n -> n, n)
-    (fun i -> Names.Constant.make2 Names.ModPath.initial (Names.Label.of_id @@ Names.Id.of_string "__tactician__"))
+    (fun i ->
+       let id = Names.Id.of_string "__tactician__" in
+       Names.Constant.make2 (Global.current_modpath ()) (Names.Label.of_id id), Lib.make_path @@ id)
 
 let push_localdb x =
   modify_field localdb_field (fun db -> x::db, ()) (fun () -> [])
@@ -452,11 +462,11 @@ let get_tactic_trace gl =
   get_field_goal2 tactic_trace_field gl (fun _ -> [])
 
 let add_to_db2 id ((outcomes, tactic) : (Proofview.Goal.t * Proofview.Goal.t list) list * glob_tactic_expr)
-    sideff name =
-  let data = mk_data_in outcomes tactic name in
+    sideff name path =
+  let data = mk_data_in outcomes tactic name path in
   add_to_db data;
   let semidb, exn, _ = Hashtbl.find int64_to_knn id in
-  Hashtbl.replace int64_to_knn id (data::semidb, exn, sideff);
+  Hashtbl.replace int64_to_knn id ({ data with status = QedTime }::semidb, exn, sideff);
   if !featureprinting then (
     (* let h s = string_of_int (Hashtbl.hash s) in
      * (\* let l2s fs = "[" ^ (String.concat ", " (List.map (fun x -> string_of_int x) fs)) ^ "]" in *\)
@@ -577,11 +587,11 @@ let tclDebugTac t env debug =
 let predict () =
   let open Proofview in
   let open Notations in
-  get_localdb () >>= fun db -> get_name () >>= fun name ->
+  get_localdb () >>= fun db -> get_name () >>= fun (const, path) ->
   let learner = learner_get () in
   let learner = List.fold_left (fun learner (outcomes, tactic) ->
-      let { outcomes; name; tactic; status} = mk_data_in outcomes tactic name in
-      learner.learn status name outcomes tactic
+      let { outcomes; tactic; name; status; path} = mk_data_in outcomes tactic const path in
+      learner.learn (path, status) outcomes tactic
     ) learner db in
   let cont =
     Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
@@ -719,7 +729,7 @@ let benchmarkSearch name : unit Proofview.tactic =
       | Some t -> t in
     let timeout_command = if !deterministic then fun x -> x else tclTIMEOUT2 abstract_time in
     let max_exec = if !deterministic then Some abstract_time else None in
-    let full_name = Names.Constant.to_string name in
+    let full_name = Libnames.pr_path name in
     let print_success env (wit, count) start_time =
       let tcs, m = List.split (List.map (fun {tac;focus;prediction_index} ->
           ((tac, focus), prediction_index)) wit) in
@@ -728,15 +738,15 @@ let benchmarkSearch name : unit Proofview.tactic =
       let open NonLogical in
       let tstring = Pp.string_of_ppcmds (synthesize_tactic env tcs) in
       (make (fun () -> print_to_eval ("\t" ^ m ^ "\t" ^ tstring ^ "\t" ^ tdiff ^ "\t" ^ string_of_int count))) >>
-      (print_info (Pp.str ("Proof found for " ^ full_name ^ "!"))) in
+      (print_info (Pp.(str "Proof found for " ++ full_name ++ str "!"))) in
     let print_name = NonLogical.make (fun () ->
-        print_to_eval ("\n" ^ (full_name) ^ "\t" ^ string_of_int abstract_time)) in
+        print_to_eval ("\n" ^ Pp.string_of_ppcmds full_name ^ "\t" ^ string_of_int abstract_time)) in
     get_benchmarked () >>= fun benchmarked ->
     if benchmarked then tclUNIT () else
       set_benchmarked () <*>
       let start_time = Unix.gettimeofday () in
       timeout_command (tclENV >>= fun env ->
-                       tclLIFT (NonLogical.print_info (Pp.str ("Start proof search for " ^ full_name))) <*>
+                       tclLIFT (NonLogical.print_info (Pp.(str "Start proof search for " ++ full_name))) <*>
                        tclLIFT print_name <*>
                        commonSearch max_exec >>=
                        fun m -> tclLIFT (print_success env m start_time))
@@ -891,7 +901,8 @@ let record_tac_complete orig tac : glob_tactic_expr =
 let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO: Implement self-learning *)
   let open Proofview in
   let open Notations in
-  let name = Names.Constant.make2 (Global.current_modpath ()) (Names.Label.of_id name) in
+  let const = Names.Constant.make2 (Global.current_modpath ()) (Names.Label.of_id name) in
+  let path = Lib.make_path name in
   let save_db env sideff (db : localdb) =
     let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic env t) in
     let string_tac t = Pp.string_of_ppcmds (tac_pp t) in
@@ -900,7 +911,7 @@ let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO:
       (* TODO: Move this to annotation time *)
       if (String.equal s "admit" || String.equal s "search" || String.is_prefix "search with cache" s
           || String.is_prefix "tactician ignore" s)
-      then () else add_to_db2 id (execs, tac) sideff name;
+      then () else add_to_db2 id (execs, tac) sideff const path;
       try (* This is purely for parsing bug detection and could be removed for performance reasons *)
         let _ = Pcoq.parse_string Pltac.tactic_eoi s in ()
       with e ->
@@ -910,13 +921,13 @@ let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO:
     List.iter (fun trp -> tryadd trp) @@ List.rev db; tclUNIT () in
   let rtac = decompose_annotate tac record_tac_complete in
   let ptac = Tacinterp.eval_tactic rtac in
-  let ptac = set_name name <*> ptac <*> tclENV >>= fun env ->
+  let ptac = set_name (const, path) <*> ptac <*> tclENV >>= fun env ->
     tclEVARMAP >>= fun sigma ->
     let sideff = Evd.eval_side_effects sigma in
     empty_localdb () >>= save_db env sideff.seff_private in
   match !benchmarking with
   | None -> ptac
-  | Some _ -> benchmarkSearch name <*> ptac
+  | Some _ -> benchmarkSearch path <*> ptac
 
 let hide_interp_t (global, t, id, name) =
   let open Proofview in
