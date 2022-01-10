@@ -51,6 +51,7 @@
    coq_ast_map_elements
    extreme_tactic_normalize
    tactic_name_remove
+   proof_equality
  ))
  (libraries
    coq.plugins.ltac
