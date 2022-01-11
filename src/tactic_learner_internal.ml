@@ -164,12 +164,12 @@ let new_learner name (module Learner : TacticianOnlineLearnerType) =
   let module Learner = Learner(TS) in
   let rec functional model =
     { learn = (fun origin exes tac ->
-          functional @@ Lazy.from_val @@ Learner.learn (Lazy.force model) origin exes tac)
+          functional @@ Learner.learn model origin exes tac)
     ; predict = (fun t ->
-          Learner.predict (Lazy.force model) t)
+          Learner.predict model t)
     ; evaluate = (fun outcome tac ->
-          let f, model = Learner.evaluate (Lazy.force model) outcome tac in
-          functional @@ Lazy.from_val model, f) } in
+          let f, model = Learner.evaluate model outcome tac in
+          functional @@ model, f) } in
 
   (* Note: This is lazy to give people a chance to set GOptions before a learner gets initialized *)
   let model = Summary.ref
@@ -184,7 +184,7 @@ let new_learner name (module Learner : TacticianOnlineLearnerType) =
   ; imp_evaluate = (fun outcome tac ->
         let f, m = Learner.evaluate (Lazy.force !model) outcome tac in
         model := Lazy.from_val m; f)
-  ; functional = (fun () -> functional !model) }
+  ; functional = (fun () -> functional (Lazy.force !model)) }
 
 module NullLearner : TacticianOnlineLearnerType = functor (_ : TacticianStructures) -> struct
   type model = unit
