@@ -198,7 +198,7 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
       let args = if inner_record ML then List.map (fun a -> fst (annotate_arg a)) args else args in
       router ML (TacML (CAst.make ?loc (e, args))) (* TODO: Decompose interesting known tactics (such as ssreflect) *)
     | TacAlias CAst.{loc; v=(e, args)} ->
-      let tactician_cache = CString.is_prefix "Tactician.Ltac1.Tactics.search_with_cache"
+      let tactician_cache = CString.is_prefix "Tactician.Ltac1.Tactics.synth_with_cache"
           (Names.KerName.to_string e) in
       let args = if inner_record Alias || tactician_cache then
           List.map (fun a -> fst (annotate_arg a)) args else args in
