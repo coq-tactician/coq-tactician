@@ -546,7 +546,7 @@ let print_goal_short = Proofview.Goal.enter
 
 let synthesize_tactic (env : Environ.env) tcs =
   let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic env t) in
-  Pp.(h 0 (str "search" ++ ws 1 ++ str "with" ++ ws 1 ++ str "cache" ++ ws 1 ++
+  Pp.(h 0 (str "synth" ++ ws 1 ++ str "with" ++ ws 1 ++ str "cache" ++ ws 1 ++
            Pp.str "(" ++ (prlist_with_sep
                             (fun () -> str "; ")
                             (fun (t, i) -> str "only" ++ ws 1 ++ int (1+i) ++ str ":" ++ ws 1 ++ tac_pp t)
@@ -914,7 +914,7 @@ let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO:
     let tryadd (execs, tac) =
       let s = string_tac tac in
       (* TODO: Move this to annotation time *)
-      if (String.equal s "admit" || String.equal s "search" || String.is_prefix "search with cache" s
+      if (String.equal s "admit" || String.equal s "synth" || String.is_prefix "synth with cache" s
           || String.is_prefix "tactician ignore" s)
       then () else add_to_db2 id (execs, tac) sideff const path;
       try (* This is purely for parsing bug detection and could be removed for performance reasons *)

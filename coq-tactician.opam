@@ -24,7 +24,7 @@ depends: [
   "coq" {>= "8.11" & < "8.12~"}
   "conf-git"
   "bos" {>= "0.2.1"}
-  "coq-tactician-dummy" {= "1.0~beta1" & with-test}
+  "coq-tactician-dummy" {= "dev" & with-test}
   "odoc" {with-doc}
 ]
 build: [
