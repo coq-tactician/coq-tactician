@@ -12,7 +12,6 @@
 
 (package
   (name coq-tactician)
-  (version dev)
   (synopsis "Tactician: A Seamless, Interactive Tactic Learner and Prover for Coq")
   (description "Tactician is a tactic learner and prover for the Coq Proof Assistant.
 The system will help users make tactical proof decisions while they retain
@@ -32,4 +31,4 @@ automation.")
     (coq (and (>= 8.14) (< 8.15~)))
     conf-git
     (bos (>= 0.2.1))
-    (coq-tactician-dummy (and (= 1.0~beta1) :with-test))))
+    (coq-tactician-dummy (and (= dev) :with-test))))
