@@ -3,9 +3,9 @@ Section test.
 Tactic Notation "ptrue" := exact I.
 Ltac prefl := reflexivity.
 Goal True. ptrue. Qed.
-Goal True. Suggest. search. Qed.
+Goal True. Suggest. synth. Qed.
 Goal 1 = 1. prefl. Qed.
-Goal 1 = 1. Suggest. search. Qed.
+Goal 1 = 1. Suggest. synth. Qed.
 End test.
-Goal True. Suggest. search. Qed.
-Goal 1 = 1. Suggest. search. Qed.
+Goal True. Suggest. synth. Qed.
+Goal 1 = 1. Suggest. synth. Qed.

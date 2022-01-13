@@ -11,7 +11,7 @@ type 'a trie =
 type hash = int -> int
 
 type 'a lsh_trie =
-  { hashes : hash list
+  { hashes : int list
   ; trie   : 'a trie }
 
 type 'a forest = 'a lsh_trie list
@@ -19,11 +19,12 @@ type 'a forest = 'a lsh_trie list
 let init_trie random depth =
   let mk_hash _ =
     let seed = Random.State.bits random in
-    Hashtbl.seeded_hash seed in
+    seed in
   { hashes = List.init depth mk_hash
   ; trie   = Leaf [] }
 
 let min_hash h feats =
+  let h = Hashtbl.seeded_hash h in
   (* Empty `feats` hashing to the same `max_int` value is okay, because then
      all empty objects collide. Note that the hash functions never produce `max_int`. *)
   let min = List.fold_left (fun m x -> min m (h x)) max_int feats in
