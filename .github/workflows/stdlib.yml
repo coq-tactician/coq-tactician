@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v2
         with:
           repository: 'coq-tactician/coq-tactician-stdlib'
-          ref: 'coqdev'
+          ref: 'coq8.14'
           path: 'coq-tactician-stdlib'
       - uses: coq-community/docker-coq-action@v1.2.3
         with:
