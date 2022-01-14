@@ -1260,9 +1260,8 @@ module MakeMapper (M: MapDef) = struct
        let+ args = List.map (tactic_arg_map m) args in
        TacAlias (id, args)
   and tactic_map
-      (m : 'a tactic_mapper) (CAst.{v=tac'; loc} : 'a gen_tactic_expr) : 'a gen_tactic_expr t =
-    let+ tac' = tactic_r_map m tac' in
-    CAst.make ?loc tac'
+      (m : 'a tactic_mapper) (tac : 'a gen_tactic_expr) : 'a gen_tactic_expr t =
+    mcast m.u (tactic_r_map m) tac
 
   let rec recursor m =
     { option_map = option_map
