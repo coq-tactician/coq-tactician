@@ -162,7 +162,7 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
     | TacFirst ts       ->                 router First (TacFirst (List.map (rinner First) ts))
     | TacComplete t     ->                 router Complete (TacComplete (rinner Complete t))
     | TacSolve ts       ->                 router Solve (TacSolve (List.map (rinner Solve) ts))
-    | TacTry t          ->                 CAst.make ?loc @@ TacTry (annotate tac) (* No need to record try *)
+    | TacTry t          ->                 CAst.make ?loc @@ TacTry (annotate t) (* No need to record try *)
     | TacOr (t1, t2)    ->                 router Or (TacOr (rinner Or t1, rinner Or t2))
     | TacOnce t         ->                 router Once (TacOnce (rinner Once t))
     | TacExactlyOnce t  ->                 router ExactlyOnce (TacExactlyOnce (rinner ExactlyOnce t))

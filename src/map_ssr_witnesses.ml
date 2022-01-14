@@ -104,10 +104,38 @@ module SSRMap (M : MapDef) = struct
     and+ clr = ssrhyps_map m clr in
     (doccs, clr)
 
-  (* TODO: We are blocked from accessing this one *)
-  let cpattern_map _ = id
-  (* TODO: We are blocked from accessing this one *)
-  let rpattern_map _ = id
+  let cpattern_map m ({ pattern; _} as p : cpattern) : cpattern t =
+    let+ pattern = m.glob_constr_and_expr_map pattern in
+    { p with pattern }
+
+  let ssrpattern_map f g (c : ('a, 'b) ssrpattern) = match c with
+    | T t ->
+      let+ t = g t in
+      T t
+    | In_T t ->
+      let+ t = g t in
+      In_T t
+    | X_In_T (i, t) ->
+      let+ i = f i
+      and+ t = g t in
+      X_In_T (i, t)
+    | In_X_In_T (i, t) ->
+      let+ i = f i
+      and+ t = g t in
+      In_X_In_T (i, t)
+    | E_In_X_In_T (t1, i, t2) ->
+      let+ t1 = g t1
+      and+ i = f i
+      and+ t2 = g t2 in
+      E_In_X_In_T (t1, i, t2)
+    | E_As_X_In_T (t1, i, t2) ->
+      let+ t1 = g t1
+      and+ i = f i
+      and+ t2 = g t2 in
+      E_As_X_In_T (t1, i, t2)
+
+  let rpattern_map m (p : rpattern) =
+    ssrpattern_map (cpattern_map m) (cpattern_map m) p
 
   let ssrarg_map m ((fwdview, (eqid, (agens, ipats))) : ssrarg) : ssrarg t =
     let+ fwdview = List.map (ast_closure_term_map m) fwdview
