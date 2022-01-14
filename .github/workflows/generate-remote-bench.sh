@@ -20,7 +20,7 @@ jobs:
           chmod 600 bench-key
           BENCHID=$(ssh -i bench-key -o StrictHostKeyChecking=no -o LogLevel=error \
               ${{ secrets.BENCH_HOST }} http://github.com/${{ github.repository }}.git \
-              $GITHUB_SHA coq-tactician-stdlib.dev \"\" \"Set Tactician Benchmark 40.\")
+              $GITHUB_SHA coq-tactician-stdlib.8.15.dev \"\" \"Set Tactician Benchmark 40.\")
           echo $BENCHID
           echo "::set-output name=benchid::$BENCHID"
 EOF
