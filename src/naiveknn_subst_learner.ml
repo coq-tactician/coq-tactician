@@ -60,14 +60,14 @@ module NaiveKnnSubst (SF : sig type second_feat end) = functor (TS : TacticianSt
       let comb = {features = feats; context = ctx; obj = obj; substituted_hash = sh} in
       let newfreq = List.fold_left
           (fun freq f ->
-             Frequencies.update f (fun y -> Some ((default 0 y) + 1)) freq)
+             Frequencies.update f (fun y -> Some ((Option.default 0 y) + 1)) freq)
           db.frequencies
           feats in
       let max = 1000 in
       let last, purgedentries = if db.length >= max then deletelast db.entries else ([], db.entries) in
       let newfreq = List.fold_left
           (fun freq f ->
-             Frequencies.update f (fun y -> Some ((default 1 y) - 1)) freq)
+             Frequencies.update f (fun y -> Some ((Option.default 1 y) - 1)) freq)
           newfreq
           last in
       (* TODO: Length needs to be adjusted if we want to use multisets  *)

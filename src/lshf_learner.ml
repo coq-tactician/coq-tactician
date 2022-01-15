@@ -121,7 +121,7 @@ module LSHF =
     let feats = to_feats b in
     let frequencies = List.fold_left
         (fun freq f ->
-           Frequencies.update f (fun y -> Some ((default 0 y) + 1)) freq)
+           Frequencies.update f (fun y -> Some ((Option.default 0 y) + 1)) freq)
         db.frequencies
         feats in
     (* TODO: Length needs to be adjusted if we want to use multisets  *)

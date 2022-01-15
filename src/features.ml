@@ -365,7 +365,7 @@ module F (TS: TacticianStructures) = struct
     List.fold_left (+.) 0.
       (List.map
          (fun f -> Float.log ((Float.of_int (1 + size)) /.
-                              (Float.of_int (1 + (default 0 (Frequencies.find_opt f freqs))))))
+                              (Float.of_int (1 + (Option.default 0 (Frequencies.find_opt f freqs))))))
          inter)
 
   let remove_feat_kind l =
@@ -375,7 +375,7 @@ module F (TS: TacticianStructures) = struct
     let inter = intersect (fun x y -> compare (snd x) y) ls1 ls2 in
     let similarity_for_one_feat feat =
       Float.log ((Float.of_int (1 + size)) /.
-                 (Float.of_int (1 + (default 0 (Frequencies.find_opt feat freq)))))
+                 (Float.of_int (1 + (Option.default 0 (Frequencies.find_opt feat freq)))))
     in
     List.fold_left (+.) 0.
       (List.map

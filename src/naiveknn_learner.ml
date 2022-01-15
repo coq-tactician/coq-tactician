@@ -67,14 +67,14 @@ module NaiveKnn = functor (TS : TacticianStructures) -> struct
     let comb = { features; obj } in
     let frequencies = List.fold_left
         (fun freq f ->
-           Frequencies.update f (fun y -> Some ((default 0 y) + 1)) freq)
+           Frequencies.update f (fun y -> Some ((Option.default 0 y) + 1)) freq)
         frequencies
         features in
     let out, entries = CircularQueue.add comb entries in
     let frequencies = Option.cata (fun out ->
         List.fold_left
           (fun freq f ->
-             Frequencies.update f (fun y -> Some ((default 1 y) - 1)) freq)
+             Frequencies.update f (fun y -> Some ((Option.default 1 y) - 1)) freq)
           frequencies out.features)
         frequencies out in
     { entries; frequencies }
