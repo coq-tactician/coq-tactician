@@ -20,75 +20,6 @@ module F (TS: TacticianStructures) = struct
     Feedback.msg_warning (Pp.str ("Tactician did not know how to handle something. Please report. "
                                   ^ sexpr_to_string lterm ^ " : " ^sexpr_to_string oterm))
 
-  let term_sexpr_to_simple_features maxlength oterm =
-    let atomtypes = ["Evar"; "Rel"; "Construct"; "Ind"; "Const"; "Var"; "Int"; "Float"] in
-    let is_atom nodetype = List.exists (String.equal nodetype) atomtypes in
-    let atom_to_string atomtype content = match atomtype, content with
-      | "Rel", _ -> "R"
-      | "Evar", (Leaf _ :: _) -> "E"
-      | "Construct", Leaf c :: _
-      | "Ind", Leaf c :: _
-      | "Var", Leaf c :: _
-      | "Const", Leaf c :: _ -> c
-      | "Int", Leaf c :: _ -> "i" ^ c
-      | "Float", Leaf c :: _ -> "f" ^ c
-      | _, _ -> warn (Leaf "KAK") oterm; "*"
-    in
-
-    (* for a tuple `(interm, acc)`:
-       - `interm` is an intermediate list of list of features that are still being assembled
-         invariant: `forall i ls, 0<i<=maxlength -> In ls (List.nth (i - 1)) -> List.length ls = i`
-       - `acc`: accumulates features that are fully assembled *)
-    let add_atom atomtype content (interm, acc) =
-      let atom = atom_to_string atomtype content in
-      let interm' = [[atom]] :: List.map (List.map (fun fs -> atom::fs)) interm in
-      (removelast interm', List.flatten interm' @ acc) in
-
-    let set_interm (_interm, acc) x = x, acc in
-    let start = replicate [] (maxlength - 1) in
-    let reset_interm f = set_interm f start in
-    let rec aux_reset f term = reset_interm (aux (reset_interm f) term)
-    and aux_reset_fold f terms = List.fold_left aux_reset f terms
-    and aux ((interm, _acc) as f) term = match term with
-
-      (* Interesting leafs *)
-      | Node (Leaf nt :: ls) when is_atom nt ->
-        add_atom nt ls f
-
-      (* Uninteresting leafs *)
-      | Node (Leaf "Sort" :: _)
-      | Node (Leaf "Meta" :: _) -> f
-
-      (* Recursion for grammar we don't handle *)
-      (* TODO: Handle binders with feature substitution *)
-      | Node [Leaf "LetIn"; _id; _; body1; typ; body2] ->
-        aux_reset_fold f [body1; typ; body2]
-      | Node (Leaf "Case" :: _ :: term :: typ :: cases) ->
-        aux_reset_fold f (term::typ::cases)
-      | Node [Leaf "Fix"; _; Node types; Node terms]
-      | Node [Leaf "CoFix"; _ ; Node types; Node terms] ->
-        aux_reset_fold f (terms @ types)
-      (* TODO: Handle implication separately *)
-      | Node [Leaf "Prod"  ; _; _; typ; body]
-      | Node [Leaf "Lambda"; _; _; typ; body] -> aux_reset_fold f [typ; body]
-
-      (* The golden path *)
-      | Node [Leaf "Proj"; p; term] -> aux (add_atom "Const" [p] f) term
-      | Node (Leaf "App" :: head :: args) ->
-        let interm', _ as f' = aux f head in
-        (* We reset back to `interm'` for every arg *)
-        reset_interm (List.fold_left (fun f' t -> set_interm (aux f' t) interm') f' args)
-      | Node [Leaf "Cast"; term; _; typ] ->
-        (* We probably want to have the type of the cast, but isolated *)
-        aux (set_interm (aux (reset_interm f) typ) interm) term
-
-      (* Hope and pray *)
-      | term -> warn term oterm; f
-    in
-    let _, res = aux (start, []) oterm in
-    (* We use tail-recursive rev_map instead of map to avoid stack overflows on large proof states *)
-    List.rev_map (String.concat "-") res
-
   type simple_token =
     | TRel
     | TEvar
@@ -209,23 +140,7 @@ module F (TS: TacticianStructures) = struct
     in
     rep_elem_aux [] n elem
 
-  let proof_state_to_simple_features max_length ps =
-    let hyps = proof_state_hypotheses ps in
-    let goal = proof_state_goal ps in
-    let mkfeats t =
-      let x = term_sexpr t in
-      term_sexpr_to_simple_features max_length (x) in
-    (* TODO: distinquish goal features from hyp features *)
-    let hyp_feats = List.map (function
-        | Named.Declaration.LocalAssum (_, typ) ->
-          mkfeats typ
-        | Named.Declaration.LocalDef (_, term, typ) ->
-          mkfeats typ @ mkfeats term)
-        hyps in
-    let x = mkfeats goal in
-    x @ List.flatten hyp_feats
-
-  let proof_state_to_simple_features2 ~gen_feat ~store_feat:(acc, add) max_length ps =
+  let proof_state_to_simple_features ~gen_feat ~store_feat:(acc, add) max_length ps =
     let hyps = proof_state_hypotheses ps in
     let goal = proof_state_goal ps in
     let mkfeats t acc =
@@ -237,18 +152,7 @@ module F (TS: TacticianStructures) = struct
     let acc = List.fold_left (fun a b -> Named.Declaration.fold_constr mkfeats b a) acc hyps in
     mkfeats goal acc
 
-  let context_simple_features max_length ctx =
-    let mkfeats t = term_sexpr_to_simple_features max_length (term_sexpr t) in
-    context_map mkfeats mkfeats ctx
-
   let context_simple_ints ctx =
-    let ctx = context_simple_features 2 ctx in
-
-    (* Tail recursive version of map, because these lists can get very large. *)
-    let to_ints feats = List.sort_uniq Int.compare (List.rev_map Hashtbl.hash feats) in
-    context_map to_ints to_ints ctx
-
-  let context_simple_ints2 ctx =
     let mkfeats t = term_sexpr_to_simple_features2
         ~gen_feat:(simple_token_to_int, Hashset.Combine.combine)
         ~store_feat:(Int.Set.empty, (fun a b -> Int.Set.add b a))
@@ -257,26 +161,14 @@ module F (TS: TacticianStructures) = struct
     context_map to_ints to_ints ctx
 
   let proof_state_to_simple_ints ps =
-    let feats = proof_state_to_simple_features 2 ps in
-    (* print_endline (String.concat ", " feats); *)
-    (* Tail recursive version of map, because these lists can get very large. *)
-    let feats = List.rev_map Hashtbl.hash feats in
-    List.sort_uniq Int.compare feats
-
-  let proof_state_to_simple_strings ps =
-    let feats = proof_state_to_simple_features 2 ps in
-    List.sort_uniq String.compare feats
-
-  let proof_state_to_simple_ints2 ps =
-    let feats = proof_state_to_simple_features2
+    let feats = proof_state_to_simple_features
         ~gen_feat:(simple_token_to_int, Hashset.Combine.combine)
         ~store_feat:(Int.Set.empty, (fun a b -> Int.Set.add b a))
         2 ps in
-    (* TODO: Consider using sets all throughout the models instead of lists *)
     Int.Set.elements feats
 
-  let proof_state_to_simple_strings2 ps =
-    let feats = proof_state_to_simple_features2
+  let proof_state_to_simple_strings ps =
+    let feats = proof_state_to_simple_features
         ~gen_feat:(simple_token_to_string, (fun s1 s2 -> s1 ^ "-" ^ s2))
         ~store_feat:(CString.Set.empty, (fun a b -> CString.Set.add b a))
         2 ps in
