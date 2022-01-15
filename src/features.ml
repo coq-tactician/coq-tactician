@@ -123,23 +123,6 @@ module F (TS: TacticianStructures) = struct
     in
     snd @@ aux (start, empty) oterm
 
-  let disting_hyps_goal ls symbol =
-    (* We use tail-recursive rev_map instead of map to avoid stack overflows on large proof states *)
-    List.rev_map (fun (feat_kind, feat) -> feat_kind, symbol ^ feat) ls
-
-  let get_top_interm interm =
-    let flat_interm = List.flatten interm in
-    if flat_interm <> [] then
-      List.nth flat_interm (List.length flat_interm -1)
-    else
-      []
-    (* List.hd (List.rev flat_interm)  *)
-  let rep_elem n elem =
-    let rec rep_elem_aux acc n elem =
-      if n = 0 then acc else rep_elem_aux (elem :: acc) (n-1) elem
-    in
-    rep_elem_aux [] n elem
-
   let proof_state_to_simple_features ~gen_feat ~store_feat:(acc, add) max_length ps =
     let hyps = proof_state_hypotheses ps in
     let goal = proof_state_goal ps in
@@ -173,6 +156,12 @@ module F (TS: TacticianStructures) = struct
         ~store_feat:(CString.Set.empty, (fun a b -> CString.Set.add b a))
         2 ps in
     CString.Set.elements feats
+
+  let rep_elem n elem =
+    let rec rep_elem_aux acc n elem =
+      if n = 0 then acc else rep_elem_aux (elem :: acc) (n-1) elem
+    in
+    rep_elem_aux [] n elem
 
   let count_dup l =
     let sl = List.sort compare l in
