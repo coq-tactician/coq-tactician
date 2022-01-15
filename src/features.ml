@@ -1,6 +1,7 @@
 open Tactic_learner
 open Context
 open Learner_helper
+open Names
 
 type feat_kind = Struct | Seman | Verti
 type semantic_features = {interm:string list list list; acc:string list list}
@@ -88,6 +89,84 @@ module F (TS: TacticianStructures) = struct
     (* We use tail-recursive rev_map instead of map to avoid stack overflows on large proof states *)
     List.rev_map (String.concat "-") res
 
+  type simple_tokens =
+    | X
+
+  let global2s g =
+    let a = Globnames.canonical_gr g in
+    let b = Nametab.path_of_global (a) in
+    Libnames.string_of_path b
+
+  let constant2s c = global2s (GlobRef.ConstRef c)
+
+  let inductive2s i = global2s (GlobRef.IndRef i)
+
+  let constructor2s c =
+    global2s (GlobRef.ConstructRef c)
+
+  let id2s id = Id.to_string id
+
+  let term_sexpr_to_simple_features2 maxlength (oterm : Constr.t) =
+    let open Constr in
+
+    (* for a tuple `(interm, acc)`:
+       - `interm` is an intermediate list of list of features that are still being assembled
+         invariant: `forall i ls, 0<i<=maxlength -> In ls (List.nth (i - 1)) -> List.length ls = i`
+       - `acc`: accumulates features that are fully assembled *)
+    let add_atom atom (interm, acc) =
+      let interm' = [[atom]] :: List.map (List.map (fun fs -> atom::fs)) interm in
+      (removelast interm', List.flatten interm' @ acc) in
+
+    let set_interm (_interm, acc) x = x, acc in
+    let start = replicate [] (maxlength - 1) in
+    let reset_interm f = set_interm f start in
+    let rec aux_reset f term = reset_interm (aux (reset_interm f) term)
+    and aux_reset_fold f terms = List.fold_left aux_reset f terms
+    and aux ((interm, _acc) as f) (term : constr) =
+      match kind term with
+      (* Interesting leafs *)
+      | Rel _ -> add_atom "R" f
+      | Evar _ -> add_atom "E" f
+      | Construct (c, u) -> add_atom (constructor2s c) f
+      | Ind (i, u) -> add_atom (inductive2s i) f
+      | Var id -> add_atom (id2s id) f
+      | Const (c, u) -> add_atom (constant2s c) f
+      | Int n -> add_atom ("i" ^ Uint63.to_string n) f
+      | Float n -> add_atom ("f" ^ Float64.to_string n) f
+
+      (* Uninteresting leafs *)
+      | Sort _
+      | Meta _ -> f
+
+      (* Recursion for grammar we don't handle *)
+      (* TODO: Handle binders with feature substitution *)
+      | LetIn (id, body1, typ, body2) ->
+        aux_reset_fold f [body1; typ; body2]
+      | Case (_, term, typ, cases) ->
+        aux_reset_fold f (term::typ::(Array.to_list cases))
+      | Fix (_, (_, typs, trms))
+      | CoFix (_, (_, typs, trms)) ->
+        aux_reset_fold f (Array.to_list trms @ Array.to_list typs)
+      (* TODO: Handle implication separately *)
+      | Prod (_, typ, body)
+      | Lambda (_, typ, body) ->
+        aux_reset_fold f [typ; body]
+
+      (* The golden path *)
+      | Proj (proj, trm) ->
+        aux (add_atom (constant2s (Names.Projection.constant proj)) f) trm
+      | App (head, args) ->
+        let interm', _ as f' = aux f head in
+        (* We reset back to `interm'` for every arg *)
+        reset_interm (List.fold_left (fun f' t -> set_interm (aux f' t) interm') f' @@ Array.to_list args)
+      | Cast (term, _, typ) ->
+        (* We probably want to have the type of the cast, but isolated *)
+        aux (set_interm (aux (reset_interm f) typ) interm) term
+    in
+    let _, res = aux (start, []) oterm in
+    (* We use tail-recursive rev_map instead of map to avoid stack overflows on large proof states *)
+    List.rev_map (String.concat "-") res
+
   let disting_hyps_goal ls symbol =
     (* We use tail-recursive rev_map instead of map to avoid stack overflows on large proof states *)
     List.rev_map (fun (feat_kind, feat) -> feat_kind, symbol ^ feat) ls
@@ -121,8 +200,28 @@ module F (TS: TacticianStructures) = struct
     let x = mkfeats goal in
     x @ List.flatten hyp_feats
 
+  let proof_state_to_simple_features2 max_length ps =
+    let hyps = proof_state_hypotheses ps in
+    let goal = proof_state_goal ps in
+    let mkfeats t =
+      let x = term_repr t in
+      term_sexpr_to_simple_features2 max_length x in
+    (* TODO: distinquish goal features from hyp features *)
+    let hyp_feats = List.map (function
+        | Named.Declaration.LocalAssum (_, typ) ->
+          mkfeats typ
+        | Named.Declaration.LocalDef (_, term, typ) ->
+          mkfeats typ @ mkfeats term)
+        hyps in
+    let x = mkfeats goal in
+    x @ List.flatten hyp_feats
+
   let context_simple_features max_length ctx =
     let mkfeats t = term_sexpr_to_simple_features max_length (term_sexpr t) in
+    context_map mkfeats mkfeats ctx
+
+  let context_simple_features2 max_length ctx =
+    let mkfeats t = term_sexpr_to_simple_features2 max_length (term_repr t) in
     context_map mkfeats mkfeats ctx
 
   let context_simple_ints ctx =
@@ -132,13 +231,27 @@ module F (TS: TacticianStructures) = struct
     let to_ints feats = List.sort_uniq Int.compare (List.rev_map Hashtbl.hash feats) in
     context_map to_ints to_ints ctx
 
+  let context_simple_ints2 ctx =
+    let ctx = context_simple_features2 2 ctx in
+
+    (* Tail recursive version of map, because these lists can get very large. *)
+    let to_ints feats = List.sort_uniq Int.compare (List.rev_map Hashtbl.hash feats) in
+    context_map to_ints to_ints ctx
+
   let proof_state_to_simple_ints ps =
     let feats = proof_state_to_simple_features 2 ps in
-    (* print_endline (String.concat ", " feats); *) 
+    (* print_endline (String.concat ", " feats); *)
     (* Tail recursive version of map, because these lists can get very large. *)
     let feats = List.rev_map Hashtbl.hash feats in
     List.sort_uniq Int.compare feats
-  
+
+  let proof_state_to_simple_ints2 ps =
+    let feats = proof_state_to_simple_features2 2 ps in
+    (* print_endline (String.concat ", " feats); *)
+    (* Tail recursive version of map, because these lists can get very large. *)
+    let feats = List.rev_map Hashtbl.hash feats in
+    List.sort_uniq Int.compare feats
+
   let count_dup l =
     let sl = List.sort compare l in
     match sl with
@@ -146,8 +259,8 @@ module F (TS: TacticianStructures) = struct
     | hd::tl ->
       let acc,x,c = List.fold_left (fun (acc,x,c) y ->
           if y = x then acc,x,c+1 else (x,c)::acc, y,1) ([],hd,1) tl in
-      (x,c)::acc    
-      
+      (x,c)::acc
+
   let term_sexpr_to_complex_features maxlength oterm =
     let atomtypes = ["Evar"; "Rel"; "Construct"; "Ind"; "Const"; "Var"; "Int"; "Float"] in
     let is_atom nodetype = List.exists (String.equal nodetype) atomtypes in
