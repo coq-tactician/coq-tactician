@@ -61,7 +61,7 @@ module F (TS: TacticianStructures) = struct
     | TInt n -> Uint63.hash n
     | TFloat n -> Float64.hash n
 
-  let term_sexpr_to_simple_features2
+  let term_sexpr_to_simple_features
       ~gen_feat:(init, comb)
       ~store_feat:(empty, add)
       maxlength (oterm : Constr.t) =
@@ -128,7 +128,7 @@ module F (TS: TacticianStructures) = struct
     let goal = proof_state_goal ps in
     let mkfeats t acc =
       let x = term_repr t in
-      term_sexpr_to_simple_features2
+      term_sexpr_to_simple_features
         ~gen_feat
         ~store_feat:(acc, add) max_length x in
     (* TODO: distinquish goal features from hyp features *)
@@ -136,7 +136,7 @@ module F (TS: TacticianStructures) = struct
     mkfeats goal acc
 
   let context_simple_ints ctx =
-    let mkfeats t = term_sexpr_to_simple_features2
+    let mkfeats t = term_sexpr_to_simple_features
         ~gen_feat:(simple_token_to_int, Hashset.Combine.combine)
         ~store_feat:(Int.Set.empty, (fun a b -> Int.Set.add b a))
         2 (term_repr t) in
