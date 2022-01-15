@@ -130,7 +130,10 @@ module F (TS: TacticianStructures) = struct
     | TInt n -> Uint63.hash n
     | TFloat n -> Float64.hash n
 
-  let term_sexpr_to_simple_features2 init comb maxlength (oterm : Constr.t) =
+  let term_sexpr_to_simple_features2
+      ~gen_feat:(init, comb)
+      ~store_feat:(empty, add)
+      maxlength (oterm : Constr.t) =
     let open Constr in
 
     (* for a tuple `(interm, acc)`:
@@ -140,7 +143,7 @@ module F (TS: TacticianStructures) = struct
     let add_atom atom (interm, acc) =
       let atom = init atom in
       let interm' = [atom] :: List.map (List.map (comb atom)) interm in
-      (removelast interm', List.flatten interm' @ acc) in
+      (removelast interm', List.fold_left add acc @@ List.flatten interm') in
     let set_interm (_interm, acc) x = x, acc in
     let start = replicate [] (maxlength - 1) in
     let reset_interm f = set_interm f start in
@@ -187,7 +190,7 @@ module F (TS: TacticianStructures) = struct
         (* We probably want to have the type of the cast, but isolated *)
         aux (set_interm (aux (reset_interm f) typ) interm) term
     in
-    snd @@ aux (start, []) oterm
+    snd @@ aux (start, empty) oterm
 
   let disting_hyps_goal ls symbol =
     (* We use tail-recursive rev_map instead of map to avoid stack overflows on large proof states *)
@@ -222,28 +225,20 @@ module F (TS: TacticianStructures) = struct
     let x = mkfeats goal in
     x @ List.flatten hyp_feats
 
-  let proof_state_to_simple_features2 init comb max_length ps =
+  let proof_state_to_simple_features2 ~gen_feat ~store_feat:(acc, add) max_length ps =
     let hyps = proof_state_hypotheses ps in
     let goal = proof_state_goal ps in
-    let mkfeats t =
+    let mkfeats t acc =
       let x = term_repr t in
-      term_sexpr_to_simple_features2 init comb max_length x in
+      term_sexpr_to_simple_features2
+        ~gen_feat
+        ~store_feat:(acc, add) max_length x in
     (* TODO: distinquish goal features from hyp features *)
-    let hyp_feats = List.map (function
-        | Named.Declaration.LocalAssum (_, typ) ->
-          mkfeats typ
-        | Named.Declaration.LocalDef (_, term, typ) ->
-          mkfeats typ @ mkfeats term)
-        hyps in
-    let x = mkfeats goal in
-    x @ List.flatten hyp_feats
+    let acc = List.fold_left (fun a b -> Named.Declaration.fold_constr mkfeats b a) acc hyps in
+    mkfeats goal acc
 
   let context_simple_features max_length ctx =
     let mkfeats t = term_sexpr_to_simple_features max_length (term_sexpr t) in
-    context_map mkfeats mkfeats ctx
-
-  let context_simple_features2 init comb max_length ctx =
-    let mkfeats t = term_sexpr_to_simple_features2 init comb max_length (term_repr t) in
     context_map mkfeats mkfeats ctx
 
   let context_simple_ints ctx =
@@ -254,8 +249,11 @@ module F (TS: TacticianStructures) = struct
     context_map to_ints to_ints ctx
 
   let context_simple_ints2 ctx =
-    let ctx = context_simple_features2 simple_token_to_int Hashset.Combine.combine 2 ctx in
-    let to_ints feats = List.sort_uniq Int.compare feats in
+    let mkfeats t = term_sexpr_to_simple_features2
+        ~gen_feat:(simple_token_to_int, Hashset.Combine.combine)
+        ~store_feat:(Int.Set.empty, (fun a b -> Int.Set.add b a))
+        2 (term_repr t) in
+    let to_ints t = Int.Set.elements (mkfeats t) in
     context_map to_ints to_ints ctx
 
   let proof_state_to_simple_ints ps =
@@ -270,13 +268,19 @@ module F (TS: TacticianStructures) = struct
     List.sort_uniq String.compare feats
 
   let proof_state_to_simple_ints2 ps =
-    let feats = proof_state_to_simple_features2 simple_token_to_int Hashset.Combine.combine 2 ps in
-    List.sort_uniq Int.compare feats
+    let feats = proof_state_to_simple_features2
+        ~gen_feat:(simple_token_to_int, Hashset.Combine.combine)
+        ~store_feat:(Int.Set.empty, (fun a b -> Int.Set.add b a))
+        2 ps in
+    (* TODO: Consider using sets all throughout the models instead of lists *)
+    Int.Set.elements feats
 
   let proof_state_to_simple_strings2 ps =
     let feats = proof_state_to_simple_features2
-        simple_token_to_string (fun s1 s2 -> s1 ^ "-" ^ s2) 2 ps in
-    List.sort_uniq String.compare feats
+        ~gen_feat:(simple_token_to_string, (fun s1 s2 -> s1 ^ "-" ^ s2))
+        ~store_feat:(CString.Set.empty, (fun a b -> CString.Set.add b a))
+        2 ps in
+    CString.Set.elements feats
 
   let count_dup l =
     let sl = List.sort compare l in
