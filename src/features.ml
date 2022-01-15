@@ -89,24 +89,48 @@ module F (TS: TacticianStructures) = struct
     (* We use tail-recursive rev_map instead of map to avoid stack overflows on large proof states *)
     List.rev_map (String.concat "-") res
 
-  type simple_tokens =
-    | X
+  type simple_token =
+    | TRel
+    | TEvar
+    | TConstruct of constructor
+    | TInd of inductive
+    | TVar of variable
+    | TConst of Constant.t
+    | TInt of Uint63.t
+    | TFloat of Float64.t
 
   let global2s g =
     let a = Globnames.canonical_gr g in
     let b = Nametab.path_of_global (a) in
     Libnames.string_of_path b
-
   let constant2s c = global2s (GlobRef.ConstRef c)
-
   let inductive2s i = global2s (GlobRef.IndRef i)
-
   let constructor2s c =
     global2s (GlobRef.ConstructRef c)
-
   let id2s id = Id.to_string id
 
-  let term_sexpr_to_simple_features2 maxlength (oterm : Constr.t) =
+  let simple_token_to_string = function
+    | TRel -> "R"
+    | TEvar -> "E"
+    | TConstruct c -> constructor2s c
+    | TInd i -> inductive2s i
+    | TVar id -> id2s id
+    | TConst c -> constant2s c
+    | TInt n -> "i" ^ Uint63.to_string n
+    | TFloat n -> "f" ^ Float64.to_string n
+
+  let simple_token_to_int =
+    function
+    | TRel -> Int.hash 0
+    | TEvar -> Int.hash 1
+    | TConstruct c -> constructor_hash c
+    | TInd i -> ind_hash i
+    | TVar id -> Id.hash id
+    | TConst c -> Constant.CanOrd.hash c
+    | TInt n -> Uint63.hash n
+    | TFloat n -> Float64.hash n
+
+  let term_sexpr_to_simple_features2 init comb maxlength (oterm : Constr.t) =
     let open Constr in
 
     (* for a tuple `(interm, acc)`:
@@ -114,9 +138,9 @@ module F (TS: TacticianStructures) = struct
          invariant: `forall i ls, 0<i<=maxlength -> In ls (List.nth (i - 1)) -> List.length ls = i`
        - `acc`: accumulates features that are fully assembled *)
     let add_atom atom (interm, acc) =
-      let interm' = [[atom]] :: List.map (List.map (fun fs -> atom::fs)) interm in
+      let atom = init atom in
+      let interm' = [atom] :: List.map (List.map (comb atom)) interm in
       (removelast interm', List.flatten interm' @ acc) in
-
     let set_interm (_interm, acc) x = x, acc in
     let start = replicate [] (maxlength - 1) in
     let reset_interm f = set_interm f start in
@@ -125,14 +149,14 @@ module F (TS: TacticianStructures) = struct
     and aux ((interm, _acc) as f) (term : constr) =
       match kind term with
       (* Interesting leafs *)
-      | Rel _ -> add_atom "R" f
-      | Evar _ -> add_atom "E" f
-      | Construct (c, u) -> add_atom (constructor2s c) f
-      | Ind (i, u) -> add_atom (inductive2s i) f
-      | Var id -> add_atom (id2s id) f
-      | Const (c, u) -> add_atom (constant2s c) f
-      | Int n -> add_atom ("i" ^ Uint63.to_string n) f
-      | Float n -> add_atom ("f" ^ Float64.to_string n) f
+      | Rel _ -> add_atom TRel f
+      | Evar _ -> add_atom TEvar f
+      | Construct (c, u) -> add_atom (TConstruct c) f
+      | Ind (i, u) -> add_atom (TInd i) f
+      | Var id -> add_atom (TVar id) f
+      | Const (c, u) -> add_atom (TConst c) f
+      | Int n -> add_atom (TInt n) f
+      | Float n -> add_atom (TFloat n) f
 
       (* Uninteresting leafs *)
       | Sort _
@@ -154,7 +178,7 @@ module F (TS: TacticianStructures) = struct
 
       (* The golden path *)
       | Proj (proj, trm) ->
-        aux (add_atom (constant2s (Names.Projection.constant proj)) f) trm
+        aux (add_atom (TConst (Projection.constant proj)) f) trm
       | App (head, args) ->
         let interm', _ as f' = aux f head in
         (* We reset back to `interm'` for every arg *)
@@ -163,9 +187,7 @@ module F (TS: TacticianStructures) = struct
         (* We probably want to have the type of the cast, but isolated *)
         aux (set_interm (aux (reset_interm f) typ) interm) term
     in
-    let _, res = aux (start, []) oterm in
-    (* We use tail-recursive rev_map instead of map to avoid stack overflows on large proof states *)
-    List.rev_map (String.concat "-") res
+    snd @@ aux (start, []) oterm
 
   let disting_hyps_goal ls symbol =
     (* We use tail-recursive rev_map instead of map to avoid stack overflows on large proof states *)
@@ -200,12 +222,12 @@ module F (TS: TacticianStructures) = struct
     let x = mkfeats goal in
     x @ List.flatten hyp_feats
 
-  let proof_state_to_simple_features2 max_length ps =
+  let proof_state_to_simple_features2 init comb max_length ps =
     let hyps = proof_state_hypotheses ps in
     let goal = proof_state_goal ps in
     let mkfeats t =
       let x = term_repr t in
-      term_sexpr_to_simple_features2 max_length x in
+      term_sexpr_to_simple_features2 init comb max_length x in
     (* TODO: distinquish goal features from hyp features *)
     let hyp_feats = List.map (function
         | Named.Declaration.LocalAssum (_, typ) ->
@@ -220,8 +242,8 @@ module F (TS: TacticianStructures) = struct
     let mkfeats t = term_sexpr_to_simple_features max_length (term_sexpr t) in
     context_map mkfeats mkfeats ctx
 
-  let context_simple_features2 max_length ctx =
-    let mkfeats t = term_sexpr_to_simple_features2 max_length (term_repr t) in
+  let context_simple_features2 init comb max_length ctx =
+    let mkfeats t = term_sexpr_to_simple_features2 init comb max_length (term_repr t) in
     context_map mkfeats mkfeats ctx
 
   let context_simple_ints ctx =
@@ -232,10 +254,8 @@ module F (TS: TacticianStructures) = struct
     context_map to_ints to_ints ctx
 
   let context_simple_ints2 ctx =
-    let ctx = context_simple_features2 2 ctx in
-
-    (* Tail recursive version of map, because these lists can get very large. *)
-    let to_ints feats = List.sort_uniq Int.compare (List.rev_map Hashtbl.hash feats) in
+    let ctx = context_simple_features2 simple_token_to_int Hashset.Combine.combine 2 ctx in
+    let to_ints feats = List.sort_uniq Int.compare feats in
     context_map to_ints to_ints ctx
 
   let proof_state_to_simple_ints ps =
@@ -245,12 +265,18 @@ module F (TS: TacticianStructures) = struct
     let feats = List.rev_map Hashtbl.hash feats in
     List.sort_uniq Int.compare feats
 
+  let proof_state_to_simple_strings ps =
+    let feats = proof_state_to_simple_features 2 ps in
+    List.sort_uniq String.compare feats
+
   let proof_state_to_simple_ints2 ps =
-    let feats = proof_state_to_simple_features2 2 ps in
-    (* print_endline (String.concat ", " feats); *)
-    (* Tail recursive version of map, because these lists can get very large. *)
-    let feats = List.rev_map Hashtbl.hash feats in
+    let feats = proof_state_to_simple_features2 simple_token_to_int Hashset.Combine.combine 2 ps in
     List.sort_uniq Int.compare feats
+
+  let proof_state_to_simple_strings2 ps =
+    let feats = proof_state_to_simple_features2
+        simple_token_to_string (fun s1 s2 -> s1 ^ "-" ^ s2) 2 ps in
+    List.sort_uniq String.compare feats
 
   let count_dup l =
     let sl = List.sort compare l in
