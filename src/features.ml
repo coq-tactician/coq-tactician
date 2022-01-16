@@ -483,30 +483,28 @@ module F (TS: TacticianStructures) = struct
 
         (* Recursion for grammar we don't handle *)
         | LetIn (_, body1, typ, body2) ->
-          let roles = [TLetVarBody; TLetVarType; TLetBody] in
-          end_structure (aux_reset_fold (start_structure features TLetIn)
-                           (List.combine [body1; typ; body2] roles) depth)
+          let cont = [body1, TLetVarBody; typ, TLetVarType; body2, TLetBody] in
+          end_structure (aux_reset_fold (start_structure features TLetIn) cont depth)
         | Case (_, term, typ, cases) ->
           let cases = Array.to_list cases in
-          let roles = ([TMatchTerm; TMatchTermType] @ (rep_elem (List.length cases) TCase)) in
-          end_structure (aux_reset_fold (start_structure features TCase)
-                           (List.combine (term::typ::cases) roles) depth)
+          let cont = [term, TMatchTerm; typ, TMatchTermType] @ (List.map (fun c -> c, TCase) cases) in
+          end_structure (aux_reset_fold (start_structure features TCase) cont depth)
         | Fix (_, (_, types, terms)) ->
           let terms = Array.to_list terms in
           let types = Array.to_list types in
-          let roles = (rep_elem (List.length terms) TFixTerm) @ (rep_elem (List.length types) TFixType) in
-          end_structure (aux_reset_fold (start_structure features TFix) (List.combine (terms @ types) roles) depth)
+          let cont = (List.map (fun c -> c, TFixTerm) terms) @ (List.map (fun c -> c, TFixType) types) in
+          end_structure (aux_reset_fold (start_structure features TFix) cont depth)
         | CoFix (_, (_, types, terms)) ->
           let terms = Array.to_list terms in
           let types = Array.to_list types in
-          let roles = (rep_elem (List.length terms) TCoFixTerm) @ (rep_elem (List.length types) TCoFixType) in
-          end_structure (aux_reset_fold (start_structure features TCoFix) (List.combine (terms @ types) roles) depth)
+          let cont = (List.map (fun c -> c, TCoFixTerm) terms) @ (List.map (fun c -> c, TCoFixType) types) in
+          end_structure (aux_reset_fold (start_structure features TCoFix) cont depth)
         | Prod (_, typ, body) ->
-          let roles = [TProdType; TProdBody] in
-          end_structure(aux_reset_fold (start_structure features TProd) (List.combine [typ; body] roles) depth)
+          let cont = [typ, TProdType; body, TProdBody] in
+          end_structure(aux_reset_fold (start_structure features TProd) cont depth)
         | Lambda (_, typ, body) ->
-          let roles = [TLambdaType; TLambdaBody] in
-          end_structure(aux_reset_fold (start_structure features TLambda) (List.combine [typ; body] roles) depth)
+          let cont = [typ, TLambdaType; body, TLambdaBody] in
+          end_structure(aux_reset_fold (start_structure features TLambda) cont depth)
 
         (* The golden path *)
         | Proj (p, term) ->
