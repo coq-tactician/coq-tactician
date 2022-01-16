@@ -563,37 +563,37 @@ module F (TS: TacticianStructures) = struct
       ~store_feat:acc
       max_length term
 
-    let proof_state_to_complex_features max_length ps =
-      let hyps = proof_state_hypotheses ps in
-      let goal = proof_state_goal ps in
-      let mkfeats t = term_sexpr_to_complex_features max_length (term_sexpr t) in
-      let hyp_id_typ_feats = List.map (function
-          | Named.Declaration.LocalAssum (id, typ) ->
-            (Names.Id.to_string id.binder_name), (sexpr_to_string (term_sexpr typ)), (mkfeats typ)
-          | Named.Declaration.LocalDef (id, term, typ) ->
-            (Names.Id.to_string id.binder_name),(sexpr_to_string (term_sexpr typ)), (mkfeats typ @ mkfeats term))
-          hyps in
-      let hyp_feats = List.map (fun (_, _, feats) -> feats) hyp_id_typ_feats in
-      let goal_feats = mkfeats goal in
-      (* seperate the goal from the local context *)
-      (List.map (fun (kind, feat) -> kind, "GOAL-"^ feat) goal_feats) @
-      (List.map (fun (kind, feat) -> kind, "HYPS-"^ feat) (List.flatten hyp_feats))
+  let proof_state_to_complex_features max_length ps =
+    let hyps = proof_state_hypotheses ps in
+    let goal = proof_state_goal ps in
+    let mkfeats t = term_sexpr_to_complex_features max_length (term_sexpr t) in
+    let hyp_id_typ_feats = List.map (function
+        | Named.Declaration.LocalAssum (id, typ) ->
+          (Names.Id.to_string id.binder_name), (sexpr_to_string (term_sexpr typ)), (mkfeats typ)
+        | Named.Declaration.LocalDef (id, term, typ) ->
+          (Names.Id.to_string id.binder_name),(sexpr_to_string (term_sexpr typ)), (mkfeats typ @ mkfeats term))
+        hyps in
+    let hyp_feats = List.map (fun (_, _, feats) -> feats) hyp_id_typ_feats in
+    let goal_feats = mkfeats goal in
+    (* seperate the goal from the local context *)
+    (List.map (fun (kind, feat) -> kind, "GOAL-"^ feat) goal_feats) @
+    (List.map (fun (kind, feat) -> kind, "HYPS-"^ feat) (List.flatten hyp_feats))
 
-    let proof_state_to_complex_features2 max_length ps =
-      let hyps = proof_state_hypotheses ps in
-      let goal = proof_state_goal ps in
-      let mkfeats prefix t acc = term_sexpr_to_complex_features2 prefix max_length acc (term_repr t) in
-      let hyp_feats = List.fold_left (fun a b -> Named.Declaration.fold_constr (mkfeats "HYPS-") b a) [] hyps in
-      mkfeats "GOAL-" goal hyp_feats
+  let proof_state_to_complex_features2 max_length ps =
+    let hyps = proof_state_hypotheses ps in
+    let goal = proof_state_goal ps in
+    let mkfeats prefix t acc = term_sexpr_to_complex_features2 prefix max_length acc (term_repr t) in
+    let hyp_feats = List.fold_left (fun a b -> Named.Declaration.fold_constr (mkfeats "HYPS-") b a) [] hyps in
+    mkfeats "GOAL-" goal hyp_feats
 
-    let count_dup l =
-      let sl = List.sort compare l in
-      match sl with
-      | [] -> []
-      | hd::tl ->
-        let acc,x,c = List.fold_left (fun (acc,x,c) y ->
-            if y = x then acc,x,c+1 else (x,c)::acc, y,1) ([],hd,1) tl in
-        (x,c)::acc
+  let count_dup l =
+    let sl = List.sort compare l in
+    match sl with
+    | [] -> []
+    | hd::tl ->
+      let acc,x,c = List.fold_left (fun (acc,x,c) y ->
+          if y = x then acc,x,c+1 else (x,c)::acc, y,1) ([],hd,1) tl in
+      (x,c)::acc
 
   let proof_state_to_complex_ints ps =
     let complex_feats = proof_state_to_complex_features 2 ps in
