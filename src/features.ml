@@ -553,14 +553,14 @@ module F (TS: TacticianStructures) = struct
     let features = aux init_features oterm TRoot 0 in
     struct_add features.structure2 features.store
 
-  let term_sexpr_to_complex_features2 max_length term=
+  let term_sexpr_to_complex_features2 prefix max_length acc term =
     let combine a b = if a = "" then b else a ^ "-" ^ b in
     let combine2 f a b = if b = "" then f a else b ^ "-" ^ f a in
     term_sexpr_to_complex_features2
-      ~gen_semantic:(semantic_token_to_string, combine, (fun ls x -> (Seman, x)::ls))
-      ~gen_structural:("", combine2 structural_token_to_string, (fun x ls -> (Struct, x)::ls))
-      ~gen_vertical:("", combine2 vertical_token_to_string, (fun x ls -> (Verti, x)::ls))
-      ~store_feat:[]
+      ~gen_semantic:(semantic_token_to_string, combine, (fun ls x -> (Seman, prefix^x)::ls))
+      ~gen_structural:("", combine2 structural_token_to_string, (fun x ls -> (Struct, prefix^x)::ls))
+      ~gen_vertical:("", combine2 vertical_token_to_string, (fun x ls -> (Verti, prefix^x)::ls))
+      ~store_feat:acc
       max_length term
 
     let proof_state_to_complex_features max_length ps =
@@ -582,15 +582,9 @@ module F (TS: TacticianStructures) = struct
     let proof_state_to_complex_features2 max_length ps =
       let hyps = proof_state_hypotheses ps in
       let goal = proof_state_goal ps in
-      let mkfeats t = term_sexpr_to_complex_features2 max_length (term_repr t) in
-      let hyp_feats = List.map (function
-          | Named.Declaration.LocalAssum (id, typ) -> mkfeats typ
-          | Named.Declaration.LocalDef (id, term, typ) -> mkfeats typ @ mkfeats term)
-          hyps in
-      let goal_feats = mkfeats goal in
-      (* seperate the goal from the local context *)
-      (List.map (fun (kind, feat) -> kind, "GOAL-"^ feat) goal_feats) @
-      (List.map (fun (kind, feat) -> kind, "HYPS-"^ feat) (List.flatten hyp_feats))
+      let mkfeats prefix t acc = term_sexpr_to_complex_features2 prefix max_length acc (term_repr t) in
+      let hyp_feats = List.fold_left (fun a b -> Named.Declaration.fold_constr (mkfeats "HYPS-") b a) [] hyps in
+      mkfeats "GOAL-" goal hyp_feats
 
     let count_dup l =
       let sl = List.sort compare l in
