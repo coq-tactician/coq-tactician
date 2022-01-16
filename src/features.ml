@@ -11,7 +11,7 @@ type 'a semantic_features = { interm: 'a list list; acc: 'a list}
 type 'a vertical_features = { walk: 'a; acc: 'a list}
 type ('a, 'b, 'c) features =
   { semantic : 'a semantic_features
-  ; structure : 'b list
+  ; structure : 'b
   ; vertical: 'c vertical_features }
 
 let global2s g =
@@ -136,10 +136,6 @@ module F (TS: TacticianStructures) = struct
   open LH
   open TS
 
-  let warn lterm oterm =
-    Feedback.msg_warning (Pp.str ("Tactician did not know how to handle something. Please report. "
-                                  ^ sexpr_to_string lterm ^ " : " ^sexpr_to_string oterm))
-
   let term_sexpr_to_simple_features
       ~gen_feat:(init, comb)
       ~store_feat:(empty, add)
@@ -242,15 +238,9 @@ module F (TS: TacticianStructures) = struct
     in
     rep_elem_aux [] n elem
 
-  let count_dup l =
-    let sl = List.sort compare l in
-    match sl with
-    | [] -> []
-    | hd::tl ->
-      let acc,x,c = List.fold_left (fun (acc,x,c) y ->
-          if y = x then acc,x,c+1 else (x,c)::acc, y,1) ([],hd,1) tl in
-      (x,c)::acc
-
+  let warn lterm oterm =
+    Feedback.msg_warning (Pp.str ("Tactician did not know how to handle something. Please report. "
+                                  ^ sexpr_to_string lterm ^ " : " ^sexpr_to_string oterm))
   let term_sexpr_to_complex_features maxlength oterm =
     let atomtypes = ["Evar"; "Rel"; "Construct"; "Ind"; "Const"; "Var"; "Int"; "Float"] in
     let is_atom nodetype = List.exists (String.equal nodetype) atomtypes in
@@ -574,6 +564,15 @@ module F (TS: TacticianStructures) = struct
       (* seperate the goal from the local context *)
       (List.map (fun (kind, feat) -> kind, "GOAL-"^ feat) goal_feats) @
       (List.map (fun (kind, feat) -> kind, "HYPS-"^ feat) (List.flatten hyp_feats))
+
+    let count_dup l =
+      let sl = List.sort compare l in
+      match sl with
+      | [] -> []
+      | hd::tl ->
+        let acc,x,c = List.fold_left (fun (acc,x,c) y ->
+            if y = x then acc,x,c+1 else (x,c)::acc, y,1) ([],hd,1) tl in
+        (x,c)::acc
 
   let proof_state_to_complex_ints ps =
     let complex_feats = proof_state_to_complex_features 2 ps in
