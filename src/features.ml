@@ -8,11 +8,19 @@ type 'a semantic_features = { interm: 'a list list; acc: 'a list}
 (*for `f(g(a), b)` and go to `a`
   walk: the walk from root to `a`
   walk_to_sibiling: walk from root to f such that we can calculate the walk to `b` basing on it*)
-type 'a vertical_features = { walk: 'a; acc: 'a list}
-type ('a, 'b, 'c) features =
+type ('a, 'b) vertical_features =
+  { walk : 'a
+  ; acc : 'b list}
+type ('a, 'b, 'c, 'd) features =
   { semantic : 'a semantic_features
   ; structure : 'b
-  ; vertical: 'c vertical_features }
+  ; vertical: ('c, 'd) vertical_features }
+
+type ('a, 'b, 'c, 'd) features2 =
+  { semantic2 : 'a list list
+  ; structure2 : 'b
+  ; vertical2 : 'c
+  ; store : 'd }
 
 let global2s g =
   let a = Globnames.canonical_gr g in
@@ -386,43 +394,59 @@ module F (TS: TacticianStructures) = struct
        (add_feature_kind features.vertical.acc Verti)))
 
 
-  let term_sexpr_to_complex_features2 maxlength (oterm : Constr.t) =
+  let term_sexpr_to_complex_features2
+      ~gen_semantic:(seman_init, seman_comb, seman_add)
+      ~gen_structural:(struct_init, struct_comb, struct_add)
+      ~gen_vertical:(vert_init, vert_comb, vert_add)
+      ~store_feat:empty
+      maxlength (oterm : Constr.t) =
     let open Constr in
     (* for a tuple `(interm, acc)`:
        - `interm` is an intermediate list of list of features that are still being assembled
          invariant: `forall i ls, 0<i<=maxlength -> In ls (List.nth (i - 1)) -> List.length ls = i`
        - `acc`: accumulates features that are fully assembled *)
-    let add_atom atom features =
-      let interm, acc = features.semantic.interm, features.semantic.acc in
+    let add_atom atom ({ semantic2; store; _ } as features) =
+      let atom = seman_init atom in
       (* `interm` contains term tree walks to maximal depth, maximal depth - 1,..., 1 *)
-      let interm' = [[atom]] :: List.map (List.map (fun fs -> atom::fs)) interm in
+      let semantic2 = [atom] :: List.map (List.map (seman_comb atom)) semantic2 in
       (* Remove the last item to keep the maximal depth constraint.
         The length of `interm` = the maximal depth constraint.
         The initial `interm` is [[walk],[],...,[]]; thus, `removelast` will remove [] in the beginning *)
-      {interm = removelast interm'; acc = List.flatten interm' @ acc}
+      { features with
+        semantic2 = removelast semantic2
+      ; store = List.fold_left seman_add store @@ List.flatten semantic2 }
     in
-    let set_interm features x = {features with semantic = {features.semantic with interm = x}} in
-    let set_walk features x = {features with vertical = {features.vertical with walk = x}} in
+    let add_struct x ({ structure2; _ } as features) =
+      { features with structure2 = struct_comb x structure2 } in
+    let set_interm features semantic2 = { features with semantic2 } in
+    let set_walk features vertical2 = { features with vertical2 } in
     let start = replicate [] (maxlength - 1) in
-    let init_features = {semantic = {interm = replicate [] (maxlength - 1); acc = []} ;
-      structure = []; vertical = {walk = []; acc = []}} in
+    let init_features =
+      { semantic2 = replicate [] (maxlength - 1)
+      ; structure2 = struct_init
+      ; vertical2 = 0, vert_init
+      ; store = empty } in
+    let add_walk w ({ vertical2 = l, x; _ } as features) =
+      { features with
+        vertical2 = l+1, vert_comb w x } in
     let reset_interm features = set_interm features start in
-    let start_structure features role =
-      { features with structure = TRole role::TOpenParen::features.structure }
+    let start_structure ({ structure2; _} as features) role =
+      { features with
+        structure2 =
+          struct_comb (TRole role) @@ struct_comb TOpenParen structure2 }
     in
-    let end_structure features =
-       {features with structure = TCloseParen::features.structure }
+    let end_structure ({ structure2; _ } as features) =
+       { features with structure2 = struct_comb TCloseParen structure2 }
     in
     let verti_atom atom features role =
-      if List.length features.vertical.walk == 1 then
+      if fst features.vertical2 == 1 then
         features
       else
         let atom_with_role = TAtom (atom, role) in
         { features with
-          vertical =
-            { features.vertical with
-              acc = (atom_with_role::features.vertical.walk) :: features.vertical.acc
-        }}
+          store =
+            vert_add (vert_comb atom_with_role @@ snd features.vertical2) features.store
+        }
     in
     let calculate_vertical_features (term : constr) role features =
       match kind term with
@@ -435,8 +459,7 @@ module F (TS: TacticianStructures) = struct
       | Int n -> verti_atom (TInt n) features role
       | Float n -> verti_atom (TFloat n) features role
       | _ ->
-        {features with vertical = {
-             features.vertical with walk = TNonAtom role::features.vertical.walk}}
+        add_walk (TNonAtom role) features
     in
     let rec aux_reset features (term, role) depth walk =
       let reset_features = reset_interm features in
@@ -444,19 +467,18 @@ module F (TS: TacticianStructures) = struct
       let features' = aux reset_features term role depth in
       reset_interm features'
     and aux_reset_fold features term_role_pairs depth =
-      let walk = features.vertical.walk in
+      let walk = features.vertical2 in
       let next_level_depth = depth + 1 in
-      List.fold_left (fun features' term_role_pair->
+      List.fold_left (fun features' term_role_pair ->
           aux_reset features' term_role_pair next_level_depth walk) features term_role_pairs
     and aux features (term : constr) role depth =
       let features = calculate_vertical_features term role features in
       let process_atom atom =
         if depth > 2 then
-          {features with semantic = add_atom atom features}
+          add_atom atom features
         else
-          {semantic = add_atom atom features;
-           structure = TEnd::features.structure;
-           vertical = features.vertical } in
+          add_struct TEnd @@ add_atom atom features
+      in
       let features = match kind term with
         (* Interesting leafs *)
         | Rel _ -> process_atom TRel
@@ -500,20 +522,19 @@ module F (TS: TacticianStructures) = struct
         (* The golden path *)
         | Proj (p, term) ->
           let p = Projection.constant p in
-          let features' = start_structure {features with semantic = add_atom (TConst p) features} TProj
+          let features' = start_structure (add_atom (TConst p) features) TProj
           in end_structure (aux features' term TProjTerm (depth + 1))
         | App (head, args) ->
-          let walk = features.vertical.walk in
+          let walk = features.vertical2 in
           let args = Array.to_list args in
           let arg_num = List.length args in
           let features_with_head = aux (start_structure features TApp) head TAppFun (depth + 1) in
-          let features_with_head_and_arg_num =
-            { features_with_head with structure = TAppArgs arg_num::features_with_head.structure } in
+          let features_with_head_and_arg_num = add_struct (TAppArgs arg_num) features_with_head in
           let feature' = List.fold_left (fun features arg ->
               let features = set_walk features walk in
               let features_this_arg = aux features arg TAppArg (depth + 1) in
               (* We reset back to `interm` of `features_with_head_and_arg_num` for every arg *)
-              set_interm features_this_arg features_with_head_and_arg_num.semantic.interm)
+              set_interm features_this_arg features_with_head_and_arg_num.semantic2)
               features_with_head_and_arg_num args
           in
           end_structure(reset_interm feature')
@@ -521,22 +542,31 @@ module F (TS: TacticianStructures) = struct
           (* We probably want to have the type of the cast, but isolated *)
           let features_reset = reset_interm features in
           let features_with_type = aux (start_structure features_reset TCast) typ TCastType (depth + 1) in
-          let feature' = set_interm features_with_type features.semantic.interm in
+          let feature' = set_interm features_with_type features.semantic2 in
           end_structure (aux feature' term TCastTerm (depth + 1))
       in
       if depth == 3 then
         (* break the maximal depth constraint*)
-        {features with structure = TEnd::features.structure}
+        add_struct TEnd features
       else features
     in
     let features = aux init_features oterm TRoot 0 in
+    struct_add features.structure2 features.store
+
+  let term_sexpr_to_complex_features2 max_length term=
+    let (structure, (semantic, vertical)) = term_sexpr_to_complex_features2
+      ~gen_semantic:((fun x -> [x]), List.append, (fun (ls, y) x -> x::ls, y))
+      ~gen_structural:([], List.cons, (fun a b -> a, b))
+      ~gen_vertical:([], List.cons, (fun x (y, ls) -> y, x::ls))
+      ~store_feat:([], [])
+      max_length term in
     (* We use tail-recursive rev_map instead of map to avoid stack overflows on large proof states *)
     let add_feature_kind features f kind = List.map (fun feature -> kind, List.map f feature) features in
     let add_feature_kind2 features f kind = List.map (fun feature -> kind, List.rev_map f feature) features in
     List.rev_map (fun (feat_kind, feats) -> feat_kind, String.concat "-" feats) (
-      (Struct, List.rev_map structural_token_to_string features.structure) ::
-      ((add_feature_kind features.semantic.acc semantic_token_to_string Seman) @
-      (add_feature_kind2 features.vertical.acc vertical_token_to_string Verti)))
+      (Struct, List.rev_map structural_token_to_string structure) ::
+      ((add_feature_kind semantic semantic_token_to_string Seman) @
+       (add_feature_kind2 vertical vertical_token_to_string Verti)))
 
     let proof_state_to_complex_features max_length ps =
       let hyps = proof_state_hypotheses ps in
