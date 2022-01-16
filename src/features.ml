@@ -316,6 +316,158 @@ module F (TS: TacticianStructures) = struct
       ((add_feature_kind features.semantic.acc Seman) @
       (add_feature_kind features.vertical.acc Verti)))
 
+  let term_sexpr_to_complex_features2 maxlength (oterm : Constr.t) =
+    let open Constr in
+    (* for a tuple `(interm, acc)`:
+       - `interm` is an intermediate list of list of features that are still being assembled
+         invariant: `forall i ls, 0<i<=maxlength -> In ls (List.nth (i - 1)) -> List.length ls = i`
+       - `acc`: accumulates features that are fully assembled *)
+    let add_atom atom features =
+      let interm, acc = features.semantic.interm, features.semantic.acc in
+      (* `interm` contains term tree walks to maximal depth, maximal depth - 1,..., 1 *)
+      let interm' = [[atom]] :: List.map (List.map (fun fs -> atom::fs)) interm in
+      (* Remove the last item to keep the maximal depth constraint.
+        The length of `interm` = the maximal depth constraint.
+        The initial `interm` is [[walk],[],...,[]]; thus, `removelast` will remove [] in the beginning *)
+      {interm = removelast interm'; acc = List.flatten interm' @ acc}
+    in
+    let set_interm features x = {features with semantic = {features.semantic with interm = x}} in
+    let set_walk features x = {features with vertical = {features.vertical with walk = x}} in
+    let start = replicate [] (maxlength - 1) in
+    let init_features = {semantic = {interm = replicate [] (maxlength - 1); acc = []} ;
+      structure = []; vertical = {walk = []; acc = []}} in
+    let reset_interm features = set_interm features start in
+    let start_structure features role =
+      {features with structure = features.structure @ ["(" ; role]}
+    in
+    let end_structure features =
+       {features with structure = features.structure @ [")"] }
+    in
+    let verti_atom atom features role =
+      if List.length features.vertical.walk == 1 then
+        features
+      else
+        let atom_with_role = atom^":"^role in
+        {features with vertical = {
+          features.vertical with acc =
+          (features.vertical.walk@[atom_with_role]) :: features.vertical.acc
+        }}
+    in
+    let calculate_vertical_features (term : constr) role features =
+      match kind term with
+      | Rel _ -> verti_atom "R" features role
+      | Evar _ -> verti_atom "E" features role
+      | Construct (c, _) -> verti_atom (constructor2s c) features role
+      | Ind (c, _) -> verti_atom (inductive2s c) features role
+      | Var id -> verti_atom (id2s id) features role
+      | Const (c, u) -> verti_atom (constant2s c) features role
+      | Int n -> verti_atom ("i" ^ Uint63.to_string n) features role
+      | Float n -> verti_atom ("f" ^ Float64.to_string n) features role
+      | _ ->
+        {features with vertical = {
+             features.vertical with walk = (features.vertical.walk@[role])}}
+    in
+    let rec aux_reset features (term, role) depth walk =
+      let reset_features = reset_interm features in
+      let reset_features = set_walk reset_features walk in
+      let features' = aux reset_features term role depth in
+      reset_interm features'
+    and aux_reset_fold features term_role_pairs depth =
+      let walk = features.vertical.walk in
+      let next_level_depth = depth + 1 in
+      List.fold_left (fun features' term_role_pair->
+          aux_reset features' term_role_pair next_level_depth walk) features term_role_pairs
+    and aux features (term : constr) role depth =
+      let features = calculate_vertical_features term role features in
+      let process_atom atom =
+        if depth > 2 then
+          {features with semantic = add_atom atom features}
+        else
+          {semantic = add_atom atom features;
+           structure = features.structure @ ["X"];
+           vertical = features.vertical } in
+      let features = match kind term with
+        (* Interesting leafs *)
+        | Rel _ -> process_atom "R"
+        | Evar _ -> process_atom "E"
+        | Construct (c, _) -> process_atom (constructor2s c)
+        | Ind (c, _) -> process_atom (inductive2s c)
+        | Var id -> process_atom (id2s id)
+        | Const (c, u) -> process_atom (constant2s c)
+        | Int n -> process_atom ("i" ^ Uint63.to_string n)
+        | Float n -> process_atom ("f" ^ Float64.to_string n)
+
+        (* Uninteresting leafs *)
+        | Sort _
+        | Meta _ -> features
+
+        (* Recursion for grammar we don't handle *)
+        | LetIn (_, body1, typ, body2) ->
+          let roles = ["LetVarBody"; "LetVarType"; "LetBody"] in
+          end_structure (aux_reset_fold (start_structure features "LetIn")
+                           (List.combine [body1; typ; body2] roles) depth)
+        | Case (_, term, typ, cases) ->
+          let cases = Array.to_list cases in
+          let roles = (["MatchTerm"; "MatchTermType"] @ (rep_elem (List.length cases) "Case")) in
+          end_structure (aux_reset_fold (start_structure features "Case")
+                           (List.combine (term::typ::cases) roles) depth)
+        | Fix (_, (_, types, terms)) ->
+          let terms = Array.to_list terms in
+          let types = Array.to_list types in
+          let roles = (rep_elem (List.length terms) "FixTerm") @ (rep_elem (List.length types) "FixType") in
+          end_structure (aux_reset_fold (start_structure features "Fix") (List.combine (terms @ types) roles) depth)
+        | CoFix (_, (_, types, terms)) ->
+          let terms = Array.to_list terms in
+          let types = Array.to_list types in
+          let roles = (rep_elem (List.length terms) "CoFixTerm") @ (rep_elem (List.length types) "CoFixType") in
+          end_structure (aux_reset_fold (start_structure features "CoFix") (List.combine (terms @ types) roles) depth)
+        | Prod (_, typ, body) ->
+          let roles = ["ProdType"; "ProdBody"] in
+          end_structure(aux_reset_fold (start_structure features "Prod") (List.combine [typ; body] roles) depth)
+        | Lambda (_, typ, body) ->
+          let roles = ["LambdaType"; "LambdaBody"] in
+          end_structure(aux_reset_fold (start_structure features "Lambda") (List.combine [typ; body] roles) depth)
+
+        (* The golden path *)
+        | Proj (p, term) ->
+          let p = Projection.constant p in
+          let features' = start_structure {features with semantic = add_atom (constant2s p) features} "Proj"
+          in end_structure (aux features' term "ProjTerm" (depth + 1))
+        | App (head, args) ->
+          let walk = features.vertical.walk in
+          let args = Array.to_list args in
+          let arg_num = List.length args in
+          let features_with_head = aux (start_structure features "App") head "AppFun" (depth + 1) in
+          let features_with_head_and_arg_num =
+            {features_with_head with structure = features_with_head.structure @ [Stdlib.string_of_int arg_num]} in
+          let feature' = List.fold_left (fun features arg ->
+              let features = set_walk features walk in
+              let features_this_arg = aux features arg "AppArg" (depth + 1) in
+              (* We reset back to `interm` of `features_with_head_and_arg_num` for every arg *)
+              set_interm features_this_arg features_with_head_and_arg_num.semantic.interm)
+              features_with_head_and_arg_num args
+          in
+          end_structure(reset_interm feature')
+        | Cast (term, _, typ) ->
+          (* We probably want to have the type of the cast, but isolated *)
+          let features_reset = reset_interm features in
+          let features_with_type = aux (start_structure features_reset "Cast") typ "CastType" (depth + 1) in
+          let feature' = set_interm features_with_type features.semantic.interm in
+          end_structure (aux feature' term "CastTerm" (depth + 1))
+      in
+      if depth == 3 then
+        (* break the maximal depth constraint*)
+        {features with structure = features.structure@["X"]}
+      else features
+    in
+    let features = aux init_features oterm "Root" 0 in
+    (* We use tail-recursive rev_map instead of map to avoid stack overflows on large proof states *)
+    let add_feature_kind features kind = List.map (fun feature -> kind, feature) features in
+    List.rev_map (fun (feat_kind, feats) -> feat_kind, String.concat "-" feats) (
+      (Struct, features.structure) ::
+      ((add_feature_kind features.semantic.acc Seman) @
+      (add_feature_kind features.vertical.acc Verti)))
+
     let proof_state_to_complex_features max_length ps =
       let hyps = proof_state_hypotheses ps in
       let goal = proof_state_goal ps in
@@ -332,9 +484,32 @@ module F (TS: TacticianStructures) = struct
       (List.map (fun (kind, feat) -> kind, "GOAL-"^ feat) goal_feats) @
       (List.map (fun (kind, feat) -> kind, "HYPS-"^ feat) (List.flatten hyp_feats))
 
+    let proof_state_to_complex_features2 max_length ps =
+      let hyps = proof_state_hypotheses ps in
+      let goal = proof_state_goal ps in
+      let mkfeats t = term_sexpr_to_complex_features2 max_length (term_repr t) in
+      let hyp_feats = List.map (function
+          | Named.Declaration.LocalAssum (id, typ) -> mkfeats typ
+          | Named.Declaration.LocalDef (id, term, typ) -> mkfeats typ @ mkfeats term)
+          hyps in
+      let goal_feats = mkfeats goal in
+      (* seperate the goal from the local context *)
+      (List.map (fun (kind, feat) -> kind, "GOAL-"^ feat) goal_feats) @
+      (List.map (fun (kind, feat) -> kind, "HYPS-"^ feat) (List.flatten hyp_feats))
+
   let proof_state_to_complex_ints ps =
     let complex_feats = proof_state_to_complex_features 2 ps in
-    let feats_with_count_pair = count_dup complex_feats in 
+    let feats_with_count_pair = count_dup complex_feats in
+    (* Tail recursive version of map, because these lists can get very large. *)
+    let feats_with_count = List.rev_map (fun ((kind, feat), count) -> kind, feat ^ "-" ^ (Stdlib.string_of_int count))
+        feats_with_count_pair in
+    (* print_endline (String.concat ", "  (List.map Stdlib.snd complex_feats)); *)
+    let feats = List.rev_map (fun (kind, feat) ->  kind, Hashtbl.hash feat) feats_with_count in
+    List.sort_uniq (fun (_kind1, feat1) (_kind2, feat2) -> Int.compare feat1 feat2) feats
+
+  let proof_state_to_complex_ints2 ps =
+    let complex_feats = proof_state_to_complex_features2 2 ps in
+    let feats_with_count_pair = count_dup complex_feats in
     (* Tail recursive version of map, because these lists can get very large. *)
     let feats_with_count = List.rev_map (fun ((kind, feat), count) -> kind, feat ^ "-" ^ (Stdlib.string_of_int count))
         feats_with_count_pair in
