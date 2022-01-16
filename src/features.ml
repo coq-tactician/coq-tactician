@@ -4,12 +4,132 @@ open Learner_helper
 open Names
 
 type feat_kind = Struct | Seman | Verti
-type semantic_features = {interm:string list list list; acc:string list list}
+type 'a semantic_features = { interm: 'a list list; acc: 'a list}
 (*for `f(g(a), b)` and go to `a`
   walk: the walk from root to `a`
-  walk_to_sibiling: walk from root to f such that we can calculate the walk to `b` basing on it*) 
-type vertical_features = {walk:string list; acc:string list list} 
-type features = {semantic : semantic_features; structure : string list; vertical: vertical_features}
+  walk_to_sibiling: walk from root to f such that we can calculate the walk to `b` basing on it*)
+type 'a vertical_features = { walk: 'a; acc: 'a list}
+type ('a, 'b, 'c) features =
+  { semantic : 'a semantic_features
+  ; structure : 'b list
+  ; vertical: 'c vertical_features }
+
+let global2s g =
+  let a = Globnames.canonical_gr g in
+  let b = Nametab.path_of_global (a) in
+  Libnames.string_of_path b
+let constant2s c = global2s (GlobRef.ConstRef c)
+let inductive2s i = global2s (GlobRef.IndRef i)
+let constructor2s c =
+  global2s (GlobRef.ConstructRef c)
+let id2s id = Id.to_string id
+
+type semantic_token =
+  | TRel
+  | TEvar
+  | TConstruct of constructor
+  | TInd of inductive
+  | TVar of variable
+  | TConst of Constant.t
+  | TInt of Uint63.t
+  | TFloat of Float64.t
+type role_token =
+  | TRoot
+  | TLetVarBody
+  | TLetVarType
+  | TLetBody
+  | TMatchTerm
+  | TMatchTermType
+  | TFixTerm
+  | TFixType
+  | TCoFixTerm
+  | TCoFixType
+  | TProdType
+  | TProdBody
+  | TLambdaType
+  | TLambdaBody
+  | TCase
+  | TProjTerm
+  | TAppFun
+  | TAppArg
+  | TCastType
+  | TCastTerm
+  | TLetIn
+  | TFix
+  | TCoFix
+  | TProd
+  | TLambda
+  | TProj
+  | TApp
+  | TCast
+type vertical_token =
+  | TAtom of semantic_token * role_token
+  | TNonAtom of role_token
+type structural_token =
+  | TOpenParen
+  | TCloseParen
+  | TAppArgs of int
+  | TRole of role_token
+  | TEnd
+
+let semantic_token_to_string = function
+  | TRel -> "R"
+  | TEvar -> "E"
+  | TConstruct c -> constructor2s c
+  | TInd i -> inductive2s i
+  | TVar id -> id2s id
+  | TConst c -> constant2s c
+  | TInt n -> "i" ^ Uint63.to_string n
+  | TFloat n -> "f" ^ Float64.to_string n
+let role_token_to_string = function
+  | TRoot -> "Root"
+  | TLetVarBody -> "LetVarBody"
+  | TLetVarType -> "LetVarType"
+  | TLetBody -> "LetBody"
+  | TMatchTerm -> "MatchTerm"
+  | TMatchTermType -> "MatchTermType"
+  | TFixTerm -> "FixTerm"
+  | TFixType -> "FixType"
+  | TCoFixTerm -> "CoFixTerm"
+  | TCoFixType -> "CoFixType"
+  | TProdType -> "ProdType"
+  | TProdBody -> "ProdBody"
+  | TLambdaType -> "LambdaType"
+  | TLambdaBody -> "LambdaBody"
+  | TCase -> "Case"
+  | TProjTerm -> "ProjTerm"
+  | TAppFun -> "AppFun"
+  | TAppArg -> "AppArg"
+  | TCastType -> "CastType"
+  | TCastTerm -> "CastTerm"
+  | TLetIn -> "LetIn"
+  | TFix -> "Fix"
+  | TCoFix -> "CoFix"
+  | TProd -> "Prod"
+  | TLambda -> "Lambda"
+  | TProj -> "Proj"
+  | TApp -> "App"
+  | TCast -> "Cast"
+let vertical_token_to_string = function
+  | TAtom (sm, rl) -> semantic_token_to_string sm ^ ":" ^ role_token_to_string rl
+  | TNonAtom rl -> role_token_to_string rl
+let structural_token_to_string = function
+  | TOpenParen -> "("
+  | TCloseParen -> ")"
+  | TAppArgs n -> string_of_int n
+  | TRole rl -> role_token_to_string rl
+  | TEnd -> "X"
+
+let semantic_token_to_int =
+  function
+  | TRel -> Int.hash 0
+  | TEvar -> Int.hash 1
+  | TConstruct c -> constructor_hash c
+  | TInd i -> ind_hash i
+  | TVar id -> Id.hash id
+  | TConst c -> Constant.CanOrd.hash c
+  | TInt n -> Uint63.hash n
+  | TFloat n -> Float64.hash n
 
 module F (TS: TacticianStructures) = struct
   module LH = L(TS)
@@ -19,47 +139,6 @@ module F (TS: TacticianStructures) = struct
   let warn lterm oterm =
     Feedback.msg_warning (Pp.str ("Tactician did not know how to handle something. Please report. "
                                   ^ sexpr_to_string lterm ^ " : " ^sexpr_to_string oterm))
-
-  type simple_token =
-    | TRel
-    | TEvar
-    | TConstruct of constructor
-    | TInd of inductive
-    | TVar of variable
-    | TConst of Constant.t
-    | TInt of Uint63.t
-    | TFloat of Float64.t
-
-  let global2s g =
-    let a = Globnames.canonical_gr g in
-    let b = Nametab.path_of_global (a) in
-    Libnames.string_of_path b
-  let constant2s c = global2s (GlobRef.ConstRef c)
-  let inductive2s i = global2s (GlobRef.IndRef i)
-  let constructor2s c =
-    global2s (GlobRef.ConstructRef c)
-  let id2s id = Id.to_string id
-
-  let simple_token_to_string = function
-    | TRel -> "R"
-    | TEvar -> "E"
-    | TConstruct c -> constructor2s c
-    | TInd i -> inductive2s i
-    | TVar id -> id2s id
-    | TConst c -> constant2s c
-    | TInt n -> "i" ^ Uint63.to_string n
-    | TFloat n -> "f" ^ Float64.to_string n
-
-  let simple_token_to_int =
-    function
-    | TRel -> Int.hash 0
-    | TEvar -> Int.hash 1
-    | TConstruct c -> constructor_hash c
-    | TInd i -> ind_hash i
-    | TVar id -> Id.hash id
-    | TConst c -> Constant.CanOrd.hash c
-    | TInt n -> Uint63.hash n
-    | TFloat n -> Float64.hash n
 
   let term_sexpr_to_simple_features
       ~gen_feat:(init, comb)
@@ -137,7 +216,7 @@ module F (TS: TacticianStructures) = struct
 
   let context_simple_ints ctx =
     let mkfeats t = term_sexpr_to_simple_features
-        ~gen_feat:(simple_token_to_int, Hashset.Combine.combine)
+        ~gen_feat:(semantic_token_to_int, Hashset.Combine.combine)
         ~store_feat:(Int.Set.empty, (fun a b -> Int.Set.add b a))
         2 (term_repr t) in
     let to_ints t = Int.Set.elements (mkfeats t) in
@@ -145,14 +224,14 @@ module F (TS: TacticianStructures) = struct
 
   let proof_state_to_simple_ints ps =
     let feats = proof_state_to_simple_features
-        ~gen_feat:(simple_token_to_int, Hashset.Combine.combine)
+        ~gen_feat:(semantic_token_to_int, Hashset.Combine.combine)
         ~store_feat:(Int.Set.empty, (fun a b -> Int.Set.add b a))
         2 ps in
     Int.Set.elements feats
 
   let proof_state_to_simple_strings ps =
     let feats = proof_state_to_simple_features
-        ~gen_feat:(simple_token_to_string, (fun s1 s2 -> s1 ^ "-" ^ s2))
+        ~gen_feat:(semantic_token_to_string, (fun s1 s2 -> s1 ^ "-" ^ s2))
         ~store_feat:(CString.Set.empty, (fun a b -> CString.Set.add b a))
         2 ps in
     CString.Set.elements feats
@@ -314,7 +393,8 @@ module F (TS: TacticianStructures) = struct
     List.rev_map (fun (feat_kind, feats) -> feat_kind, String.concat "-" feats) (
       (Struct, features.structure) ::
       ((add_feature_kind features.semantic.acc Seman) @
-      (add_feature_kind features.vertical.acc Verti)))
+       (add_feature_kind features.vertical.acc Verti)))
+
 
   let term_sexpr_to_complex_features2 maxlength (oterm : Constr.t) =
     let open Constr in
@@ -338,16 +418,16 @@ module F (TS: TacticianStructures) = struct
       structure = []; vertical = {walk = []; acc = []}} in
     let reset_interm features = set_interm features start in
     let start_structure features role =
-      {features with structure = features.structure @ ["(" ; role]}
+      {features with structure = features.structure @ [TOpenParen ; TRole role]}
     in
     let end_structure features =
-       {features with structure = features.structure @ [")"] }
+       {features with structure = features.structure @ [TCloseParen] }
     in
     let verti_atom atom features role =
       if List.length features.vertical.walk == 1 then
         features
       else
-        let atom_with_role = atom^":"^role in
+        let atom_with_role = TAtom (atom, role) in
         {features with vertical = {
           features.vertical with acc =
           (features.vertical.walk@[atom_with_role]) :: features.vertical.acc
@@ -355,17 +435,17 @@ module F (TS: TacticianStructures) = struct
     in
     let calculate_vertical_features (term : constr) role features =
       match kind term with
-      | Rel _ -> verti_atom "R" features role
-      | Evar _ -> verti_atom "E" features role
-      | Construct (c, _) -> verti_atom (constructor2s c) features role
-      | Ind (c, _) -> verti_atom (inductive2s c) features role
-      | Var id -> verti_atom (id2s id) features role
-      | Const (c, u) -> verti_atom (constant2s c) features role
-      | Int n -> verti_atom ("i" ^ Uint63.to_string n) features role
-      | Float n -> verti_atom ("f" ^ Float64.to_string n) features role
+      | Rel _ -> verti_atom TRel features role
+      | Evar _ -> verti_atom TEvar features role
+      | Construct (c, _) -> verti_atom (TConstruct c) features role
+      | Ind (c, _) -> verti_atom (TInd c) features role
+      | Var id -> verti_atom (TVar id) features role
+      | Const (c, u) -> verti_atom (TConst c) features role
+      | Int n -> verti_atom (TInt n) features role
+      | Float n -> verti_atom (TFloat n) features role
       | _ ->
         {features with vertical = {
-             features.vertical with walk = (features.vertical.walk@[role])}}
+             features.vertical with walk = (features.vertical.walk@[TNonAtom role])}}
     in
     let rec aux_reset features (term, role) depth walk =
       let reset_features = reset_interm features in
@@ -384,18 +464,18 @@ module F (TS: TacticianStructures) = struct
           {features with semantic = add_atom atom features}
         else
           {semantic = add_atom atom features;
-           structure = features.structure @ ["X"];
+           structure = features.structure @ [TEnd];
            vertical = features.vertical } in
       let features = match kind term with
         (* Interesting leafs *)
-        | Rel _ -> process_atom "R"
-        | Evar _ -> process_atom "E"
-        | Construct (c, _) -> process_atom (constructor2s c)
-        | Ind (c, _) -> process_atom (inductive2s c)
-        | Var id -> process_atom (id2s id)
-        | Const (c, u) -> process_atom (constant2s c)
-        | Int n -> process_atom ("i" ^ Uint63.to_string n)
-        | Float n -> process_atom ("f" ^ Float64.to_string n)
+        | Rel _ -> process_atom TRel
+        | Evar _ -> process_atom TEvar
+        | Construct (c, _) -> process_atom (TConstruct c)
+        | Ind (c, _) -> process_atom (TInd c)
+        | Var id -> process_atom (TVar id)
+        | Const (c, u) -> process_atom (TConst c)
+        | Int n -> process_atom (TInt n)
+        | Float n -> process_atom (TFloat n)
 
         (* Uninteresting leafs *)
         | Sort _
@@ -403,46 +483,46 @@ module F (TS: TacticianStructures) = struct
 
         (* Recursion for grammar we don't handle *)
         | LetIn (_, body1, typ, body2) ->
-          let roles = ["LetVarBody"; "LetVarType"; "LetBody"] in
-          end_structure (aux_reset_fold (start_structure features "LetIn")
+          let roles = [TLetVarBody; TLetVarType; TLetBody] in
+          end_structure (aux_reset_fold (start_structure features TLetIn)
                            (List.combine [body1; typ; body2] roles) depth)
         | Case (_, term, typ, cases) ->
           let cases = Array.to_list cases in
-          let roles = (["MatchTerm"; "MatchTermType"] @ (rep_elem (List.length cases) "Case")) in
-          end_structure (aux_reset_fold (start_structure features "Case")
+          let roles = ([TMatchTerm; TMatchTermType] @ (rep_elem (List.length cases) TCase)) in
+          end_structure (aux_reset_fold (start_structure features TCase)
                            (List.combine (term::typ::cases) roles) depth)
         | Fix (_, (_, types, terms)) ->
           let terms = Array.to_list terms in
           let types = Array.to_list types in
-          let roles = (rep_elem (List.length terms) "FixTerm") @ (rep_elem (List.length types) "FixType") in
-          end_structure (aux_reset_fold (start_structure features "Fix") (List.combine (terms @ types) roles) depth)
+          let roles = (rep_elem (List.length terms) TFixTerm) @ (rep_elem (List.length types) TFixType) in
+          end_structure (aux_reset_fold (start_structure features TFix) (List.combine (terms @ types) roles) depth)
         | CoFix (_, (_, types, terms)) ->
           let terms = Array.to_list terms in
           let types = Array.to_list types in
-          let roles = (rep_elem (List.length terms) "CoFixTerm") @ (rep_elem (List.length types) "CoFixType") in
-          end_structure (aux_reset_fold (start_structure features "CoFix") (List.combine (terms @ types) roles) depth)
+          let roles = (rep_elem (List.length terms) TCoFixTerm) @ (rep_elem (List.length types) TCoFixType) in
+          end_structure (aux_reset_fold (start_structure features TCoFix) (List.combine (terms @ types) roles) depth)
         | Prod (_, typ, body) ->
-          let roles = ["ProdType"; "ProdBody"] in
-          end_structure(aux_reset_fold (start_structure features "Prod") (List.combine [typ; body] roles) depth)
+          let roles = [TProdType; TProdBody] in
+          end_structure(aux_reset_fold (start_structure features TProd) (List.combine [typ; body] roles) depth)
         | Lambda (_, typ, body) ->
-          let roles = ["LambdaType"; "LambdaBody"] in
-          end_structure(aux_reset_fold (start_structure features "Lambda") (List.combine [typ; body] roles) depth)
+          let roles = [TLambdaType; TLambdaBody] in
+          end_structure(aux_reset_fold (start_structure features TLambda) (List.combine [typ; body] roles) depth)
 
         (* The golden path *)
         | Proj (p, term) ->
           let p = Projection.constant p in
-          let features' = start_structure {features with semantic = add_atom (constant2s p) features} "Proj"
-          in end_structure (aux features' term "ProjTerm" (depth + 1))
+          let features' = start_structure {features with semantic = add_atom (TConst p) features} TProj
+          in end_structure (aux features' term TProjTerm (depth + 1))
         | App (head, args) ->
           let walk = features.vertical.walk in
           let args = Array.to_list args in
           let arg_num = List.length args in
-          let features_with_head = aux (start_structure features "App") head "AppFun" (depth + 1) in
+          let features_with_head = aux (start_structure features TApp) head TAppFun (depth + 1) in
           let features_with_head_and_arg_num =
-            {features_with_head with structure = features_with_head.structure @ [Stdlib.string_of_int arg_num]} in
+            {features_with_head with structure = features_with_head.structure @ [TAppArgs arg_num]} in
           let feature' = List.fold_left (fun features arg ->
               let features = set_walk features walk in
-              let features_this_arg = aux features arg "AppArg" (depth + 1) in
+              let features_this_arg = aux features arg TAppArg (depth + 1) in
               (* We reset back to `interm` of `features_with_head_and_arg_num` for every arg *)
               set_interm features_this_arg features_with_head_and_arg_num.semantic.interm)
               features_with_head_and_arg_num args
@@ -451,22 +531,22 @@ module F (TS: TacticianStructures) = struct
         | Cast (term, _, typ) ->
           (* We probably want to have the type of the cast, but isolated *)
           let features_reset = reset_interm features in
-          let features_with_type = aux (start_structure features_reset "Cast") typ "CastType" (depth + 1) in
+          let features_with_type = aux (start_structure features_reset TCast) typ TCastType (depth + 1) in
           let feature' = set_interm features_with_type features.semantic.interm in
-          end_structure (aux feature' term "CastTerm" (depth + 1))
+          end_structure (aux feature' term TCastTerm (depth + 1))
       in
       if depth == 3 then
         (* break the maximal depth constraint*)
-        {features with structure = features.structure@["X"]}
+        {features with structure = features.structure@[TEnd]}
       else features
     in
-    let features = aux init_features oterm "Root" 0 in
+    let features = aux init_features oterm TRoot 0 in
     (* We use tail-recursive rev_map instead of map to avoid stack overflows on large proof states *)
-    let add_feature_kind features kind = List.map (fun feature -> kind, feature) features in
+    let add_feature_kind features f kind = List.map (fun feature -> kind, List.map f feature) features in
     List.rev_map (fun (feat_kind, feats) -> feat_kind, String.concat "-" feats) (
-      (Struct, features.structure) ::
-      ((add_feature_kind features.semantic.acc Seman) @
-      (add_feature_kind features.vertical.acc Verti)))
+      (Struct, List.map structural_token_to_string features.structure) ::
+      ((add_feature_kind features.semantic.acc semantic_token_to_string Seman) @
+      (add_feature_kind features.vertical.acc vertical_token_to_string Verti)))
 
     let proof_state_to_complex_features max_length ps =
       let hyps = proof_state_hypotheses ps in
