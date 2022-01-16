@@ -85,7 +85,7 @@ let semantic_token_to_string = function
   | TEvar -> "E"
   | TConstruct c -> constructor2s c
   | TInd i -> inductive2s i
-  | TVar id -> id2s id
+  | TVar id -> "$" ^ id2s id
   | TConst c -> constant2s c
   | TInt n -> "i" ^ Uint63.to_string n
   | TFloat n -> "f" ^ Float64.to_string n
@@ -255,9 +255,9 @@ module F (TS: TacticianStructures) = struct
     let atom_to_string atomtype content = match atomtype, content with
       | "Rel", _ -> "R"
       | "Evar", (Leaf _ :: _) -> "E"
+      | "Var", Leaf c :: _ -> "$" ^ c
       | "Construct", Leaf c :: _
       | "Ind", Leaf c :: _
-      | "Var", Leaf c :: _
       | "Const", Leaf c :: _ -> c
       | "Int", Leaf c :: _ -> "i" ^ c
       | "Float", Leaf c :: _ -> "f" ^ c
