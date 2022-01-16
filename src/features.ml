@@ -408,10 +408,10 @@ module F (TS: TacticianStructures) = struct
       structure = []; vertical = {walk = []; acc = []}} in
     let reset_interm features = set_interm features start in
     let start_structure features role =
-      {features with structure = features.structure @ [TOpenParen ; TRole role]}
+      { features with structure = TRole role::TOpenParen::features.structure }
     in
     let end_structure features =
-       {features with structure = features.structure @ [TCloseParen] }
+       {features with structure = TCloseParen::features.structure }
     in
     let verti_atom atom features role =
       if List.length features.vertical.walk == 1 then
@@ -454,7 +454,7 @@ module F (TS: TacticianStructures) = struct
           {features with semantic = add_atom atom features}
         else
           {semantic = add_atom atom features;
-           structure = features.structure @ [TEnd];
+           structure = TEnd::features.structure;
            vertical = features.vertical } in
       let features = match kind term with
         (* Interesting leafs *)
@@ -507,7 +507,7 @@ module F (TS: TacticianStructures) = struct
           let arg_num = List.length args in
           let features_with_head = aux (start_structure features TApp) head TAppFun (depth + 1) in
           let features_with_head_and_arg_num =
-            {features_with_head with structure = features_with_head.structure @ [TAppArgs arg_num]} in
+            { features_with_head with structure = TAppArgs arg_num::features_with_head.structure } in
           let feature' = List.fold_left (fun features arg ->
               let features = set_walk features walk in
               let features_this_arg = aux features arg TAppArg (depth + 1) in
@@ -525,14 +525,14 @@ module F (TS: TacticianStructures) = struct
       in
       if depth == 3 then
         (* break the maximal depth constraint*)
-        {features with structure = features.structure@[TEnd]}
+        {features with structure = TEnd::features.structure}
       else features
     in
     let features = aux init_features oterm TRoot 0 in
     (* We use tail-recursive rev_map instead of map to avoid stack overflows on large proof states *)
     let add_feature_kind features f kind = List.map (fun feature -> kind, List.map f feature) features in
     List.rev_map (fun (feat_kind, feats) -> feat_kind, String.concat "-" feats) (
-      (Struct, List.map structural_token_to_string features.structure) ::
+      (Struct, List.rev_map structural_token_to_string features.structure) ::
       ((add_feature_kind features.semantic.acc semantic_token_to_string Seman) @
       (add_feature_kind features.vertical.acc vertical_token_to_string Verti)))
 
