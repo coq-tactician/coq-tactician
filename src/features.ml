@@ -554,19 +554,14 @@ module F (TS: TacticianStructures) = struct
     struct_add features.structure2 features.store
 
   let term_sexpr_to_complex_features2 max_length term=
-    let (structure, (semantic, vertical)) = term_sexpr_to_complex_features2
-      ~gen_semantic:((fun x -> [x]), List.append, (fun (ls, y) x -> x::ls, y))
-      ~gen_structural:([], List.cons, (fun a b -> a, b))
-      ~gen_vertical:([], List.cons, (fun x (y, ls) -> y, x::ls))
-      ~store_feat:([], [])
-      max_length term in
-    (* We use tail-recursive rev_map instead of map to avoid stack overflows on large proof states *)
-    let add_feature_kind features f kind = List.map (fun feature -> kind, List.map f feature) features in
-    let add_feature_kind2 features f kind = List.map (fun feature -> kind, List.rev_map f feature) features in
-    List.rev_map (fun (feat_kind, feats) -> feat_kind, String.concat "-" feats) (
-      (Struct, List.rev_map structural_token_to_string structure) ::
-      ((add_feature_kind semantic semantic_token_to_string Seman) @
-       (add_feature_kind2 vertical vertical_token_to_string Verti)))
+    let combine a b = if a = "" then b else a ^ "-" ^ b in
+    let combine2 f a b = if b = "" then f a else b ^ "-" ^ f a in
+    term_sexpr_to_complex_features2
+      ~gen_semantic:(semantic_token_to_string, combine, (fun ls x -> (Seman, x)::ls))
+      ~gen_structural:("", combine2 structural_token_to_string, (fun x ls -> (Struct, x)::ls))
+      ~gen_vertical:("", combine2 vertical_token_to_string, (fun x ls -> (Verti, x)::ls))
+      ~store_feat:[]
+      max_length term
 
     let proof_state_to_complex_features max_length ps =
       let hyps = proof_state_hypotheses ps in
