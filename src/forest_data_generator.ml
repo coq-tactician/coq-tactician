@@ -177,13 +177,24 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
     if Libnames.is_dirpath_prefix_of dirp (Libnames.dirpath name) then `File else `Dependency
 
   let learn db (name, status) outcomes tac =
-    let lshfnew = LSHF.learn db.lshf (name, status) outcomes tac in
+    let lshfnew = match db.database with
+      | ((pname, status), ls)::_ when not @@ Libnames.eq_full_path name pname ->
+        List.fold_left (fun db (outcomes, tac) -> LSHF.learn db (name, status) outcomes tac) db.lshf ls
+      | _ -> db.lshf in
     let new_database = match db.database with
       | ((pname, pstatus), ls)::data when Libnames.eq_full_path name pname ->
         ((pname, pstatus), (outcomes, tac)::ls)::data
       | _ -> ((name, status), [outcomes, tac])::db.database in
     last_model := new_database; {database = new_database; lshf = lshfnew}
-  let predict db situations = LSHF.predict db.lshf situations
+  let predict db (situations : situation list) =
+    let empty = List.for_all (fun (s : situation) -> s.parents = []) situations in
+    let lshf = if empty then
+      (match db.database with
+      | ((pname, status), ls)::_ ->
+        List.fold_left (fun db (outcomes, tac) -> LSHF.learn db (pname, status) outcomes tac) db.lshf ls
+      | _ -> db.lshf) else
+      db.lshf in
+    LSHF.predict lshf situations
   let evaluate db _ _ = 0., db
 
   let syntactic_feats tac =

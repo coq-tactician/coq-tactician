@@ -621,8 +621,8 @@ let predict () =
     Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
     let situation = List.map (fun gl ->
         let ps = goal_to_proof_state gl in
-        { parents = List.map (fun tac -> (ps (* TODO: Fix *), { executions = [](*TODO: Fix*); tactic = tac }))
-              ([] (* List.map TS.tactic_make (get_tactic_trace gl) *))
+        { parents = List.map (fun tac -> (ps (* TODO: Fix *), { executions = [](*TODO: Fix*); tactic = tac })) @@
+              List.map TS.tactic_make (get_tactic_trace gl)
         ; siblings = End
         ; state = ps}) gls in
     (* Coq stores goals in reverse order, so we present them in an intuitive order.
