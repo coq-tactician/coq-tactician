@@ -556,10 +556,16 @@ module F (TS: TacticianStructures) = struct
   let term_sexpr_to_complex_features2 prefix max_length acc term =
     let combine a b = if a = "" then b else a ^ "-" ^ b in
     let combine2 f a b = if b = "" then f a else b ^ "-" ^ f a in
+    let inc x = function
+      | None -> Some (x, 1)
+      | Some (x, i) -> Some (x, i+1) in
     term_sexpr_to_complex_features2
-      ~gen_semantic:(semantic_token_to_string, combine, (fun ls x -> (Seman, prefix^x)::ls))
-      ~gen_structural:("", combine2 structural_token_to_string, (fun x ls -> (Struct, prefix^x)::ls))
-      ~gen_vertical:("", combine2 vertical_token_to_string, (fun x ls -> (Verti, prefix^x)::ls))
+      ~gen_semantic:(semantic_token_to_string, combine,
+                     (fun ls x -> CString.Map.update (prefix^x) (inc Seman) ls))
+      ~gen_structural:("", combine2 structural_token_to_string,
+                       (fun x ls -> CString.Map.update (prefix^x) (inc Struct) ls))
+      ~gen_vertical:("", combine2 vertical_token_to_string,
+                     (fun x ls -> CString.Map.update (prefix^x) (inc Verti) ls))
       ~store_feat:acc
       max_length term
 
@@ -583,7 +589,8 @@ module F (TS: TacticianStructures) = struct
     let hyps = proof_state_hypotheses ps in
     let goal = proof_state_goal ps in
     let mkfeats prefix t acc = term_sexpr_to_complex_features2 prefix max_length acc (term_repr t) in
-    let hyp_feats = List.fold_left (fun a b -> Named.Declaration.fold_constr (mkfeats "HYPS-") b a) [] hyps in
+    let hyp_feats = List.fold_left (fun a b -> Named.Declaration.fold_constr (mkfeats "HYPS-") b a)
+        CString.Map.empty hyps in
     mkfeats "GOAL-" goal hyp_feats
 
   let count_dup l =
@@ -616,21 +623,17 @@ module F (TS: TacticianStructures) = struct
 
   let proof_state_to_complex_ints2 ps =
     let complex_feats = proof_state_to_complex_features2 2 ps in
-    let feats_with_count_pair = count_dup complex_feats in
-    (* Tail recursive version of map, because these lists can get very large. *)
-    let feats_with_count = List.rev_map (fun ((kind, feat), count) -> kind, feat ^ "-" ^ (Stdlib.string_of_int count))
-        feats_with_count_pair in
-    (* print_endline (String.concat ", "  (List.map Stdlib.snd complex_feats)); *)
+    let feats_with_count = CString.Map.fold
+        (fun feat (kind, count) acc -> (kind, feat ^ "-" ^ string_of_int count) :: acc)
+        complex_feats [] in
     let feats = List.rev_map (fun (kind, feat) ->  kind, Hashtbl.hash feat) feats_with_count in
     List.sort_uniq (fun (_kind1, feat1) (_kind2, feat2) -> Int.compare feat1 feat2) feats
 
   let proof_state_to_complex_strings2 ps =
     let complex_feats = proof_state_to_complex_features2 2 ps in
-    let feats_with_count_pair = count_dup complex_feats in
-    (* Tail recursive version of map, because these lists can get very large. *)
-    let feats_with_count = List.rev_map (fun ((kind, feat), count) -> kind, feat ^ "-" ^ (Stdlib.string_of_int count))
-        feats_with_count_pair in
-    (* print_endline (String.concat ", "  (List.map Stdlib.snd complex_feats)); *)
+    let feats_with_count = CString.Map.fold
+        (fun feat (kind, count) acc -> (kind, feat ^ "-" ^ string_of_int count) :: acc)
+        complex_feats [] in
     List.sort_uniq (fun (_kind1, feat1) (_kind2, feat2) -> String.compare feat1 feat2) feats_with_count
 
   let context_complex_features max_length ctx =
