@@ -584,6 +584,15 @@ module F (TS: TacticianStructures) = struct
     let feats = List.rev_map (fun (kind, feat) ->  kind, Hashtbl.hash feat) feats_with_count in
     List.sort_uniq (fun (_kind1, feat1) (_kind2, feat2) -> Int.compare feat1 feat2) feats
 
+  let proof_state_to_complex_strings ps =
+    let complex_feats = proof_state_to_complex_features 2 ps in
+    let feats_with_count_pair = count_dup complex_feats in
+    (* Tail recursive version of map, because these lists can get very large. *)
+    let feats_with_count = List.rev_map (fun ((kind, feat), count) -> kind, feat ^ "-" ^ (Stdlib.string_of_int count))
+        feats_with_count_pair in
+    (* print_endline (String.concat ", "  (List.map Stdlib.snd complex_feats)); *)
+    List.sort_uniq (fun (_kind1, feat1) (_kind2, feat2) -> String.compare feat1 feat2) feats_with_count
+
   let proof_state_to_complex_ints2 ps =
     let complex_feats = proof_state_to_complex_features2 2 ps in
     let feats_with_count_pair = count_dup complex_feats in
@@ -593,6 +602,15 @@ module F (TS: TacticianStructures) = struct
     (* print_endline (String.concat ", "  (List.map Stdlib.snd complex_feats)); *)
     let feats = List.rev_map (fun (kind, feat) ->  kind, Hashtbl.hash feat) feats_with_count in
     List.sort_uniq (fun (_kind1, feat1) (_kind2, feat2) -> Int.compare feat1 feat2) feats
+
+  let proof_state_to_complex_strings2 ps =
+    let complex_feats = proof_state_to_complex_features2 2 ps in
+    let feats_with_count_pair = count_dup complex_feats in
+    (* Tail recursive version of map, because these lists can get very large. *)
+    let feats_with_count = List.rev_map (fun ((kind, feat), count) -> kind, feat ^ "-" ^ (Stdlib.string_of_int count))
+        feats_with_count_pair in
+    (* print_endline (String.concat ", "  (List.map Stdlib.snd complex_feats)); *)
+    List.sort_uniq (fun (_kind1, feat1) (_kind2, feat2) -> String.compare feat1 feat2) feats_with_count
 
   let context_complex_features max_length ctx =
     let mkfeats t = term_sexpr_to_complex_features max_length (term_sexpr t) in
