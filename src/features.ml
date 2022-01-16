@@ -418,9 +418,10 @@ module F (TS: TacticianStructures) = struct
         features
       else
         let atom_with_role = TAtom (atom, role) in
-        {features with vertical = {
-          features.vertical with acc =
-          (features.vertical.walk@[atom_with_role]) :: features.vertical.acc
+        { features with
+          vertical =
+            { features.vertical with
+              acc = (atom_with_role::features.vertical.walk) :: features.vertical.acc
         }}
     in
     let calculate_vertical_features (term : constr) role features =
@@ -435,7 +436,7 @@ module F (TS: TacticianStructures) = struct
       | Float n -> verti_atom (TFloat n) features role
       | _ ->
         {features with vertical = {
-             features.vertical with walk = (features.vertical.walk@[TNonAtom role])}}
+             features.vertical with walk = TNonAtom role::features.vertical.walk}}
     in
     let rec aux_reset features (term, role) depth walk =
       let reset_features = reset_interm features in
@@ -531,10 +532,11 @@ module F (TS: TacticianStructures) = struct
     let features = aux init_features oterm TRoot 0 in
     (* We use tail-recursive rev_map instead of map to avoid stack overflows on large proof states *)
     let add_feature_kind features f kind = List.map (fun feature -> kind, List.map f feature) features in
+    let add_feature_kind2 features f kind = List.map (fun feature -> kind, List.rev_map f feature) features in
     List.rev_map (fun (feat_kind, feats) -> feat_kind, String.concat "-" feats) (
       (Struct, List.rev_map structural_token_to_string features.structure) ::
       ((add_feature_kind features.semantic.acc semantic_token_to_string Seman) @
-      (add_feature_kind features.vertical.acc vertical_token_to_string Verti)))
+      (add_feature_kind2 features.vertical.acc vertical_token_to_string Verti)))
 
     let proof_state_to_complex_features max_length ps =
       let hyps = proof_state_hypotheses ps in
