@@ -34,23 +34,23 @@ module OfflineEvaluationSimulatorLearner : TacticianOnlineLearnerType = functor 
     (* Note: This is lazy to give people a chance to set GOptions before a learner gets initialized *)
     recurse (lazy (Learner.empty ()))
 
-  let learners : (module TacticianOnlineLearnerType) list =
+  let learners : (string * (module TacticianOnlineLearnerType)) list =
     [
-      (module Naiveknn_learner.SimpleNaiveKnn)
-    ; (module Naiveknn_learner.ComplexNaiveKnn)
-    ; (module Lshf_learner.SimpleLSHF)
-    ; (module Lshf_learner.ComplexLSHF)
+      "simple-knn", (module Naiveknn_learner.SimpleNaiveKnn)
+    ; "complex-knn", (module Naiveknn_learner.ComplexNaiveKnn)
+    ; "simple-lshf", (module Lshf_learner.SimpleLSHF)
+    ; "complex-lshf", (module Lshf_learner.ComplexLSHF)
     ]
 
-  let new_learners () = List.map new_learner learners
+  let new_learners () = List.map (fun (n, l) -> n, new_learner l) learners
 
   type model = { learners : dynamic_learner list
-               ; data : (data_status * Libnames.full_path * (outcome list * tactic) list) list; last_hash : int }
+               ; data : (data_status * Libnames.full_path * (outcome list * tactic) list) list }
 
   let last_model = Summary.ref ~name:"offline-evaluation-simulator-learner-lastmodel" []
   let persistent_data = ref (List.init (List.length learners) (fun _ -> []))
 
-  let empty () = { learners = new_learners (); data = []; last_hash = 0 }
+  let empty () = { learners = List.map snd @@ new_learners (); data = [] }
 
   let cache_type name =
     let dirp = Global.current_dirpath () in
@@ -112,7 +112,6 @@ module OfflineEvaluationSimulatorLearner : TacticianOnlineLearnerType = functor 
     List.rev @@ snd @@ List.fold_left eval_inter_step (learner, []) data
 
   let learn db (path, status) outcomes tac =
-    let hash = Hashtbl.hash_param 255 255 (db.last_hash, Hashtbl.hash_param 255 255 path, tactic_hash tac) in
     let update_learner learner = match db.data with
     | (pstatus, ppath, ls)::_ when not @@ Libnames.eq_full_path path ppath ->
       next_knn learner pstatus ppath ls
@@ -137,7 +136,7 @@ module OfflineEvaluationSimulatorLearner : TacticianOnlineLearnerType = functor 
          (*  | Substituted -> print_endline "substituted" *)
          (*  | Discharged -> print_endline "discharged"); *)
      | _ -> ());
-    { learners; data; last_hash = hash }
+    { learners; data }
   let predict db situations = IStream.empty
   let evaluate db _ _ = 0., db
 
@@ -152,7 +151,7 @@ module OfflineEvaluationSimulatorLearner : TacticianOnlineLearnerType = functor 
     | _ ->
       let long = long || Option.List.map (fun x -> x) row = None in
       let row = String.concat "\t" @@
-        List.map (fun x -> Option.default "" @@ Option.map string_of_int x) row in
+        List.map (fun x -> Option.default "" @@ x) row in
       let tail ls = match ls with
         | [] -> []
         | _::ls -> ls in
@@ -162,11 +161,13 @@ module OfflineEvaluationSimulatorLearner : TacticianOnlineLearnerType = functor 
   let endline_hook () = print_endline "evaluating";
     let persistent_data = List.map List.rev !persistent_data in
     let data = preprocess !last_model in
-    let eval_schemes = [eval_intra; eval_intra_partial; eval_inter] in
+    let eval_schemes = ["intra", eval_intra; "intrab", eval_intra_partial; "inter", eval_inter] in
     let eval = List.flatten @@ List.map2
-        (fun learner persistent -> persistent :: List.map (fun f -> f data learner) eval_schemes)
+        (fun (name, learner) persistent ->
+           (("real-" ^ name) :: List.map string_of_int persistent) ::
+           List.map (fun (en, f) -> (en^"-"^name) :: (List.map string_of_int @@ f data learner)) eval_schemes)
         (new_learners ()) persistent_data in
-    let eval = transpose (eval @ persistent_data) false in
+    let eval = transpose eval false in
     List.iter (output_string (data_file ())) eval
 
   let () = Declaremods.append_end_library_hook endline_hook
