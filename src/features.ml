@@ -690,6 +690,23 @@ module F (TS: TacticianStructures) = struct
 
   let proof_state_to_complex_ints2 ps = proof_state_to_complex_ints2 2 ps
 
+  let proof_state_to_complex_ints_no_kind2 max_length ps =
+    let hyps = proof_state_hypotheses ps in
+    let goal = proof_state_goal ps in
+    let mkfeats prefix t acc = term_sexpr_to_complex_ints_no_kind2 prefix max_length acc (term_repr t) in
+    let feats = List.fold_left (fun a b -> Named.Declaration.fold_constr (mkfeats (Int.hash 2000)) b a)
+        Int.Map.empty hyps in
+    let feats = mkfeats (Int.hash 2001) goal feats in
+    let feats_with_count = Int.Map.fold
+        (fun feat count acc -> Hashset.Combine.combine feat count :: acc)
+        feats [] in
+    (* TODO: In the current fomulation, this resorting is needed. However, this is rather expensive.
+             We should consider not adding feature counts to the featues itself. This is likely to be
+             suboptimal for the model anyways. *)
+    List.sort_uniq Int.compare feats_with_count
+
+  let proof_state_to_complex_ints_no_kind2 ps = proof_state_to_complex_ints_no_kind2 2 ps
+
   let count_dup l =
     let sl = List.sort compare l in
     match sl with
