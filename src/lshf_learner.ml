@@ -168,5 +168,5 @@ module ComplexLSHF : TacticianOnlineLearnerType =
     let predict db f = predict db f proof_state_to_complex_ints (List.map snd) manually_weighed_tfidf
   end
 
-(* let () = register_online_learner "SimpleLSHF" (module SimpleLSHF) *)
+let () = register_online_learner "SimpleLSHF" (module SimpleLSHF)
 (* let () = register_online_learner "ComplexLSHF" (module ComplexLSHF) *)
