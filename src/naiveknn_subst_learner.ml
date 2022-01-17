@@ -152,10 +152,10 @@ module ComplexNaiveSubstKnn : TacticianOnlineLearnerType = functor (TS : Tactici
   open FH
   open LH
   let learn db _status outcomes tac = learn db _status outcomes tac
-      (fun x -> remove_feat_kind @@ proof_state_to_complex_ints x)
+      proof_state_to_complex_ints_no_kind
       context_complex_ints
   let predict db f = predict db f proof_state_to_complex_ints
-      (fun x -> context_map remove_feat_kind remove_feat_kind @@ context_complex_ints x)
+      context_complex_ints_no_kind
       manually_weighed_tfidf
 
 end

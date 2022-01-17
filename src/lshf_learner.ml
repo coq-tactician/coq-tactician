@@ -164,8 +164,8 @@ module ComplexLSHF : TacticianOnlineLearnerType =
     module FH = F(TS)
     open FH
     let learn db _status outcomes tac = learn db _status outcomes tac
-        (fun x -> remove_feat_kind @@ proof_state_to_complex_ints x)
-    let predict db f = predict db f proof_state_to_complex_ints remove_feat_kind manually_weighed_tfidf
+        proof_state_to_complex_ints_no_kind
+    let predict db f = predict db f proof_state_to_complex_ints (List.map snd) manually_weighed_tfidf
   end
 
 (* let () = register_online_learner "SimpleLSHF" (module SimpleLSHF) *)
