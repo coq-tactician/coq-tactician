@@ -128,16 +128,57 @@ let structural_token_to_string = function
   | TRole rl -> role_token_to_string rl
   | TEnd -> "X"
 
+(* WARNING: Be careful to make sure that these hashes don't collide. OCaml's buit-in hash function collides
+   on constructors of different variants with the same index (even if they have different names). This is
+   dangerous. *)
 let semantic_token_to_int =
   function
-  | TRel -> Int.hash 0
-  | TEvar -> Int.hash 1
+  | TRel -> Int.hash 1001
+  | TEvar -> Int.hash 1002
   | TConstruct c -> constructor_hash c
   | TInd i -> ind_hash i
   | TVar id -> Id.hash id
   | TConst c -> Constant.CanOrd.hash c
   | TInt n -> Uint63.hash n
   | TFloat n -> Float64.hash n
+let role_token_to_int = function
+  | TRoot -> Int.hash 1003
+  | TLetVarBody -> Int.hash 1004
+  | TLetVarType -> Int.hash 1005
+  | TLetBody -> Int.hash 1006
+  | TMatchTerm -> Int.hash 1007
+  | TMatchTermType -> Int.hash 1008
+  | TFixTerm -> Int.hash 1009
+  | TFixType -> Int.hash 1010
+  | TCoFixTerm -> Int.hash 1011
+  | TCoFixType -> Int.hash 1012
+  | TProdType -> Int.hash 1013
+  | TProdBody -> Int.hash 1014
+  | TLambdaType -> Int.hash 1015
+  | TLambdaBody -> Int.hash 1016
+  | TCase -> Int.hash 1017
+  | TProjTerm -> Int.hash 1018
+  | TAppFun -> Int.hash 1019
+  | TAppArg -> Int.hash 1020
+  | TCastType -> Int.hash 1021
+  | TCastTerm -> Int.hash 1022
+  | TLetIn -> Int.hash 1023
+  | TFix -> Int.hash 1024
+  | TCoFix -> Int.hash 1025
+  | TProd -> Int.hash 1026
+  | TLambda -> Int.hash 1027
+  | TProj -> Int.hash 1028
+  | TApp -> Int.hash 1029
+  | TCast -> Int.hash 1030
+let vertical_token_to_int = function
+  | TAtom (sm, rl) -> Hashset.Combine.combine (semantic_token_to_int sm) (role_token_to_int rl)
+  | TNonAtom rl -> Hashset.Combine.combine (Int.hash 1031) (role_token_to_int rl)
+let structural_token_to_int = function
+  | TOpenParen -> Int.hash 1032
+  | TCloseParen -> Int.hash 1033
+  | TAppArgs n -> Hashset.Combine.combine (Int.hash 1034) (Int.hash n)
+  | TRole rl -> Hashset.Combine.combine (Int.hash 1035) (role_token_to_int rl)
+  | TEnd -> Int.hash 1036
 
 module F (TS: TacticianStructures) = struct
   module LH = L(TS)
@@ -553,12 +594,13 @@ module F (TS: TacticianStructures) = struct
     let features = aux init_features oterm TRoot 0 in
     struct_add features.structure2 features.store
 
-  let term_sexpr_to_complex_features2 prefix max_length acc term =
+  let inc x = function
+    | None -> Some (x, 1)
+    | Some (x, i) -> Some (x, i+1)
+
+  let term_sexpr_to_complex_strings2 prefix max_length acc term =
     let combine a b = if a = "" then b else a ^ "-" ^ b in
     let combine2 f a b = if b = "" then f a else b ^ "-" ^ f a in
-    let inc x = function
-      | None -> Some (x, 1)
-      | Some (x, i) -> Some (x, i+1) in
     term_sexpr_to_complex_features2
       ~gen_semantic:(semantic_token_to_string, combine,
                      (fun ls x -> CString.Map.update (prefix^x) (inc Seman) ls))
@@ -566,6 +608,35 @@ module F (TS: TacticianStructures) = struct
                        (fun x ls -> CString.Map.update (prefix^x) (inc Struct) ls))
       ~gen_vertical:("", combine2 vertical_token_to_string,
                      (fun x ls -> CString.Map.update (prefix^x) (inc Verti) ls))
+      ~store_feat:acc
+      max_length term
+
+  let term_sexpr_to_complex_ints2 prefix max_length acc term =
+    let combine a b = Hashset.Combine.combine a b in
+    let combine2 f a b = Hashset.Combine.combine (f a) b in
+    term_sexpr_to_complex_features2
+      ~gen_semantic:(semantic_token_to_int, combine,
+                     (fun ls x -> Int.Map.update (combine prefix x) (inc Seman) ls))
+      ~gen_structural:(0, combine2 structural_token_to_int,
+                       (fun x ls -> Int.Map.update (combine prefix x) (inc Struct) ls))
+      ~gen_vertical:(0, combine2 vertical_token_to_int,
+                     (fun x ls -> Int.Map.update (combine prefix x) (inc Verti) ls))
+      ~store_feat:acc
+      max_length term
+
+  let term_sexpr_to_complex_ints_no_kind2 prefix max_length acc term =
+    let combine a b = Hashset.Combine.combine a b in
+    let combine2 f a b = Hashset.Combine.combine (f a) b in
+    let inc = function
+      | None -> Some 1
+      | Some i -> Some (i+1) in
+    term_sexpr_to_complex_features2
+      ~gen_semantic:(semantic_token_to_int, combine,
+                     (fun ls x -> Int.Map.update (combine prefix x) inc ls))
+      ~gen_structural:(0, combine2 structural_token_to_int,
+                       (fun x ls -> Int.Map.update (combine prefix x) inc ls))
+      ~gen_vertical:(0, combine2 vertical_token_to_int,
+                     (fun x ls -> Int.Map.update (combine prefix x) inc ls))
       ~store_feat:acc
       max_length term
 
@@ -585,13 +656,39 @@ module F (TS: TacticianStructures) = struct
     (List.map (fun (kind, feat) -> kind, "GOAL-"^ feat) goal_feats) @
     (List.map (fun (kind, feat) -> kind, "HYPS-"^ feat) (List.flatten hyp_feats))
 
-  let proof_state_to_complex_features2 max_length ps =
+  let proof_state_to_complex_strings2 max_length ps =
     let hyps = proof_state_hypotheses ps in
     let goal = proof_state_goal ps in
-    let mkfeats prefix t acc = term_sexpr_to_complex_features2 prefix max_length acc (term_repr t) in
-    let hyp_feats = List.fold_left (fun a b -> Named.Declaration.fold_constr (mkfeats "HYPS-") b a)
+    let mkfeats prefix t acc = term_sexpr_to_complex_strings2 prefix max_length acc (term_repr t) in
+    let feats = List.fold_left (fun a b -> Named.Declaration.fold_constr (mkfeats "HYPS-") b a)
         CString.Map.empty hyps in
-    mkfeats "GOAL-" goal hyp_feats
+    let feats = mkfeats "GOAL-" goal feats in
+    let feats_with_count = CString.Map.fold
+        (fun feat (kind, count) acc -> (kind, feat ^ "-" ^ string_of_int count) :: acc)
+        feats [] in
+    (* TODO: In the current fomulation, this resorting is needed. However, this is rather expensive.
+             We should consider not adding feature counts to the featues itself. This is likely to be
+             suboptimal for the model anyways. *)
+    List.sort_uniq (fun (_kind1, feat1) (_kind2, feat2) -> String.compare feat1 feat2) feats_with_count
+
+  let proof_state_to_complex_strings2 ps = proof_state_to_complex_strings2 2 ps
+
+  let proof_state_to_complex_ints2 max_length ps =
+    let hyps = proof_state_hypotheses ps in
+    let goal = proof_state_goal ps in
+    let mkfeats prefix t acc = term_sexpr_to_complex_ints2 prefix max_length acc (term_repr t) in
+    let feats = List.fold_left (fun a b -> Named.Declaration.fold_constr (mkfeats (Int.hash 2000)) b a)
+        Int.Map.empty hyps in
+    let feats = mkfeats (Int.hash 2001) goal feats in
+    let feats_with_count = Int.Map.fold
+        (fun feat (kind, count) acc -> (kind, Hashset.Combine.combine feat count) :: acc)
+        feats [] in
+    (* TODO: In the current fomulation, this resorting is needed. However, this is rather expensive.
+             We should consider not adding feature counts to the featues itself. This is likely to be
+             suboptimal for the model anyways. *)
+    List.sort_uniq (fun (_kind1, feat1) (_kind2, feat2) -> Int.compare feat1 feat2) feats_with_count
+
+  let proof_state_to_complex_ints2 ps = proof_state_to_complex_ints2 2 ps
 
   let count_dup l =
     let sl = List.sort compare l in
@@ -619,21 +716,6 @@ module F (TS: TacticianStructures) = struct
     let feats_with_count = List.rev_map (fun ((kind, feat), count) -> kind, feat ^ "-" ^ (Stdlib.string_of_int count))
         feats_with_count_pair in
     (* print_endline (String.concat ", "  (List.map Stdlib.snd complex_feats)); *)
-    List.sort_uniq (fun (_kind1, feat1) (_kind2, feat2) -> String.compare feat1 feat2) feats_with_count
-
-  let proof_state_to_complex_ints2 ps =
-    let complex_feats = proof_state_to_complex_features2 2 ps in
-    let feats_with_count = CString.Map.fold
-        (fun feat (kind, count) acc -> (kind, feat ^ "-" ^ string_of_int count) :: acc)
-        complex_feats [] in
-    let feats = List.rev_map (fun (kind, feat) ->  kind, Hashtbl.hash feat) feats_with_count in
-    List.sort_uniq (fun (_kind1, feat1) (_kind2, feat2) -> Int.compare feat1 feat2) feats
-
-  let proof_state_to_complex_strings2 ps =
-    let complex_feats = proof_state_to_complex_features2 2 ps in
-    let feats_with_count = CString.Map.fold
-        (fun feat (kind, count) acc -> (kind, feat ^ "-" ^ string_of_int count) :: acc)
-        complex_feats [] in
     List.sort_uniq (fun (_kind1, feat1) (_kind2, feat2) -> String.compare feat1 feat2) feats_with_count
 
   let context_complex_features max_length ctx =
