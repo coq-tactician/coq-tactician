@@ -27,7 +27,11 @@ let compare_head_gen_leq_with kind1 kind2 leq_universes leq_sorts eq leq nargs t
     Int.equal len (Array.length l2) &&
     leq (nargs+len) c1 c2 && CArray.equal_norefl (eq 0) l1 l2
   | Proj (p1,c1), Proj (p2,c2) -> Projection.equal p1 p2 && eq 0 c1 c2
-  | Evar (e1,l1), Evar (e2,l2) -> Evar.equal e1 e2 && CArray.equal (eq 0) l1 l2
+  | Evar (e1,l1), Evar (e2,l2) ->
+    if Evar.equal e1 e2 then Feedback.msg_notice Pp.(str "equal") else Feedback.msg_notice Pp.(str "not equal");
+    Feedback.msg_notice (Evar.print e1);
+    Feedback.msg_notice (Evar.print e2);
+    Evar.equal e1 e2 && CArray.equal (eq 0) l1 l2
   | Const (c1,u1), Const (c2,u2) ->
     (* The args length currently isn't used but may as well pass it. *)
     Constant.equal c1 c2 && leq_universes (GlobRef.ConstRef c1) nargs u1 u2
@@ -54,7 +58,16 @@ let eq_constr_univs_test (evd1, t1) (evd2, t2) =
   let open Evd in
   let t1 = EConstr.Unsafe.to_constr t1
   and t2 = EConstr.Unsafe.to_constr t2 in
-  let sigma = ref (merge_universe_context evd2 (evar_universe_context evd1)) in
+  (* let us1 = Evd.evar_universe_context evd1 in *)
+  (* let us2 = Evd.evar_universe_context evd2 in *)
+  (* let uv1 = fst @@ UState.context_set us1 in *)
+  (* let uv2 = fst @@ UState.context_set us2 in *)
+  (* Feedback.msg_info Pp.(str "univs 1"); *)
+  (* Univ.LSet.iter (fun u -> Feedback.msg_info @@ Univ.Level.pr u) uv1; *)
+  (* Feedback.msg_info Pp.(str "\nunivs 2"); *)
+  (* Univ.LSet.iter (fun u -> Feedback.msg_info @@ Univ.Level.pr u) uv2; *)
+  let sigma = Evd.emit_side_effects (Evd.eval_side_effects evd1) evd2 in
+  let sigma = ref (merge_universe_context sigma (evar_universe_context evd1)) in
   let eq_universes _ _ u1 u2 =
     let u1 = normalize_universe_instance !sigma u1 in
     let u2 = normalize_universe_instance !sigma u2 in
@@ -143,6 +156,23 @@ let third_if_not_equal_tactic t1 t2 t3 =
     | _ -> t3 in
   tclOR t1_fail t2
 
+let pstate_equal ~pstate1 ~pstate2 =
+  let goals p =
+    let open Proof in
+    let { sigma; goals; stack; shelf; given_up; _ } = data p in
+    List.iter (fun (l, r) ->
+        let msg = Pp.(
+            str "left: " ++ prlist Evar.print l ++ str " right: " ++ prlist Evar.print r
+          ) in
+        Feedback.msg_notice msg) stack;
+    let goals = goals @ shelf @ given_up @ List.concat @@ List.map (fun (l, r) -> l@r) stack in
+    let goals = List.filter_map (Evarutil.advance sigma) goals in
+    sigma, goals in
+  let sigma1, gs1 = goals pstate1 in
+  let sigma2, gs2 = goals pstate2 in
+  Util.List.for_all2eq (fun g1 g2 ->
+      goal_equal (sigma1, g1) (sigma2, g2)) gs1 gs2
+
 (** Compare the proof states after running [t1] and [t2] and taking their first result.
     If they are equal, we keep the (first) result of [t2]. Otherwise, run [t3].
     Comparison of the proof state happens on all unsolved goals. *)
@@ -151,20 +181,10 @@ let third_if_not_equal_command ~pstate t1 t2 t3 =
     let open Proof_global in
     map_proof (fun p ->
         fst @@ Pfedit.solve (Goal_select.get_default_goal_selector ()) None t p) pstate in
-  let goals p =
-    let open Proof in
-    let { sigma; goals; stack; shelf; given_up; _ } = data @@ Proof_global.get_proof p in
-    let goals = goals @ shelf @ given_up @ List.concat @@ List.map (fun (l, r) -> l@r) stack in
-    let goals = List.filter_map (Evarutil.advance sigma) goals in
-    sigma, goals in
   try
     let p1 = run t1 in
     let p2 = run t2 in
-    let sigma1, gs1 = goals p1 in
-    let sigma2, gs2 = goals p2 in
-    let equal = Util.List.for_all2eq (fun g1 g2 ->
-        goal_equal (sigma1, g1) (sigma2, g2)) gs1 gs2 in
-    if equal then
+    if pstate_equal ~pstate1:(Proof_global.get_proof p1) ~pstate2:(Proof_global.get_proof p2) then
        p2
     else
       run t3

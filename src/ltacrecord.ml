@@ -948,6 +948,63 @@ let hide_interp_t global t ot id name =
       hide_interp (Proofview.Goal.env gl)
     end
 
+let vernac_solve ~pstate n info tcom b id =
+  let print_error ~pstate ~pstate1 ~pstate2 =
+    let open Proofview in
+    let open Notations in
+    let tac =
+      let open Proofview in
+      Proofview.tclENV >>= fun env ->
+      let ist = Genintern.empty_glob_sign env in
+      let t1 = Tacintern.intern_pure_tactic ist tcom in
+      let t2 = decompose_annotate t1 (fun _ t -> t) in
+      Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
+      let msg = Pp.(
+        str "Tactician found a bug in it's tactical decomposition. Please report." ++ fnl () ++
+        Pptactic.pr_glob_tactic (Global.env ()) t1 ++ fnl () ++
+        Pptactic.pr_glob_tactic (Global.env ()) t2 ++ fnl () ++
+        Printer.pr_open_subgoals_diff ~diffs:true ~oproof:pstate1 pstate2 ++ fnl () ++
+        Printer.pr_open_subgoals_diff ~diffs:true ~oproof:pstate2 pstate1
+      ) in
+      Feedback.msg_warning msg; tclUNIT () in
+    ignore (Pfedit.solve n info tac pstate) in
+  let open Goal_select in
+  let skip = pre_vernac_solve pstate id in
+  if skip then pstate else
+    try
+      let pstate, status = Proof_global.map_fold_proof_endline (fun etac p ->
+          let with_end_tac = if b then Some etac else None in
+          let global = match n with SelectAll | SelectList _ -> true | _ -> false in
+          let info = Option.append info G_ltac.(!print_info_trace) in
+          let name = Proof_global.get_proof_name pstate in
+          let (pstate1,status1) =
+            Pfedit.solve n info (Tacinterp.hide_interp global tcom None) ?with_end_tac p
+          in
+          let p, status =
+            try
+              let (pstate2,status2) =
+                Pfedit.solve n info (hide_interp_t global tcom None id name) ?with_end_tac p in
+              if Proof_equality.pstate_equal ~pstate1 ~pstate2 then
+                pstate2, status2
+              else
+                (print_error ~pstate:p ~pstate1 ~pstate2;
+                 pstate1, status1)
+            with
+            | e when CErrors.noncritical e ->
+              let msg = Pp.(str "Tactician's tactical decomposition crashed. Please report.") in
+              Feedback.msg_warning msg;
+              pstate1, status1
+          in
+         (* in case a strict subtree was completed,
+             go back to the top of the prooftree *)
+          let p = Proof.maximal_unfocus Vernacentries.command_focus p in
+          p,status) pstate in
+      if not status then Feedback.feedback Feedback.AddedAxiom;
+      pstate
+    with
+    | e when CErrors.noncritical e || e = CErrors.Timeout ->
+      save_exn id e; raise e
+
 let tactician_ignore t =
   let open Proofview in
   let open Notations in
