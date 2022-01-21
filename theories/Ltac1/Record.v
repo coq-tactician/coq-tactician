@@ -1,3 +1,7 @@
+(* Needed to deal with the 'abstract' tactic. See inline_private_constants.ml *)
+Definition private_constant_placeholder (x : Type) := x.
+Register private_constant_placeholder as tactician.private_constant_placeholder.
+
 Declare ML Module "ltac_plugin".
 Declare ML Module "ground_plugin".
 Declare ML Module "extraction_plugin".
@@ -22,13 +26,26 @@ Tactician Record Do Keep.
 Tactician Record Timeout Keep.
 Tactician Record Repeat Keep.
 Tactician Record Progress Keep.
+
+(*
+ The abstract tactic is a difficult beast to deal with for several reasons:
+ a) It does not add proving power (it is only useful for advanced things, way beyond Tactician).
+    However, we cannot decompose it, because the inner tactic of abstract is executed in a different context
+    and therefore not recorded by Tactician. Hence, if we want to record something, this settings needs to
+    remain "Keep".
+ b) Abstract emits side-effects that need to either be inlined or otherwise dealt with in Tacticians recorded data.
+    It is unclear what the best approach for this would be.
+ c) The 'abstract' tactic is very error-prone, making Tactician crash. See https://github.com/coq/coq/issues/9146
+    Note that setting this to 'Decompose' will not keep Tactician from using 'abstract' ever, because it could be
+    part of a more complex expression (or inside of an ltac definition). This is better than nothing though.
+ *)
 Tactician Record Abstract Keep.
 Tactician Record LetIn Keep.
 Tactician Record Match Keep.
 Tactician Record MatchGoal Keep.
 Tactician Record Arg Keep.
 Tactician Record Select Decompose. (* TODO: This setting should be kept like this until we implement
-                                      an override in tactic_annotate in case we are in 'search with cache' *)
+                                      an override in tactic_annotate in case we are in 'synth with cache' *)
 Tactician Record ML Keep.
 Tactician Record Alias Keep.
 Tactician Record Call Keep.
