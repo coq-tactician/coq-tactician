@@ -229,6 +229,7 @@ module F (TS: TacticianStructures) = struct
             structure = features.structure @ ["X"]; 
             vertical = features.vertical}
         (* Uninteresting leafs *)
+        (* TODO: features for Sort because A:Prop has empty features *)
         | Node (Leaf "Sort" :: _)
         | Node (Leaf "Meta" :: _) -> features
         (* Recursion for grammar we don't handle *)
