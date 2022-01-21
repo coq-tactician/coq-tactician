@@ -8,7 +8,7 @@ type id = Id.t
 module IdMap : Map.S with type key = Id.t
 type id_map = Id.t IdMap.t
 
-type sexpr = Node of sexpr list | Leaf of string
+type sexpr = Sexpr.sexpr = Node of sexpr list | Leaf of string
 
 module type TacticianStructures = sig
   type term
@@ -53,19 +53,22 @@ module type TacticianStructures = sig
     { confidence : float
     ; focus      : int
     ; tactic     : tactic }
-
-  type location =
-    | Dependency
-    | File
-    | Lemma
 end
+
+type data_status =
+  | Original
+  | QedTime
+  | Substituted of Libnames.full_path (* path of the substituted constant (does not exist) *)
+  | Discharged of Libnames.full_path (* path of the substituted constant (does not exist) *)
+
+type origin = Libnames.full_path * data_status
 
 module type TacticianOnlineLearnerType =
   functor (S : TacticianStructures) -> sig
     open S
     type model
     val empty    : unit -> model
-    val learn    : model -> location -> outcome list -> tactic -> model (* TODO: Add lemma dependencies *)
+    val learn    : model -> origin -> outcome list -> tactic -> model (* TODO: Add lemma dependencies *)
     val predict  : model -> situation list -> prediction IStream.t (* TODO: Add global environment *)
     val evaluate : model -> outcome -> tactic -> float * model
   end
@@ -74,7 +77,7 @@ module type TacticianOfflineLearnerType =
   functor (S : TacticianStructures) -> sig
     open S
     type model
-    val add      : location -> outcome list -> tactic -> unit (* TODO: Add lemma dependencies *)
+    val add      : origin -> outcome list -> tactic -> unit (* TODO: Add lemma dependencies *)
     val train    : unit -> model
     val predict  : model -> situation list -> prediction IStream.t (* TODO: Add global environment *)
     val evaluate : model -> outcome -> tactic -> float

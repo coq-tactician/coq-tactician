@@ -1,5 +1,6 @@
 open Tactic_learner
 open Learner_helper
+open Features
 open Util
 
 type features =  int list
@@ -10,7 +11,7 @@ type 'a trie =
 type hash = int -> int
 
 type 'a lsh_trie =
-  { hashes : hash list
+  { hashes : int list
   ; trie   : 'a trie }
 
 type 'a forest = 'a lsh_trie list
@@ -18,11 +19,12 @@ type 'a forest = 'a lsh_trie list
 let init_trie random depth =
   let mk_hash _ =
     let seed = Random.State.bits random in
-    Hashtbl.seeded_hash seed in
+    seed in
   { hashes = List.init depth mk_hash
   ; trie   = Leaf [] }
 
 let min_hash h feats =
+  let h = Hashtbl.seeded_hash h in
   (* Empty `feats` hashing to the same `max_int` value is okay, because then
      all empty objects collide. Note that the hash functions never produce `max_int`. *)
   let min = List.fold_left (fun m x -> min m (h x)) max_int feats in
@@ -96,7 +98,8 @@ let sort_window_default = 1000
 let sort_window = ref sort_window_default
 let () = declare_option ["Tactician"; "LSHF"; "Sort"; "Window"] sort_window sort_window_default
 
-module LSHF : TacticianOnlineLearnerType = functor (TS : TacticianStructures) -> struct
+module LSHF =
+  functor (TS : TacticianStructures) -> struct
   module LH = L(TS)
   open TS
   open LH
@@ -114,11 +117,11 @@ module LSHF : TacticianOnlineLearnerType = functor (TS : TacticianStructures) ->
     ; length = 0
     ; frequencies = Frequencies.empty }
 
-  let add db b obj =
-    let feats = remove_feat_kind (proof_state_to_ints b) in
+  let add db b obj to_feats =
+    let feats = to_feats b in
     let frequencies = List.fold_left
         (fun freq f ->
-           Frequencies.update f (fun y -> Some ((default 0 y) + 1)) freq)
+           Frequencies.update f (fun y -> Some ((Option.default 0 y) + 1)) freq)
         db.frequencies
         feats in
     (* TODO: Length needs to be adjusted if we want to use multisets  *)
@@ -126,13 +129,13 @@ module LSHF : TacticianOnlineLearnerType = functor (TS : TacticianStructures) ->
     let forest = insert db.forest feats obj in
     { forest; length; frequencies }
 
-  let learn db _loc outcomes tac =
-    List.fold_left (fun db out -> add db out.before tac) db outcomes
+  let learn db (name, status) outcomes tac to_feats =
+    List.fold_left (fun db out -> add db out.before tac to_feats) db outcomes
 
-  let predict db f =
+  let predict db f to_feats remove_kind tfidf =
     if f = [] then IStream.of_list [] else
-      let feats = proof_state_to_ints (List.hd f).state in
-      let candidates, _ = query db.forest (remove_feat_kind feats) !sort_window in
+      let feats = to_feats (List.hd f).state in
+      let candidates, _ = query db.forest (remove_kind feats) !sort_window in
       let tdidfs = List.map
           (fun (o, f) -> let x = tfidf db.length db.frequencies feats f in (x, o))
           candidates in
@@ -144,4 +147,26 @@ module LSHF : TacticianOnlineLearnerType = functor (TS : TacticianStructures) ->
 
 end
 
-let () = register_online_learner "LSHF" (module LSHF) 
+module SimpleLSHF : TacticianOnlineLearnerType =
+  functor (TS : TacticianStructures) -> struct
+    module LSHF = LSHF(TS)
+    include LSHF
+    module FH = F(TS)
+    open FH
+  let learn db _status outcomes tac = learn db _status outcomes tac proof_state_to_simple_ints
+  let predict db f = predict db f proof_state_to_simple_ints (fun x -> x) tfidf
+end
+
+module ComplexLSHF : TacticianOnlineLearnerType =
+  functor (TS : TacticianStructures) -> struct
+    module LSHF = LSHF(TS)
+    include LSHF
+    module FH = F(TS)
+    open FH
+    let learn db _status outcomes tac = learn db _status outcomes tac
+        proof_state_to_complex_ints_no_kind
+    let predict db f = predict db f proof_state_to_complex_ints (List.map snd) manually_weighed_tfidf
+  end
+
+(* let () = register_online_learner "SimpleLSHF" (module SimpleLSHF) *)
+let () = register_online_learner "ComplexLSHF" (module ComplexLSHF)

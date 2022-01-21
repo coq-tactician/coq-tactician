@@ -30,15 +30,20 @@ module type MapDef = sig
     ; raw_atomic_tactic : raw_atomic_tactic_expr transformer
     ; glob_tactic_arg : glob_tactic_arg transformer
     ; raw_tactic_arg : raw_tactic_arg transformer
-    ; cast : 'a. 'a CAst.t map
+    ; cast : 'a. 'a CAst.t t -> 'a CAst.t t
     ; constant : Constant.t map
     ; mutind : MutInd.t map
     ; short_name : Id.t CAst.t option map
-    ; located : Loc.t option map
+    ; located : 'a. (Loc.t option * 'a) t -> (Loc.t option * 'a) t
     ; variable : Id.t map
+    ; qualid : (DirPath.t * Id.t) map
+    (* Guaranteed not be at least partially qualified (otherwise variable is called) *)
     ; constr_pattern : constr_pattern transformer
     ; constr_expr : constr_expr_r transformer
-    ; glob_constr : ([ `any ] glob_constr_r) transformer }
+    ; glob_constr : ([ `any ] glob_constr_r) transformer
+    ; glob_constr_and_expr : Genintern.glob_constr_and_expr transformer
+    ; glob_constr_pattern_and_expr : Genintern.glob_constr_pattern_and_expr transformer
+    }
 
   type recursor =
     { option_map : 'a. 'a map -> 'a option map
@@ -85,15 +90,20 @@ module MapDefTemplate (M: Monad.Def) = struct
     ; raw_atomic_tactic : raw_atomic_tactic_expr transformer
     ; glob_tactic_arg : glob_tactic_arg transformer
     ; raw_tactic_arg : raw_tactic_arg transformer
-    ; cast : 'a. 'a CAst.t map
+    ; cast : 'a. 'a CAst.t t -> 'a CAst.t t
     ; constant : Constant.t map
     ; mutind : MutInd.t map
     ; short_name : Id.t CAst.t option map
-    ; located : Loc.t option map
+    ; located : 'a. (Loc.t option * 'a) t -> (Loc.t option * 'a) t
     ; variable : Id.t map
+    ; qualid : (DirPath.t * Id.t) map
+    (* Guaranteed not be at least partially qualified (otherwise variable is called) *)
     ; constr_pattern : constr_pattern transformer
     ; constr_expr : constr_expr_r transformer
-    ; glob_constr : ([ `any ] glob_constr_r) transformer }
+    ; glob_constr : ([ `any ] glob_constr_r) transformer
+    ; glob_constr_and_expr : Genintern.glob_constr_and_expr transformer
+    ; glob_constr_pattern_and_expr : Genintern.glob_constr_pattern_and_expr transformer
+    }
   let none_transformer x f = f x
   let default_mapper =
     { glob_tactic = none_transformer
@@ -102,15 +112,19 @@ module MapDefTemplate (M: Monad.Def) = struct
     ; raw_atomic_tactic = none_transformer
     ; glob_tactic_arg = none_transformer
     ; raw_tactic_arg = none_transformer
-    ; cast = id
+    ; cast = (fun x -> x)
     ; constant = id
     ; mutind = id
     ; short_name = id
-    ; located = id
+    ; located = (fun x -> x)
     ; variable = id
+    ; qualid = id
     ; constr_pattern = none_transformer
     ; constr_expr = none_transformer
-    ; glob_constr = none_transformer }
+    ; glob_constr = none_transformer
+    ; glob_constr_and_expr = none_transformer
+    ; glob_constr_pattern_and_expr = none_transformer
+    }
   type recursor =
     { option_map : 'a. 'a map -> 'a option map
     ; or_var_map : 'a. 'a map -> 'a or_var map
@@ -264,14 +278,13 @@ module MakeMapper (M: MapDef) = struct
     filter_placeholders ls
 
   let mcast m f CAst.{loc; v} =
-    let* v = f v in m.cast (CAst.make ?loc v)
+    m.cast (let+ v = f v in CAst.make ?loc v)
   let mdast m f CAst.{loc; v} =
-    let* v = f (DAst.get_thunk v) in
-    m.cast (DAst.make ?loc v)
+    m.cast (let+ v = f (DAst.get_thunk v) in
+            DAst.make ?loc v)
   let located_map m f (l, x) =
-    let+ l = m.located l
-    and+ x = f x in
-    (l, x)
+    m.located (let+ x = f x in
+               (l, x))
 
   let array_map f xs = let+ xs = List.map f (Array.to_list xs) in Array.of_list xs
   let array_combine xs ys = Array.of_list (OList.combine (Array.to_list xs) (Array.to_list ys))
@@ -288,9 +301,9 @@ module MakeMapper (M: MapDef) = struct
   let qualid_map m (CAst.{loc; _} as q) =
     let d, id = Libnames.repr_qualid q in
     if DirPath.is_empty d then
-      let* id = m.variable id in
-      m.cast (Libnames.make_qualid ?loc DirPath.empty id)
-    else m.cast q
+      m.cast (let+ id = m.variable id in
+              Libnames.make_qualid ?loc DirPath.empty id)
+    else m.cast (let+ d, id = m.qualid (d, id) in Libnames.make_qualid ?loc d id)
 
   let rec cases_pattern_r_map m = function
     | PatVar n -> return (PatVar n, [])
@@ -443,11 +456,11 @@ module MakeMapper (M: MapDef) = struct
 
   let match_context_hyps m f = function
     | Hyp (id, mp) ->
-      let+ id = m.cast id
+      let+ id = m.cast @@ return id
       and+ mp, bnds = match_pattern_map f mp in
       Hyp (id, mp), filter_lnames [id] @ bnds
     | Def (id, mp1, mp2) ->
-      let+ id = m.cast id
+      let+ id = m.cast @@ return id
       and+ mp1, bnds1 = match_pattern_map f mp1
       and+ mp2, bnds2 = match_pattern_map f mp2 in
       Def (id, mp1, mp2), filter_lnames [id] @ bnds2@bnds1
@@ -530,7 +543,7 @@ module MakeMapper (M: MapDef) = struct
 
   let glob_sort_name_map m = function
     | GType li ->
-      let+ li = m.cast li in
+      let+ li = m.cast @@ return li in
       GType li
     | x -> return x
 
@@ -637,7 +650,9 @@ module MakeMapper (M: MapDef) = struct
        let+ c = option_map (fun c -> with_binders bndrs @@ glob_constr_map c) c
        and+ tt = List.map (fun (c, (n, pp)) ->
            let+ c = glob_constr_map c
-           and+ pp = option_map m.cast pp in
+           and+ pp = option_map
+               (fun x -> mcast m (fun ((i, j), nls) ->
+                                 let+ i = m.mutind i in (i, j), nls) x) pp in
            (c, (n, pp))) tt
        and+ cc = List.map (mcast m (fun (ids, cps, c) ->
            (* TODO: It might be that `ids` is all the variables in `cps`, but this is
@@ -687,15 +702,23 @@ module MakeMapper (M: MapDef) = struct
      | GFloat _ as c -> return c
   and glob_constr_map m r c = mdast m (glob_constr_r_map m r) c
 
+  let explicitation_map m = function
+    | ExplByPos (i, id) ->
+      let+ id = option_map m.variable id in
+      ExplByPos (i, id)
+    | ExplByName id ->
+      let+ id = m.variable id in
+      ExplByName id
+
   let rec cases_pattern_expr_r_map m r (case : cases_pattern_expr_r) =
     let cases_pattern_expr_map = cases_pattern_expr_map m r in
     match case with
     | CPatAlias (ca, l) ->
       let+ ca, bndrs = cases_pattern_expr_map ca
-      and+ l = m.cast l in
+      and+ l = m.cast @@ return l in
       CPatAlias (ca, l), l::bndrs
     | CPatCstr (id, cas1, cas2) ->
-      let+ id = m.cast id (* not a variable *)
+      let+ id = m.cast @@ return id (* not a variable *)
       and+ cas1 = option_map (List.map cases_pattern_expr_map) cas1
       and+ cas2 = List.map (cases_pattern_expr_map) cas2 in
       let cas1, bndrs1 = Option.cata (fun cas1 ->
@@ -728,7 +751,7 @@ module MakeMapper (M: MapDef) = struct
     | CPatPrim _ -> return (case, [])
     | CPatRecord xs ->
       let+ xs = List.map (fun (qu, ca) ->
-          let+ qu = m.cast qu (* not a variable *)
+          let+ qu = m.cast @@ return qu (* not a variable *)
           and+ ca,bndrs = cases_pattern_expr_map ca in
           (qu, ca), bndrs) xs in
       let xs, bndrs = OList.split xs in
@@ -751,12 +774,12 @@ module MakeMapper (M: MapDef) = struct
       CRef (qu, i)
     | CFix (li, fix) -> (* li represents the final choice of the cofixpoints, and is not a binder *)
       let bnds = OList.map (fun (id, _, _, _, _) -> CAst.(id.v)) fix in
-      let+ li = m.cast li
+      let+ li = m.cast @@ return li
       and+ fix = List.map (fix_expr_map bnds m r) fix in
       CFix (li, fix)
     | CCoFix (li, cofix) -> (* li represents the final choice of the cofixpoints, and is not a binder *)
       let bnds = OList.map (fun (id, _, _, _) -> CAst.(id.v)) cofix in
-     let+ li = m.cast li
+     let+ li = m.cast @@ return li
      and+ cofix = List.map (cofix_expr_map bnds m r) cofix in
      CCoFix (li, cofix)
     | CProdN (lb, c) ->
@@ -770,7 +793,7 @@ module MakeMapper (M: MapDef) = struct
       let+ c = with_binders (OList.concat bnds) @@ constr_expr_map c in
       CLambdaN (lb, c)
     | CLetIn (l, b, typ, term) ->
-      let+ l = m.cast l
+      let+ l = m.cast @@ return l
       and+ b = constr_expr_map b
       and+ typ = option_map constr_expr_map typ
       and+ term = with_binders (filter_lnames [l]) @@ constr_expr_map term in
@@ -782,7 +805,8 @@ module MakeMapper (M: MapDef) = struct
     | CApp ((flg, c), cs) ->
       let+ c = constr_expr_map c
       and+ cs = List.map (fun (c, e) ->
-          let+ c = constr_expr_map c in
+          let+ c = constr_expr_map c
+          and+ e = option_map (mcast m (explicitation_map m)) e in
           (c,e)) cs in
       CApp ((flg, c), cs)
     | CRecord xs ->
@@ -794,7 +818,7 @@ module MakeMapper (M: MapDef) = struct
     | CCases (sty, c1, cs, bs) ->
       let* cs = List.map (fun (c, l, pat) ->
           let+ c = constr_expr_map c
-          and+ l = option_map m.cast l
+          and+ l = option_map (fun x -> m.cast @@ return x) l
           and+ pat = option_map (cases_pattern_expr_map m r) pat in
           let l' = Option.cata (fun x -> [x]) [] l in
           let pat,bndrs = Option.cata (fun (pat, bndrs) -> Some pat, bndrs) (None, []) pat in
@@ -810,15 +834,15 @@ module MakeMapper (M: MapDef) = struct
       CCases (sty, c1, cs, bs)
     | CLetTuple (ls, (l, c1), c2, c3) ->
       let bndrs = filter_lnames (Option.cata (fun id -> [id]) [] l @ ls) in
-      let+ ls = List.map m.cast ls
-      and+ l = option_map m.cast l
+      let+ ls = List.map (fun x -> m.cast @@ return x) ls
+      and+ l = option_map (fun x -> m.cast @@ return x) l
       and+ c1 = option_map constr_expr_map c1
       and+ c2 = constr_expr_map c2
       and+ c3 = with_binders bndrs @@ constr_expr_map c3 in
       CLetTuple (ls, (l, c1), c2, c3)
     | CIf (c1, (l, c2), c3, c4) ->
       let bndrs = Option.cata (fun l -> [CAst.(l.v)]) [] l in
-      let+ l = option_map m.cast l
+      let+ l = option_map (fun x -> m.cast @@ return x) l
       and+ c1 = constr_expr_map c1
       and+ c2 = option_map (fun c2 -> with_binders (filter_placeholders bndrs) @@ constr_expr_map c2) c2
       and+ c3 = constr_expr_map c3
@@ -860,7 +884,7 @@ module MakeMapper (M: MapDef) = struct
      let+ c = constr_expr_map c in
      CDelimiters (str, c)
   and fix_expr_map bnds m r (li, ord, bi, typ, term) =
-    let* li = m.cast li
+    let* li = m.cast @@ return li
     and+ ord = option_map (recursion_order_expr m r) ord
     and+ bi = List.map (local_binder_expr_map m r) bi in
     let bi,bnds' = OList.split bi in
@@ -868,7 +892,7 @@ module MakeMapper (M: MapDef) = struct
     and+ term = with_binders (OList.concat bnds' @ bnds) @@ constr_expr_map m r term in
     (li, ord, bi, typ, term)
   and cofix_expr_map bnds m r (li, bi, typ, term) =
-    let* li = m.cast li
+    let* li = m.cast @@ return li
     and+ bi = List.map (local_binder_expr_map m r) bi in
     let bi,bnds' = OList.split bi in
     let+ typ = constr_expr_map m r typ
@@ -876,19 +900,20 @@ module MakeMapper (M: MapDef) = struct
     (li, bi, typ, term)
   and local_binder_expr_map m r : local_binder_expr -> (local_binder_expr * Id.t list) t = function
     | CLocalAssum (lis, bk, c) ->
-      let+ lis = List.map m.cast lis
+      let+ lis = List.map (fun x -> m.cast @@ return x) lis
       and+ c = constr_expr_map m r c in
       CLocalAssum (lis, bk, c), filter_lnames lis
     | CLocalDef (li, c1, c2) ->
-      let+ li = m.cast li
+      let+ li = m.cast @@ return li
       and+ c1 = constr_expr_map m r c1
       and+ c2 = option_map (constr_expr_map m r) c2 in
       CLocalDef (li, c1, c2), filter_lnames [li]
     | CLocalPattern CAst.{loc; v=(ca, c)} ->
-      let* ca,bndrs = cases_pattern_expr_map m r ca
-      and+ c = option_map (constr_expr_map m r) c in
-      let+ cast = m.cast (CAst.make ?loc (ca, c)) in
-      CLocalPattern cast, filter_lnames bndrs
+      let+ CAst.{loc; v=(x, bndrs)} = m.cast (
+        let+ ca,bndrs = cases_pattern_expr_map m r ca
+        and+ c = option_map (constr_expr_map m r) c in
+        CAst.make ?loc ((ca, c), bndrs)) in
+      CLocalPattern (CAst.make ?loc x), filter_lnames bndrs
   and recursion_order_expr_r m r = function
     | CStructRec li ->
       let+ li = mcast m m.variable li in
@@ -971,12 +996,14 @@ module MakeMapper (M: MapDef) = struct
      | PInt _ as pat -> return pat
      | PFloat _ as pat -> return pat
 
-  and glob_constr_and_expr_map m r ((gc, ce) : g_trm) =
+  and glob_constr_and_expr_map m r (trm : g_trm) =
+    m.glob_constr_and_expr trm @@ function (gc, ce) ->
     let+ gc = glob_constr_map m r gc
     and+ ce = option_map (constr_expr_map m r) ce in
     (gc, ce)
-  and g_pat_map m r ((ids, c, cp) : g_pat) =
+  and g_pat_map m r (pat : g_pat) =
     (* TODO: `ids` are variables, but unknown if binders. They do not appear to be used, so we ignore *)
+    m.glob_constr_pattern_and_expr pat @@ function (ids, c, cp) ->
     let+ c = glob_constr_and_expr_map m r c
     and+ cp = constr_pattern_map m cp in
     (ids, c, cp)
@@ -1248,7 +1275,7 @@ module MakeMapper (M: MapDef) = struct
     pat_map      = constr_expr_map m recursor;
     ref_map      = qualid_map m;
     nam_map      = mcast m m.variable;
-    cst_map      = or_by_notation_map m m.cast;
+    cst_map      = or_by_notation_map m (fun x -> m.cast @@ return x);
     generic_map  = generic_raw_map (recursor m);
     u            = m;
     tactic       = m.raw_tactic;
@@ -1262,7 +1289,7 @@ module MakeMapper (M: MapDef) = struct
     trm_map      = glob_constr_and_expr_map m recursor;
     dtrm_map     = glob_constr_and_expr_map m recursor;
     pat_map      = g_pat_map m recursor;
-    ref_map      = or_var_map m (fun (l, id) -> let+ l = m.located l in (l, id));
+    ref_map      = or_var_map m (fun x -> m.located @@ return x);
     nam_map      = mcast m m.variable;
     cst_map      = or_var_map m (and_short_name_map m (evaluable_global_reference_map m));
     generic_map  = generic_glob_map (recursor m);

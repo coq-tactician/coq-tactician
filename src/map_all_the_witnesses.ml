@@ -160,7 +160,7 @@ let _ = register_generic_map wit_hloc (module struct
     end
   end)
 
-let _ = register_generic_map wit_glob (module struct
+let at wit = register_generic_map wit (module struct
     type raw = constr_expr
     type glob = glob_constr_and_expr
     module M = functor (M : MapDef) -> struct
@@ -169,6 +169,7 @@ let _ = register_generic_map wit_glob (module struct
       let glob_map m = m.glob_constr_and_expr_map
     end
   end)
+let _ = [at wit_glob; at wit_lglob]
 
 let _ = register_generic_map wit_lconstr (module struct
     type raw = constr_expr
