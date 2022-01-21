@@ -1,8 +1,11 @@
 open Tactic_learner
 open Learner_helper
+open Features
 
 module OnlineForest : TacticianOnlineLearnerType = functor (TS : TacticianStructures) -> struct
     module LH = L(TS)
+    module FH = F(TS)
+    open FH
     open TS
     open LH
     module Tree = Tree_online.Make(Data)
@@ -15,7 +18,7 @@ module OnlineForest : TacticianOnlineLearnerType = functor (TS : TacticianStruct
     let empty () = Forest.empty
 
     let add forest b obj =
-      let feats = proof_state_to_ints b in
+      let feats = proof_state_to_complex_ints_no_kind b in
       Forest.add
       ~n_feas:10
       ~max_depth:320
@@ -27,8 +30,9 @@ module OnlineForest : TacticianOnlineLearnerType = functor (TS : TacticianStruct
       List.fold_left (fun db out -> add db out.before tac) db outcomes
 
     let predict forest f =
+      let () = print_endline "aa" in
       if f = [] then IStream.empty else
-      let feats = proof_state_to_ints (List.hd f).state in
+      let feats = proof_state_to_complex_ints_no_kind (List.hd f).state in
       let example = Data.unlabeled feats in
       let out = Forest.score forest example in
       let out = List.map (fun (x, y) -> (y, x)) out in
