@@ -102,6 +102,9 @@ let constr2s t =
       let (info, t1, inv, t2, bodies) = (* TODO: Use inv *)
         (* We assume here that the current environment is an extension of the environment where
            the term was defined. *)
+        (* TODO: This crashes when the inducive was defined in a section that is now closed.
+                 This makes the s-expressions basically useless. The only proper fix seems to be fixing
+                 https://github.com/coq-tactician/coq-tactician/issues/28 *)
         Inductive.expand_case (Global.env ()) (a, b, c, d, e, f, g) in
       Node (s2s "Case" :: case_info2s info :: aux ls t1 :: aux ls t2
            :: Array.to_list (Array.map (aux ls) bodies))
