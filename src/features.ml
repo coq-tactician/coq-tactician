@@ -58,6 +58,8 @@ type role_token =
   | TProj
   | TApp
   | TCast
+  | TArray
+  | TArrayType
 type vertical_token =
   | TAtom of semantic_token * role_token
   | TNonAtom of role_token
@@ -106,6 +108,8 @@ let role_token_to_string = function
   | TProj -> "Proj"
   | TApp -> "App"
   | TCast -> "Cast"
+  | TArray -> "Array"
+  | TArrayType -> "ArrayType"
 let vertical_token_to_string = function
   | TAtom (sm, rl) -> semantic_token_to_string sm ^ ":" ^ role_token_to_string rl
   | TNonAtom rl -> role_token_to_string rl
@@ -123,8 +127,8 @@ let semantic_token_to_int =
   function
   | TRel -> Int.hash 1001
   | TEvar -> Int.hash 1002
-  | TConstruct c -> constructor_hash c
-  | TInd i -> ind_hash i
+  | TConstruct c -> Construct.CanOrd.hash c
+  | TInd i -> Ind.CanOrd.hash i
   | TVar id -> Id.hash id
   | TConst c -> Constant.CanOrd.hash c
   | TInt n -> Uint63.hash n
@@ -158,15 +162,17 @@ let role_token_to_int = function
   | TProj -> Int.hash 1028
   | TApp -> Int.hash 1029
   | TCast -> Int.hash 1030
+  | TArray -> Int.hash 1031
+  | TArrayType -> Int.hash 1032
 let vertical_token_to_int = function
   | TAtom (sm, rl) -> Hashset.Combine.combine (semantic_token_to_int sm) (role_token_to_int rl)
-  | TNonAtom rl -> Hashset.Combine.combine (Int.hash 1031) (role_token_to_int rl)
+  | TNonAtom rl -> Hashset.Combine.combine (Int.hash 1033) (role_token_to_int rl)
 let structural_token_to_int = function
-  | TOpenParen -> Int.hash 1032
-  | TCloseParen -> Int.hash 1033
-  | TAppArgs n -> Hashset.Combine.combine (Int.hash 1034) (Int.hash n)
-  | TRole rl -> Hashset.Combine.combine (Int.hash 1035) (role_token_to_int rl)
-  | TEnd -> Int.hash 1036
+  | TOpenParen -> Int.hash 1034
+  | TCloseParen -> Int.hash 1035
+  | TAppArgs n -> Hashset.Combine.combine (Int.hash 1036) (Int.hash n)
+  | TRole rl -> Hashset.Combine.combine (Int.hash 1037) (role_token_to_int rl)
+  | TEnd -> Int.hash 1038
 
 module F (TS: TacticianStructures) = struct
   module LH = L(TS)
@@ -212,7 +218,7 @@ module F (TS: TacticianStructures) = struct
       (* TODO: Handle binders with feature substitution *)
       | LetIn (id, body1, typ, body2) ->
         aux_reset_fold f [body1; typ; body2]
-      | Case (_, term, typ, cases) ->
+      | Case (_, term, _, typ, cases) ->
         aux_reset_fold f (term::typ::(Array.to_list cases))
       | Fix (_, (_, typs, trms))
       | CoFix (_, (_, typs, trms)) ->
@@ -232,6 +238,8 @@ module F (TS: TacticianStructures) = struct
       | Cast (term, _, typ) ->
         (* We probably want to have the type of the cast, but isolated *)
         aux (set_interm (aux (reset_interm f) typ) interm) term
+      | Array (_, _arr, _default, typ) ->
+        aux f typ
     in
     snd @@ aux (start, empty) oterm
 
@@ -373,7 +381,7 @@ module F (TS: TacticianStructures) = struct
         | LetIn (_, body1, typ, body2) ->
           let cont = [body1, TLetVarBody; typ, TLetVarType; body2, TLetBody] in
           end_structure (aux_reset_fold (start_structure features TLetIn) cont depth)
-        | Case (_, term, typ, cases) ->
+        | Case (_, term, _, typ, cases) ->
           let cases = Array.to_list cases in
           let cont = [term, TMatchTerm; typ, TMatchTermType] @ (List.map (fun c -> c, TCase) cases) in
           end_structure (aux_reset_fold (start_structure features TCase) cont depth)
@@ -419,6 +427,9 @@ module F (TS: TacticianStructures) = struct
           let features_with_type = aux (start_structure features_reset TCast) typ TCastType (depth + 1) in
           let feature' = set_interm features_with_type features.semantic in
           end_structure (aux feature' term TCastTerm (depth + 1))
+        | Array (_, _arr, _default, typ) ->
+          let features' = start_structure features TArray
+          in end_structure (aux features' typ TArrayType (depth + 1))
       in
       if depth == 3 then
         (* break the maximal depth constraint*)
