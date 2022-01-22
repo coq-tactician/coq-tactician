@@ -28,7 +28,6 @@ type semantic_token =
   | TVar of variable
   | TConst of Constant.t
   | TInt of Uint63.t
-  | TFloat of Float64.t
 type role_token =
   | TRoot
   | TLetVarBody
@@ -76,7 +75,6 @@ let semantic_token_to_string = function
   | TVar id -> "$" ^ id2s id
   | TConst c -> constant2s c
   | TInt n -> "i" ^ Uint63.to_string n
-  | TFloat n -> "f" ^ Float64.to_string n
 let role_token_to_string = function
   | TRoot -> "Root"
   | TLetVarBody -> "LetVarBody"
@@ -128,7 +126,6 @@ let semantic_token_to_int =
   | TVar id -> Id.hash id
   | TConst c -> Constant.CanOrd.hash c
   | TInt n -> Uint63.hash n
-  | TFloat n -> Float64.hash n
 let role_token_to_int = function
   | TRoot -> Int.hash 1003
   | TLetVarBody -> Int.hash 1004
@@ -202,7 +199,6 @@ module F (TS: TacticianStructures) = struct
       | Var id -> add_atom (TVar id) f
       | Const (c, u) -> add_atom (TConst c) f
       | Int n -> add_atom (TInt n) f
-      | Float n -> add_atom (TFloat n) f
 
       (* Uninteresting leafs *)
       | Sort _
@@ -332,7 +328,6 @@ module F (TS: TacticianStructures) = struct
       | Var id -> verti_atom (TVar id) features role
       | Const (c, u) -> verti_atom (TConst c) features role
       | Int n -> verti_atom (TInt n) features role
-      | Float n -> verti_atom (TFloat n) features role
       | _ ->
         add_walk (TNonAtom role) features
     in
@@ -363,7 +358,6 @@ module F (TS: TacticianStructures) = struct
         | Var id -> process_atom (TVar id)
         | Const (c, u) -> process_atom (TConst c)
         | Int n -> process_atom (TInt n)
-        | Float n -> process_atom (TFloat n)
 
         (* Uninteresting leafs *)
         | Sort _
