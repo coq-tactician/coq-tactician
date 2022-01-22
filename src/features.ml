@@ -36,6 +36,7 @@ type role_token =
   | TLetBody
   | TMatchTerm
   | TMatchTermType
+  | TMatchTermReturn
   | TFixTerm
   | TFixType
   | TCoFixTerm
@@ -86,6 +87,7 @@ let role_token_to_string = function
   | TLetBody -> "LetBody"
   | TMatchTerm -> "MatchTerm"
   | TMatchTermType -> "MatchTermType"
+  | TMatchTermReturn -> "MatchTermReturn"
   | TFixTerm -> "FixTerm"
   | TFixType -> "FixType"
   | TCoFixTerm -> "CoFixTerm"
@@ -140,39 +142,40 @@ let role_token_to_int = function
   | TLetBody -> Int.hash 1006
   | TMatchTerm -> Int.hash 1007
   | TMatchTermType -> Int.hash 1008
-  | TFixTerm -> Int.hash 1009
-  | TFixType -> Int.hash 1010
-  | TCoFixTerm -> Int.hash 1011
-  | TCoFixType -> Int.hash 1012
-  | TProdType -> Int.hash 1013
-  | TProdBody -> Int.hash 1014
-  | TLambdaType -> Int.hash 1015
-  | TLambdaBody -> Int.hash 1016
-  | TCase -> Int.hash 1017
-  | TProjTerm -> Int.hash 1018
-  | TAppFun -> Int.hash 1019
-  | TAppArg -> Int.hash 1020
-  | TCastType -> Int.hash 1021
-  | TCastTerm -> Int.hash 1022
-  | TLetIn -> Int.hash 1023
-  | TFix -> Int.hash 1024
-  | TCoFix -> Int.hash 1025
-  | TProd -> Int.hash 1026
-  | TLambda -> Int.hash 1027
-  | TProj -> Int.hash 1028
-  | TApp -> Int.hash 1029
-  | TCast -> Int.hash 1030
-  | TArray -> Int.hash 1031
-  | TArrayType -> Int.hash 1032
+  | TMatchTermReturn -> Int.hash 1009
+  | TFixTerm -> Int.hash 1010
+  | TFixType -> Int.hash 1011
+  | TCoFixTerm -> Int.hash 1012
+  | TCoFixType -> Int.hash 1013
+  | TProdType -> Int.hash 1014
+  | TProdBody -> Int.hash 1015
+  | TLambdaType -> Int.hash 1016
+  | TLambdaBody -> Int.hash 1017
+  | TCase -> Int.hash 1018
+  | TProjTerm -> Int.hash 1019
+  | TAppFun -> Int.hash 1020
+  | TAppArg -> Int.hash 1021
+  | TCastType -> Int.hash 1022
+  | TCastTerm -> Int.hash 1023
+  | TLetIn -> Int.hash 1024
+  | TFix -> Int.hash 1025
+  | TCoFix -> Int.hash 1026
+  | TProd -> Int.hash 1027
+  | TLambda -> Int.hash 1028
+  | TProj -> Int.hash 10289
+  | TApp -> Int.hash 1030
+  | TCast -> Int.hash 1031
+  | TArray -> Int.hash 1032
+  | TArrayType -> Int.hash 1033
 let vertical_token_to_int = function
   | TAtom (sm, rl) -> Hashset.Combine.combine (semantic_token_to_int sm) (role_token_to_int rl)
-  | TNonAtom rl -> Hashset.Combine.combine (Int.hash 1033) (role_token_to_int rl)
+  | TNonAtom rl -> Hashset.Combine.combine (Int.hash 1034) (role_token_to_int rl)
 let structural_token_to_int = function
-  | TOpenParen -> Int.hash 1034
-  | TCloseParen -> Int.hash 1035
-  | TAppArgs n -> Hashset.Combine.combine (Int.hash 1036) (Int.hash n)
-  | TRole rl -> Hashset.Combine.combine (Int.hash 1037) (role_token_to_int rl)
-  | TEnd -> Int.hash 1038
+  | TOpenParen -> Int.hash 1035
+  | TCloseParen -> Int.hash 1036
+  | TAppArgs n -> Hashset.Combine.combine (Int.hash 1037) (Int.hash n)
+  | TRole rl -> Hashset.Combine.combine (Int.hash 1038) (role_token_to_int rl)
+  | TEnd -> Int.hash 1039
 
 module F (TS: TacticianStructures) = struct
   module LH = L(TS)
@@ -218,8 +221,8 @@ module F (TS: TacticianStructures) = struct
       (* TODO: Handle binders with feature substitution *)
       | LetIn (id, body1, typ, body2) ->
         aux_reset_fold f [body1; typ; body2]
-      | Case (_, term, _, typ, cases) ->
-        aux_reset_fold f (term::typ::(Array.to_list cases))
+      | Case (_info, _univs, destr, (_, ret), _inv, typ, cases) ->
+        aux_reset_fold f (typ::ret::(Array.to_list destr)@(List.map snd @@ Array.to_list cases))
       | Fix (_, (_, typs, trms))
       | CoFix (_, (_, typs, trms)) ->
         aux_reset_fold f (Array.to_list trms @ Array.to_list typs)
@@ -381,9 +384,12 @@ module F (TS: TacticianStructures) = struct
         | LetIn (_, body1, typ, body2) ->
           let cont = [body1, TLetVarBody; typ, TLetVarType; body2, TLetBody] in
           end_structure (aux_reset_fold (start_structure features TLetIn) cont depth)
-        | Case (_, term, _, typ, cases) ->
-          let cases = Array.to_list cases in
-          let cont = [term, TMatchTerm; typ, TMatchTermType] @ (List.map (fun c -> c, TCase) cases) in
+        | Case (_info, _univs, destr, (_, ret), _inv, typ, cases) ->
+          let cases = List.map snd @@ Array.to_list cases in
+          let destr = Array.to_list destr in
+          let cont = (ret, TMatchTermReturn)::(typ, TMatchTermType)::
+                     List.map (fun c -> c, TMatchTerm) destr
+                     @ (List.map (fun c -> c, TCase) cases) in
           end_structure (aux_reset_fold (start_structure features TCase) cont depth)
         | Fix (_, (_, types, terms)) ->
           let terms = Array.to_list terms in
