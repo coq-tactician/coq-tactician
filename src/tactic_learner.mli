@@ -8,7 +8,7 @@ type id = Id.t
 module IdMap : Map.S with type key = Id.t
 type id_map = Id.t IdMap.t
 
-type sexpr = Node of sexpr list | Leaf of string
+type sexpr = Sexpr.sexpr = Node of sexpr list | Leaf of string
 
 module type TacticianStructures = sig
   type term
