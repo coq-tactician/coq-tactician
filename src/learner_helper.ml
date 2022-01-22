@@ -107,6 +107,4 @@ module L (TS: TacticianStructures) = struct
         ) in
     intersect l1 l2
 
-  let default d opt = match opt with | None -> d | Some x -> x
-
 end
