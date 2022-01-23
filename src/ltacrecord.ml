@@ -1010,3 +1010,62 @@ let tactician_ignore t =
   let open Notations in
   get_record () >>= fun b ->
   set_record false <*> t <*> set_record b
+
+let subst_one dep_proof_ok x (hyp,rhs,dir) =
+  let open Termops in
+  let module NamedDecl = Context.Named.Declaration in
+  let open Logic in
+  let open Names in
+  let open Tacticals.New in
+  let open Locus in
+  let open Tactics in
+  let open Equality in
+  let open EConstr in
+  Proofview.Goal.enter begin fun gl ->
+  let env = Proofview.Goal.env gl in
+  let sigma = Tacmach.New.project gl in
+  let hyps = Proofview.Goal.hyps gl in
+  let concl = Proofview.Goal.concl gl in
+  (* The set of hypotheses using x *)
+  let dephyps =
+    List.rev (pi3 (List.fold_right (fun dcl (dest,deps,allhyps) ->
+      let id = NamedDecl.get_id dcl in
+      if not (Id.equal id hyp)
+         && List.exists (fun y -> occur_var_in_decl env sigma y dcl) deps
+      then
+        (* let id_dest = if !regular_subst_tactic then dest else MoveLast in *)
+        let id_dest = dest in
+        (dest,id::deps,(id_dest,id)::allhyps)
+      else
+        (MoveBefore id,deps,allhyps))
+      hyps
+      (MoveBefore x,[x],[]))) in (* In practice, no dep hyps before x, so MoveBefore x is good enough *)
+  (* Decides if x appears in conclusion *)
+  let depconcl = occur_var env sigma x concl in
+  let need_rewrite = not (List.is_empty dephyps) || depconcl in
+  tclTHENLIST
+    ((if need_rewrite then
+      [revert (List.map snd dephyps);
+       general_rewrite dir AtLeastOneOccurrence true dep_proof_ok (mkVar hyp);
+       (tclMAP (fun (dest,id) -> intro_move (Some id) dest) dephyps)]
+      else
+       [Proofview.tclUNIT ()]) @
+     [tclTRY (clear [x; hyp])])
+  end
+
+let subst_from hyps dir =
+  let open Proofview in
+  let open Notations in
+  let subst_one_from gl hyp =
+    let c = Tacmach.New.pf_get_hyp_typ hyp gl in
+    let sigma = Goal.sigma gl in
+    try
+      let _, _, (_, lhs, rhs) = Hipattern.find_eq_data_decompose gl c in
+      match dir with
+      | true when EConstr.isVar sigma lhs -> subst_one true (EConstr.destVar sigma lhs) (hyp, rhs, dir)
+      | false when EConstr.isVar sigma rhs -> subst_one true (EConstr.destVar sigma rhs) (hyp, lhs, dir)
+      | _ -> Tacticals.New.tclZEROMSG Pp.(str "Hypothesis could not be substituted.")
+    with Constr_matching.PatternMatchingFailure ->
+      Tacticals.New.tclZEROMSG Pp.(str "Hypothesis could not be substituted.") in
+  Proofview.Goal.enter @@ fun gl ->
+  Tacticals.New.tclMAP (subst_one_from gl) hyps

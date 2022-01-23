@@ -7,7 +7,6 @@ open Ltacrecord
 open Tactic_annotate
 
 open Pcoq
-open G_ltac
 open Tacarg
 open Vernacextend
 open Pp
@@ -65,14 +64,22 @@ let pr_decomposition = function
   | Both -> str "Both"
   | Discard -> str "Discard"
 
-let pr_ltac_use_default b =
-  if (snd b) then (* Bug: a space is inserted before "..." *) Pp.str ".." else Pp.mt ()
-
 open Attributes
 open Tacexpr
 open Libnames
 open Stdarg
 
+}
+
+TACTIC EXTEND subst_from
+| [ "subst" "from" "->" ne_var_list(l) ] -> { Ltacrecord.subst_from l true }
+| [ "subst" "from" "<-" ne_var_list(l) ] -> { Ltacrecord.subst_from l false }
+END
+
+{
+open G_ltac
+let pr_ltac_use_default b =
+  if (snd b) then (* Bug: a space is inserted before "..." *) Pp.str ".." else Pp.mt ()
 }
 
 GRAMMAR EXTEND Gram
