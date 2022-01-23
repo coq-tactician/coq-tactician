@@ -219,7 +219,7 @@ let coqtop = "%{bin}%"/"coqtop"
 let tactician_lib = "%{coq-tactician:lib}%"
 let tactician_dir = "%{coq:lib}%"/"user-contrib"/"Tactician"
 let plugin_dir = "%{coq-tactician:share}%"/"plugins"
-let tactician_flags = ["-q"; "-I"; tactician_dir; "-R"; tactician_dir; "Tactician"; "-rifrom"; "Tactician"; "Ltac1.Record"]
+let tactician_flags = ["-q"; "-I"; tactician_dir; "-R"; tactician_dir; "Tactician"; "-require"; "Tactician.Ltac1.Record"]
 
 let read_args name =
   let ic = open_in name in
