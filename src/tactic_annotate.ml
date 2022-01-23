@@ -239,10 +239,14 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
     | None -> apply None
     | Some (id, pat) -> (match pat with
         | None -> apply (Some (id, None))
+        | Some CAst.{ v=(Tactypes.IntroNaming _); _ } as ps ->
+          (* Special case when the intropattern is for naming; this is only needed because it sometimes causes
+             the context to be re-ordered *)
+          apply (Some (id, ps))
         | Some ps ->
-          let ps, i, cont = expand_intro_pattern ~def_name:id.v loc 0 eflg ps in
+          let _ps, i, cont = expand_intro_pattern ~def_name:id.v loc 0 eflg ps in
           let tac = cont (fun _ -> TacId []) i in
-          tacthenfirst (apply (Some (id, Some ps))) tac
+          tacthenfirst (apply (Some (id, None))) tac
       ) in
   let decompose_apply aflg eflg intro loc (ls : 'trm with_bindings_arg list) =
     let intro' = Option.map (fun (n, _) -> (n, None)) intro in
