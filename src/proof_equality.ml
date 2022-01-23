@@ -5,7 +5,7 @@
     terms are very important, as they can be referenced by tactics. Additionally, they
     will be used to determine the name of a hypothesis in the local context when it is
     introduced. *)
-let compare_head_gen_leq_with kind1 kind2 leq_universes leq_sorts eq leq nargs t1 t2 =
+let compare_head_gen_leq_with kind1 kind2 eq_evar leq_universes leq_sorts eq leq nargs t1 t2 =
   let open Constr in
   let open Names in
   let open Context in
@@ -28,14 +28,12 @@ let compare_head_gen_leq_with kind1 kind2 leq_universes leq_sorts eq leq nargs t
     leq (nargs+len) c1 c2 && CArray.equal_norefl (eq 0) l1 l2
   | Proj (p1,c1), Proj (p2,c2) -> Projection.equal p1 p2 && eq 0 c1 c2
   | Evar (e1,l1), Evar (e2,l2) ->
-    if Evar.equal e1 e2 then Feedback.msg_notice Pp.(str "equal") else Feedback.msg_notice Pp.(str "not equal");
-    Feedback.msg_notice (Evar.print e1);
-    Feedback.msg_notice (Evar.print e2);
-    Evar.equal e1 e2 && CArray.equal (eq 0) l1 l2
+    eq_evar e1 e2 && CArray.equal (eq 0) l1 l2
   | Const (c1,u1), Const (c2,u2) ->
     (* The args length currently isn't used but may as well pass it. *)
     Constant.equal c1 c2 && leq_universes (GlobRef.ConstRef c1) nargs u1 u2
-  | Ind (c1,u1), Ind (c2,u2) -> eq_ind c1 c2 && leq_universes (GlobRef.IndRef c1) nargs u1 u2
+  | Ind (c1,u1), Ind (c2,u2) ->
+    eq_ind c1 c2 && leq_universes (GlobRef.IndRef c1) nargs u1 u2
   | Construct (c1,u1), Construct (c2,u2) ->
     eq_constructor c1 c2 && leq_universes (GlobRef.ConstructRef c1) nargs u1 u2
   | Case (_,p1,c1,bl1), Case (_,p2,c2,bl2) ->
@@ -51,75 +49,89 @@ let compare_head_gen_leq_with kind1 kind2 leq_universes leq_sorts eq leq nargs t
     | Proj _ | Evar _ | Const _ | Ind _ | Construct _ | Case _ | Fix _
     | CoFix _ | Int _ | Float _), _ -> false
 
-let compare_head_gen_with kind1 kind2 eq_universes eq_sorts eq t1 t2 =
-  compare_head_gen_leq_with kind1 kind2 eq_universes eq_sorts eq eq t1 t2
+let compare_head_gen_with kind1 kind2 eq_evar eq_universes eq_sorts eq nargs t1 t2 =
+    compare_head_gen_leq_with kind1 kind2 eq_evar eq_universes eq_sorts eq eq nargs t1 t2
 
-let eq_constr_univs_test (evd1, t1) (evd2, t2) =
+let evars_equal evd1 evd2 (equal : (Evar.t * Evar.t) list) =
   let open Evd in
-  let t1 = EConstr.Unsafe.to_constr t1
-  and t2 = EConstr.Unsafe.to_constr t2 in
-  (* let us1 = Evd.evar_universe_context evd1 in *)
-  (* let us2 = Evd.evar_universe_context evd2 in *)
-  (* let uv1 = fst @@ UState.context_set us1 in *)
-  (* let uv2 = fst @@ UState.context_set us2 in *)
-  (* Feedback.msg_info Pp.(str "univs 1"); *)
-  (* Univ.LSet.iter (fun u -> Feedback.msg_info @@ Univ.Level.pr u) uv1; *)
-  (* Feedback.msg_info Pp.(str "\nunivs 2"); *)
-  (* Univ.LSet.iter (fun u -> Feedback.msg_info @@ Univ.Level.pr u) uv2; *)
-  let sigma = Evd.emit_side_effects (Evd.eval_side_effects evd1) evd2 in
-  let sigma = ref (merge_universe_context sigma (evar_universe_context evd1)) in
-  let eq_universes _ _ u1 u2 =
-    let u1 = normalize_universe_instance !sigma u1 in
-    let u2 = normalize_universe_instance !sigma u2 in
-    UGraph.check_eq_instances (universes !sigma) u1 u2
-  in
-  let eq_sorts s1 s2 =
-    if Sorts.equal s1 s2 then true
-    else
-      let u1 = Sorts.univ_of_sort s1 and u2 = Sorts.univ_of_sort s2 in
-      try sigma := add_universe_constraints !sigma UnivProblem.(Set.singleton (UEq (u1, u2))); true
+  let evd_common = Evd.emit_side_effects (Evd.eval_side_effects evd1) evd2 in
+  let evd_common = ref (merge_universe_context evd_common (evar_universe_context evd1)) in
+  let left_evar_map = ref Evar.Map.empty in
+  let right_evar_map = ref Evar.Map.empty in
+  let rec eq_constr_univs_test t1 t2 =
+    let t1 = EConstr.Unsafe.to_constr t1
+    and t2 = EConstr.Unsafe.to_constr t2 in
+    let eq_universes _ _ u1 u2 =
+      let u1 = normalize_universe_instance !evd_common u1 in
+      let u2 = normalize_universe_instance !evd_common u2 in
+      try evd_common := add_universe_constraints !evd_common
+            UnivProblem.(enforce_eq_instances_univs false u1 u2 Set.empty); true
       with Univ.UniverseInconsistency _ | UniversesDiffer -> false
+    in
+    let eq_sorts s1 s2 =
+      if Sorts.equal s1 s2 then true
+      else
+        let u1 = Sorts.univ_of_sort s1 and u2 = Sorts.univ_of_sort s2 in
+        try evd_common := add_universe_constraints !evd_common UnivProblem.(Set.singleton (UEq (u1, u2))); true
+        with Univ.UniverseInconsistency _ | UniversesDiffer -> false
+    in
+    let kind1 = Evarutil.kind_of_term_upto evd1 in
+    let kind2 = Evarutil.kind_of_term_upto evd2 in
+    let rec eq_constr' nargs m n =
+      compare_head_gen_with kind1 kind2 evar_equal eq_universes eq_sorts eq_constr' nargs m n
+    in
+    compare_head_gen_with kind1 kind2 evar_equal eq_universes eq_sorts eq_constr' 0 t1 t2
+
+  (** equality function on hypothesis contexts *)
+  and eq_named_context_val ctx1 ctx2 =
+    let open Context.Named.Declaration in
+    let c1 = EConstr.named_context_of_val ctx1 and c2 = EConstr.named_context_of_val ctx2 in
+    let eq_named_declaration d1 d2 =
+      match d1, d2 with
+      | LocalAssum (i1,t1), LocalAssum (i2,t2) ->
+        Context.eq_annot Names.Id.equal i1 i2 && eq_constr_univs_test t1 t2
+      | LocalDef (i1,c1,t1), LocalDef (i2,c2,t2) ->
+        Context.eq_annot Names.Id.equal i1 i2 && eq_constr_univs_test c1 c2
+        && eq_constr_univs_test t1 t2
+      | _ ->
+        false
+    in CList.equal eq_named_declaration c1 c2
+
+  and eq_evar_body b1 b2 =
+    match b1, b2 with
+    | Evar_empty, Evar_empty -> true
+    | Evar_defined t1, Evar_defined t2 ->
+      eq_constr_univs_test t1 t2
+    | _ -> false
+
+  and eq_evar_info ei1 ei2 =
+    (* TODO: Should we be checking equality on other types of evar kinds? *)
+    let kinds_equal = match ei1.evar_source, ei2.evar_source with
+      | (_, Evar_kinds.NamedHole id1), (_, Evar_kinds.NamedHole id2) -> Names.Id.equal id1 id2
+      | (_, Evar_kinds.NamedHole _), _ | _, (_, Evar_kinds.NamedHole _) -> false
+      | _, _ -> true in
+    kinds_equal &&
+    eq_constr_univs_test ei1.evar_concl ei2.evar_concl &&
+    eq_named_context_val ei1.evar_hyps ei2.evar_hyps &&
+    eq_evar_body ei1.evar_body ei2.evar_body
+
+  (** Equality function on goals *)
+  and evar_equal evar1 evar2 =
+    match Evar.Map.find_opt evar1 !left_evar_map, Evar.Map.find_opt evar2 !right_evar_map with
+    | Some evar2', Some evar1' when Evar.equal evar1 evar1' && Evar.equal evar2 evar2' ->
+      true
+    | None, None ->
+      let evi1 = Evd.find evd1 evar1 in
+      let evi2 = Evd.find evd2 evar2 in
+      (match eq_evar_info evi1 evi2 with
+       | true ->
+         left_evar_map := Evar.Map.add evar1 evar2 !left_evar_map;
+         right_evar_map := Evar.Map.add evar2 evar1 !right_evar_map;
+         true
+       | false -> false)
+    | _, _ -> false
   in
-  let kind1 = Evarutil.kind_of_term_upto evd1 in
-  let kind2 = Evarutil.kind_of_term_upto evd2 in
-  let rec eq_constr' nargs m n =
-    compare_head_gen_with kind1 kind2 eq_universes eq_sorts eq_constr' nargs m n
-  in
-  compare_head_gen_with kind1 kind2 eq_universes eq_sorts eq_constr' 0 t1 t2
-
-(** equality function on hypothesis contexts *)
-let eq_named_context_val (sigma1, ctx1) (sigma2, ctx2) =
-  let open Context.Named.Declaration in
-  let c1 = EConstr.named_context_of_val ctx1 and c2 = EConstr.named_context_of_val ctx2 in
-  let eq_named_declaration d1 d2 =
-    match d1, d2 with
-    | LocalAssum (i1,t1), LocalAssum (i2,t2) ->
-      Context.eq_annot Names.Id.equal i1 i2 && eq_constr_univs_test (sigma1, t1) (sigma2, t2)
-    | LocalDef (i1,c1,t1), LocalDef (i2,c2,t2) ->
-      Context.eq_annot Names.Id.equal i1 i2 && eq_constr_univs_test (sigma1, c1) (sigma2, c2)
-      && eq_constr_univs_test (sigma1, t1) (sigma2, t2)
-    | _ ->
-      false
-  in CList.equal eq_named_declaration c1 c2
-
-let eq_evar_body (sigma1, b1) (sigma2, b2) =
-  let open Evd in
-  match b1, b2 with
-  | Evar_empty, Evar_empty -> true
-  | Evar_defined t1, Evar_defined t2 -> eq_constr_univs_test (sigma1, t1) (sigma2, t2)
-  | _ -> false
-
-let eq_evar_info (sigma1, ei1) (sigma2, ei2) =
-  let open Evd in
-  eq_constr_univs_test (sigma1, ei1.evar_concl) (sigma2, ei2.evar_concl) &&
-  eq_named_context_val (sigma1, ei1.evar_hyps) (sigma2, ei2.evar_hyps) &&
-  eq_evar_body (sigma1, ei1.evar_body) (sigma2, ei2.evar_body)
-
-(** Equality function on goals *)
-let goal_equal (evd1, evar1) (evd2, evar2) =
-  let evi1 = Evd.find evd1 evar1 in
-  let evi2 = Evd.find evd2 evar2 in
-  eq_evar_info (evd1, evi1) (evd2, evi2)
+  CList.for_all (fun (evar1, evar2) -> evar_equal evar1 evar2) equal
 
 (** Compare the proof states after running [t1] and [t2] and taking their first result.
     If they are equal, we keep the (first) result of [t2]. Otherwise, run [t3].
@@ -144,10 +156,10 @@ let third_if_not_equal_tactic t1 t2 t3 =
         let g2 = List.map Goal.goal g2 in
         tclEVARMAP >>= fun evd2 ->
         let test =
-          Util.List.for_all2eq begin fun i f ->
-            goal_equal (evd1, i) (evd2, f)
-          end g1 g2
-        in
+          try
+            let equal = List.combine g1 g2 in
+            evars_equal evd1 evd2 @@ equal
+          with Invalid_argument _ -> false in
         if test then
           tclUNIT res
         else
@@ -160,18 +172,15 @@ let pstate_equal ~pstate1 ~pstate2 =
   let goals p =
     let open Proof in
     let { sigma; goals; stack; shelf; given_up; _ } = data p in
-    List.iter (fun (l, r) ->
-        let msg = Pp.(
-            str "left: " ++ prlist Evar.print l ++ str " right: " ++ prlist Evar.print r
-          ) in
-        Feedback.msg_notice msg) stack;
     let goals = goals @ shelf @ given_up @ List.concat @@ List.map (fun (l, r) -> l@r) stack in
     let goals = List.filter_map (Evarutil.advance sigma) goals in
     sigma, goals in
   let sigma1, gs1 = goals pstate1 in
   let sigma2, gs2 = goals pstate2 in
-  Util.List.for_all2eq (fun g1 g2 ->
-      goal_equal (sigma1, g1) (sigma2, g2)) gs1 gs2
+  try
+    let equal = List.combine gs1 gs2 in
+    evars_equal sigma1 sigma2 @@ equal
+  with Invalid_argument _ -> false
 
 (** Compare the proof states after running [t1] and [t2] and taking their first result.
     If they are equal, we keep the (first) result of [t2]. Otherwise, run [t3].
