@@ -77,5 +77,5 @@ module DecompositionLearner : TacticianOnlineLearnerType = functor (TS : Tactici
 
 end
 
-let () = register_online_learner "decomposition-learner" (module DecompositionLearner)
-let () = Tactic_learner_internal.disable_queue ()
+(* let () = register_online_learner "decomposition-learner" (module DecompositionLearner) *)
+(* let () = Tactic_learner_internal.disable_queue () *)
