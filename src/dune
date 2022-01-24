@@ -35,6 +35,8 @@
    tactic_sexpr
    timeouttac
    tactician_util
+   tactic_one_variable
+   extreme_tactic_normalize      
  ))
  (libraries
    coq.plugins.ltac
