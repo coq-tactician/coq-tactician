@@ -11,7 +11,7 @@ type 'a trie =
 type hash = int -> int
 
 type 'a lsh_trie =
-  { hashes : hash list
+  { hashes : int list
   ; trie   : 'a trie }
 
 type 'a forest = 'a lsh_trie list
@@ -19,11 +19,12 @@ type 'a forest = 'a lsh_trie list
 let init_trie random depth =
   let mk_hash _ =
     let seed = Random.State.bits random in
-    Hashtbl.seeded_hash seed in
+    seed in
   { hashes = List.init depth mk_hash
   ; trie   = Leaf [] }
 
 let min_hash h feats =
+  let h = Hashtbl.seeded_hash h in
   (* Empty `feats` hashing to the same `max_int` value is okay, because then
      all empty objects collide. Note that the hash functions never produce `max_int`. *)
   let min = List.fold_left (fun m x -> min m (h x)) max_int feats in
@@ -120,7 +121,7 @@ module LSHF =
     let feats = to_feats b in
     let frequencies = List.fold_left
         (fun freq f ->
-           Frequencies.update f (fun y -> Some ((default 0 y) + 1)) freq)
+           Frequencies.update f (fun y -> Some ((Option.default 0 y) + 1)) freq)
         db.frequencies
         feats in
     (* TODO: Length needs to be adjusted if we want to use multisets  *)
@@ -163,8 +164,8 @@ module ComplexLSHF : TacticianOnlineLearnerType =
     module FH = F(TS)
     open FH
     let learn db _status outcomes tac = learn db _status outcomes tac
-        (fun x -> remove_feat_kind @@ proof_state_to_complex_ints x)
-    let predict db f = predict db f proof_state_to_complex_ints remove_feat_kind manually_weighed_tfidf
+        proof_state_to_complex_ints_no_kind
+    let predict db f = predict db f proof_state_to_complex_ints (List.map snd) manually_weighed_tfidf
   end
 
 (* let () = register_online_learner "SimpleLSHF" (module SimpleLSHF) *)

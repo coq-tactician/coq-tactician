@@ -14,8 +14,8 @@ TACTIC EXTEND tacticianignore
   { Tactician_ltac1_record_plugin.Ltacrecord.tactician_ignore (Tacinterp.tactic_of_value ist t) }
 END
 
-TACTIC EXTEND search
-| [ "ml_search" ] ->   { Tactician_ltac1_record_plugin.Ltacrecord.userSearch }
+TACTIC EXTEND synth
+| [ "ml_synth" ] ->   { Tactician_ltac1_record_plugin.Ltacrecord.userSearch }
 END
 
 VERNAC COMMAND EXTEND TacticianSuggest CLASSIFIED AS QUERY STATE proof_query
