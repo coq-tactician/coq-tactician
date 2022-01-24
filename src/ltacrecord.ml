@@ -962,9 +962,9 @@ let vernac_solve ~pstate n info tcom b id =
       let msg = Pp.(
         str "Tactician found a bug in it's tactical decomposition. Please report." ++ fnl () ++
         Pptactic.pr_glob_tactic (Global.env ()) t1 ++ fnl () ++
-        Pptactic.pr_glob_tactic (Global.env ()) t2 ++ fnl () ++
-        Printer.pr_open_subgoals_diff ~diffs:true ~oproof:pstate1 pstate2 ++ fnl () ++
-        Printer.pr_open_subgoals_diff ~diffs:true ~oproof:pstate2 pstate1
+        Pptactic.pr_glob_tactic (Global.env ()) t2 ++ fnl ()
+        (* Printer.pr_open_subgoals_diff ~diffs:true ~oproof:pstate1 pstate2 ++ fnl () ++ *)
+        (* Printer.pr_open_subgoals_diff ~diffs:true ~oproof:pstate2 pstate1 *)
       ) in
       Feedback.msg_warning msg; tclUNIT () in
     ignore (Pfedit.solve n info tac pstate) in
