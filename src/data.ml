@@ -28,28 +28,19 @@ let features (features, label) =
 let length = List.length
 
 let random_feature examples =
-    let ex1 = Utils.choose_random examples in
-    let complem e = label e <> label ex1 && features e <> features ex1 in
-    let examples_ex1 = List.filter complem examples in
-    let ex2 = try Utils.choose_random examples_ex1 with _ -> ex1 in
-    let feas =
-        let fex1 = (features ex1) in
-        let fex2 = (features ex2) in
-        if fex1 = fex2 then ISet.empty else
-        let fex1, fex2 = if Random.int 2 = 0 then fex1, fex2 else fex2, fex1 in
-        let diff = ISet.diff fex1 fex2 in
-        if ISet.is_empty diff then ISet.diff fex2 fex1 else diff in
-    try Some (Utils.choose_random (ISet.elements feas)) with _ -> None
+    let random_example_1 = features (Utils.choose_random examples) in
+    let random_example_2 = features (Utils.choose_random examples) in
+    let ex_1_minus_ex_2 = ISet.diff random_example_1 random_example_2 in
+    if ISet.is_empty ex_1_minus_ex_2 then
+        Utils.choose_random (ISet.elements random_example_1)
+    else
+        Utils.choose_random (ISet.elements ex_1_minus_ex_2)
 
-    (* returns deduplicated list of splitting features; try 2 * n times *)
 let random_features examples n =
-    let rec loop c acc =
-        if c = 0 || (ISet.cardinal acc) > n - 1 then acc else
-        match random_feature examples with
-        | None -> loop (c - 1) acc
-        | Some fea -> loop (c - 1) (ISet.add fea acc) in
-    ISet.elements (loop (2 * n) ISet.empty)
-
+    let rec loop acc = function
+        | 0 -> acc
+        | n -> loop ((random_feature examples) :: acc) (n - 1) in
+    loop [] n
 let is_splitting examples f =
     let is_mem e = ISet.mem f (features e) in
     let in_some = List.fold_left (fun b e -> b || is_mem e) false examples in
@@ -102,9 +93,6 @@ let fold_left f s examples =
 let random_example examples =
     Utils.choose_random examples
 
-
-exception Rule_not_found
-
 let split_impur impur fea examples =
     let rule = rule_of_fea fea in
     let append (left, right) e =
@@ -119,17 +107,14 @@ let split_impur impur fea examples =
     let fr = sqrt (er /. e) in
     ((impur left) *. fl +. (impur right) *. fr)
 
-(* m -- numbers of random features to choose from *)
-let gini_rule ?(n_feas=1) examples =
-    let random_feas = random_features examples n_feas in
-    match random_feas with
-    | [] -> raise Rule_not_found
-    | [fea] -> fea
-    | _ ->
-        let impur_from_fea f =
-            split_impur Impurity.gini_impur f examples in
-        let impurs = List.map impur_from_fea random_feas in
-        let impurs_feas = List.combine impurs random_feas in
-        let best_impur, best_fea = Utils.min_list impurs_feas in
-        best_fea
-
+(* m -- numbers of features to choose from *)
+let gini_rule examples =
+    let n = length examples in
+    let m =  n |> float_of_int |> sqrt |> int_of_float in
+    let random_feas = random_features examples m in
+    let impur_from_fea f =
+        split_impur Impurity.gini_impur f examples in
+    let impurs = List.map impur_from_fea random_feas in
+    let impurs_feas = List.combine impurs random_feas in
+    let best_impur, best_fea = Utils.min_list impurs_feas in
+    best_fea

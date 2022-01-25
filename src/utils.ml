@@ -51,6 +51,17 @@ let rec init_seg l n =
     | [] -> failwith "init_seg"
     | h :: t -> if n = 1 then [h] else h :: init_seg t (n-1)
 
+let init_seg_and_tail l n =
+    let rec aux acc n = function
+        | [] -> (List.rev acc, [])
+        | h :: t ->
+            if n = 0 then (List.rev acc, h :: t) else aux (h :: acc) (n-1) t
+    in aux [] n l
+
+let random_split l n =
+    let sl = shuffle l in
+    init_seg_and_tail sl n
+
 let choose_randoms l n =
     init_seg (shuffle l) n
 

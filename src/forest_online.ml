@@ -3,15 +3,20 @@ module Make = functor (Data : Tree_online.DATA) -> struct
 
     let empty = []
 
-    let add ?(n_feas=1) ?(min_impur=0.5) ?(max_depth=100) ?(n_trees=100)
+    let add ?(min_impur=0.5) ?(n_trees=100) ?(remove_old=false) ?(part=0.2)
         forest example =
         let n = List.length forest in
-        let add_tree = (n = 0) || ((Random.int n = 0) && n < n_trees) in
+        let add_tree = n < n_trees in
+        let del_tree = remove_old && n >= n_trees in
+        let forest = if del_tree then Utils.remove_last forest else forest in
+        let k = int_of_float (part *. float_of_int n) in
+        let k = min n (max 1 k) in
+        let trees_to_update, trees_rest = Utils.random_split forest k in
         let updated_trees =
-            List.map
-            (fun tree -> Tree.add ~n_feas ~min_impur ~max_depth tree example)
-            forest in
-        if add_tree then Tree.leaf example :: updated_trees else updated_trees
+            List.map (fun tree -> Tree.add ~min_impur tree example)
+            trees_to_update in
+        let forest = updated_trees @ trees_rest in
+        if add_tree then Tree.leaf example :: forest else forest
 
     let forest examples =
         Data.fold_left add empty examples
