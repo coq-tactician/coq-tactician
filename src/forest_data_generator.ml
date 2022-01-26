@@ -129,16 +129,13 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
               let lcontext = proof_state_hypotheses before in
               let mk_feats t = 
                 let feat_map = term_sexpr_to_complex_ints_no_kind (Int.hash 2000) 2 Int.Map.empty (term_repr t) in
-                let feats = Int.Map.fold (fun feat (feat) acc -> (feat) :: acc) feat_map [] in
-                List.sort_uniq Int.compare feats
-              in
+                Int.Map.fold (fun feat count acc -> (feat, count) :: acc) feat_map [] in
               let lcontext = List.map (function
                   | Context.Named.Declaration.LocalAssum (id, typ) ->
-                    mk_feats typ
+                    List.sort_uniq (fun (feat, _count)  (feat', _count') -> Int.compare feat feat') (mk_feats typ)
                   | Context.Named.Declaration.LocalDef (id, typ, trm) ->
-                    List.sort_uniq Int.compare (mk_feats typ @ mk_feats trm)
+                    List.sort_uniq (fun (feat, _count)  (feat', _count') -> Int.compare feat feat') (mk_feats typ @ mk_feats trm)
                 ) lcontext in
-
               let line = Sexplib.Pre_sexp.List
                   [ Std.sexp_of_list (Conv.sexp_of_pair Std.sexp_of_int Std.sexp_of_int) ps
                   ; tactic_local_context_sexpr (proof_state_hypotheses before) tac
@@ -146,7 +143,7 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
                   ; Std.sexp_of_list (Conv.sexp_of_pair Std.sexp_of_int Std.sexp_of_int) disappear_feats
                   ; Std.sexp_of_list (Conv.sexp_of_pair Std.sexp_of_int Std.sexp_of_int) appear_feats
                   ; Std.sexp_of_list Std.sexp_of_int @@ parent_tacs
-                  ; Std.sexp_of_list (Std.sexp_of_list Std.sexp_of_int) lcontext
+                  ; Std.sexp_of_list (Std.sexp_of_list (Conv.sexp_of_pair Std.sexp_of_int Std.sexp_of_int)) lcontext
                   ] in
               output_string (data_file ()) (Sexp.to_string line ^ "\n")
             ) outcomes
