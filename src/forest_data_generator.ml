@@ -129,12 +129,14 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
               let lcontext = proof_state_hypotheses before in
               let mk_feats t = 
                 let feat_map = term_sexpr_to_complex_ints_no_kind (Int.hash 2000) 2 Int.Map.empty (term_repr t) in
-                Int.Map.fold (fun feat (feat) acc -> (feat) :: acc) feat_map [] in
+                let feats = Int.Map.fold (fun feat (feat) acc -> (feat) :: acc) feat_map [] in
+                List.sort_uniq Int.compare feats
+              in
               let lcontext = List.map (function
                   | Context.Named.Declaration.LocalAssum (id, typ) ->
                     mk_feats typ
                   | Context.Named.Declaration.LocalDef (id, typ, trm) ->
-                    mk_feats typ @ mk_feats trm
+                    List.sort_uniq Int.compare (mk_feats typ @ mk_feats trm)
                 ) lcontext in
 
               let line = Sexplib.Pre_sexp.List
