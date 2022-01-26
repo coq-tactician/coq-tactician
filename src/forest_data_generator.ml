@@ -32,102 +32,6 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
   let last_model = Summary.ref ~name:"dataset-generator-learner-lastmodel" []
 
   let empty () = {database = []; lshf = LSHF.empty ()}
-
-  let term_equal term1 term2 =
-    Constr.equal (term_repr term1) (term_repr term2)
-
-  let hyp_equal hyp1 hyp2 = Context.Named.Declaration.equal
-    (fun hyp_1 hyp_2 -> term_equal hyp_1 hyp_2) hyp1 hyp2
-
-  let mkfeats t = term_sexpr_to_simple_features 2 (term_sexpr t)
-
-  let list_to_set l =
-    List.fold_left (fun int_set elm -> IntSet.add elm int_set) IntSet.empty l
-  (*
-  let rec hyps_feats_disappear hyps hyps' feat_set =
-    let get_hyp_feats hyp =
-    match hyp with
-    | Context.Named.Declaration.LocalAssum (_, typ) ->
-      mkfeats typ
-    | Context.Named.Declaration.LocalDef (_, term, typ) ->
-      mkfeats typ @ mkfeats term
-    in
-    match hyps with
-    | [] -> feat_set
-    | hyp :: target_tl ->
-      if List.exists (fun hyp' -> hyp_equal hyp hyp') hyps'
-      then hyps_feats_disappear target_tl hyps' feat_set
-      else
-        let hyp_feat_set =  list_to_set (List.rev (List.rev_map Hashtbl.hash (get_hyp_feats hyp))) in
-        let new_feat_set = IntSet.union feat_set hyp_feat_set in
-        hyps_feats_disappear target_tl hyps' new_feat_set
-
-  (* get features in state not in state' *)
-  let state_diff state state'=
-    let hyps = proof_state_hypotheses state in
-    let goal = proof_state_goal state in
-    let hyps' = proof_state_hypotheses state' in
-    let goal' = proof_state_goal state' in
-    let goal_diff =
-      if term_equal goal goal' then []
-      else List.rev (List.rev_map Hashtbl.hash (mkfeats goal)) in
-    hyps_feats_disappear hyps hyps' (list_to_set goal_diff)
-
-  let feat_disappear before_state after_states =
-    if after_states == [] then
-      proof_state_to_simple_ints before_state
-    else
-      let disappear_feat_set =
-      List.fold_left (
-        fun feat_set after_state ->
-          IntSet.union feat_set (state_diff before_state after_state)
-        ) IntSet.empty after_states in
-      IntSet.elements disappear_feat_set
-
-  let feat_appear before_state after_states =
-    let appear_feat_set =
-      List.fold_left (fun feat_set after_state ->
-        (IntSet.union feat_set (state_diff after_state before_state))
-      ) IntSet.empty after_states in
-    IntSet.elements appear_feat_set *)
-  
-  let proof_state_to_complex_features state = remove_feat_kind (proof_state_to_complex_features 2 state)
-
-  let rec add_to_features_and_count_list feature' feature_and_count =
-    match feature_and_count with
-    | [] -> [(feature', 1)]
-    | (feature, count)::tl -> 
-      if feature = feature' then (feature, count + 1)::tl
-      else (feature, count)::add_to_features_and_count_list feature' tl
-
-  let rec attach_count_to_features features' features_and_count =
-    match features' with
-    | [] -> features_and_count
-    | hd :: tl -> attach_count_to_features tl (add_to_features_and_count_list hd features_and_count)
-
-  let proof_state_to_int_and_count state = 
-    let features = proof_state_to_complex_features state in    
-    let sorted_features = List.sort String.compare features in
-    let feature_and_count_list = attach_count_to_features sorted_features [] in
-    let ints_and_count_list = List.rev_map (fun (feature, count) -> Hashtbl.hash feature, count) feature_and_count_list in
-    ints_and_count_list
-
-  (* let proof_state_to_int_and_count state extract_feat = 
-    let features = extract_feat state in    
-    let sorted_features = List.sort String.compare features in
-    let feature_and_count_list = attach_count_to_features sorted_features [] in
-    let ints_and_count_list = List.rev_map (fun (feature, count) -> Hashtbl.hash feature, count) feature_and_count_list in
-    ints_and_count_list *)
-
-  (* features in int_and_count but not int_and_count' *)
-  (* let get_state_diff int_and_count int_and_count'=
-    List.fold_left (fun acc (int_feat, count) -> 
-      if (List.exists (fun (int_feat', count') -> 
-        if (int_feat' = int_feat) && (count>count') then true else false 
-        ) int_and_count') 
-        || ((List.exists (fun (int_feat', count') -> int_feat' = int_feat) int_and_count') = false)
-      then (int_feat::acc) else acc
-    ) [] int_and_count *)
     
   let rec feat_to_diff_and_count (feat, count) feats_and_counts' =
     match feats_and_counts' with
@@ -139,23 +43,15 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
 
   let get_state_diff_and_count int_and_count int_and_count'=
     List.fold_left (fun acc (int_feat, count) -> 
-      (* if (List.exists (fun (int_feat', count') -> 
-        if (int_feat' = int_feat) && (count>count') then true else false 
-        ) int_and_count') 
-        || ((List.exists (fun (int_feat', count') -> int_feat' = int_feat) int_and_count') = false)
-      then (int_feat::acc) else acc *)
       let diff = feat_to_diff_and_count (int_feat, count) int_and_count' in
       if diff != (-1, -1) then (diff::acc) else acc
     ) [] int_and_count 
 
   let get_tac_semantic_aux before_state after_state = 
-    let int_and_count = proof_state_to_int_and_count before_state in
-    let int_and_count' = proof_state_to_int_and_count after_state in
-    (* let disappear_feats = get_state_diff int_and_count int_and_count' in *)
+    let int_and_count = proof_state_to_complex_ints_counts_no_kind before_state in
+    let int_and_count' = proof_state_to_complex_ints_counts_no_kind after_state in
     let disappear_feats = get_state_diff_and_count int_and_count int_and_count' in
-    (* let appear_feats = get_state_diff int_and_count' int_and_count in *)
     let appear_feats = get_state_diff_and_count int_and_count' int_and_count in
-
     disappear_feats, appear_feats
 
   let get_tac_semantic before_state after_states = 
@@ -167,7 +63,7 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
           let disappear_feats', appear_feats' = get_tac_semantic_aux before_state after_state in
           disappear_feats_acc@disappear_feats', appear_feats_acc@appear_feats'
       )  ([], []) after_states 
-    else proof_state_to_int_and_count before_state, []
+    else proof_state_to_complex_ints_counts_no_kind before_state, []
     in
     List.sort_uniq (fun (feat1, num1) (feat2, num2) -> Int.compare feat1 feat2) disappear_feats, 
     List.sort_uniq (fun (feat1, num1) (feat2, num2) -> Int.compare feat1 feat2) appear_feats 
@@ -215,19 +111,13 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
       List.iter (fun (outcomes, tac) ->
           List.iter (fun { before; after; preds; parents; _ } ->
               (* let ps = proof_state_to_simple_ints before in *) 
-              let ps =  proof_state_to_int_and_count before in 
-              (* let preds = List.map (fun (tactic, after) ->
-                  let disappear_feats = Option.default [-1] @@ Option.map (feat_disappear before) after in
-                  let appear_feats = Option.default [-1] @@ Option.map (feat_appear before) after in
-                  (tactic, disappear_feats, appear_feats)) preds in *)
+              let ps =  proof_state_to_complex_ints_counts_no_kind before in 
               let preds = List.rev_map (fun (tactic, after) ->
                 let disappear_feats, appear_feats = 
                   if after = None then [(-1, -1)], [(-1, -1)] 
                   else get_tac_semantic before (Option.get after) in
                   (tactic, disappear_feats, appear_feats)) preds in
               let disappear_feats, appear_feats = get_tac_semantic before after in 
-              (* let disappear_feats = feat_disappear before after in
-              let appear_feats = feat_appear before after in *)
               let preds = List.rev_map (fun (tac, df, af) ->
                   Sexplib.Pre_sexp.List
                     [ tactic_local_context_sexpr (proof_state_hypotheses before) tac
@@ -236,10 +126,10 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
                     ]) preds in
               (* let neg = List.filter (fun neg_tac -> tac != neg_tac) neg in *)
               let parent_tacs = List.map (fun (_, { executions; tactic }) -> tactic_hash tactic) parents in
-
               let lcontext = proof_state_hypotheses before in
-              let mk_feats t = List.map (fun (_, f) -> Hashtbl.hash f) @@
-                  term_sexpr_to_complex_features 2 (term_sexpr t) in
+              let mk_feats t = 
+                let feat_map = term_sexpr_to_complex_ints_no_kind (Int.hash 2000) 2 Int.Map.empty (term_repr t) in
+                Int.Map.fold (fun feat (feat) acc -> (feat) :: acc) feat_map [] in
               let lcontext = List.map (function
                   | Context.Named.Declaration.LocalAssum (id, typ) ->
                     mk_feats typ
