@@ -3,6 +3,11 @@ open Ltac_plugin
 open Learner_helper
 open Features
 open Sexplib
+open Map_all_the_things
+open Mapping_helpers
+open Tactician_util
+open Genarg
+
 
 let data_file =
   let file = ref None in
@@ -13,6 +18,59 @@ let data_file =
        file := Some k;
        k
      | Some f -> f)
+
+module NormalizeDef = struct
+  include MapDefTemplate (IdentityMonad)
+  let map_sort = "normalize"
+  let warnProblem wit =
+    Feedback.msg_warning (Pp.(str "Tactician is having problems with " ++
+                            str "the following tactic. Please report. " ++
+                            pr_argument_type wit))
+  let default wit = { raw = (fun _ -> warnProblem (ArgumentType wit); id)
+                  ; glb = (fun _ -> warnProblem (ArgumentType wit); id)}
+end
+
+module NormalizeMapper = MakeMapper(NormalizeDef)
+  open NormalizeDef
+  open Helpers(NormalizeDef)  
+  type 'a k = 'a NormalizeDef.t  
+  let placeholder = match Coqlib.lib_ref "tactician.private_constant_placeholder" with
+  | Names.GlobRef.ConstRef const -> const
+  | _ -> assert false
+        
+  (* optimized *)
+  let optimized_mapper = { NormalizeDef.default_mapper with
+    glob_constr_and_expr = (fun (expr, _) g -> g (expr, None))}  
+  let tactic_normalize_optimized = NormalizeMapper.glob_tactic_expr_map optimized_mapper
+  let opaque_mapper = { NormalizeDef.default_mapper with
+    glob_constr_and_expr = (fun (expr, _) g -> g (expr, None))
+    ; variable = (fun _ -> Names.Id.of_string "X")
+    ; constant = (fun c ->
+      let body = (Global.lookup_constant c).const_body in (
+        match body with
+        | Declarations.OpaqueDef _ -> placeholder
+        | _ -> c))}
+    
+  (* constants *)
+  let constants_mapper = { NormalizeDef.default_mapper with
+    glob_constr_and_expr = (fun (expr, _) g -> g (expr, None))
+    ; variable = (fun _ -> Names.Id.of_string "X")
+    ; constant = (fun c -> placeholder)}
+    
+  (* no-terms *)
+    
+  let no_terms_mapper = { NormalizeDef.default_mapper with
+    glob_constr_and_expr = (fun (expr, _) g -> g (expr, None))
+    ; variable = (fun _ -> Names.Id.of_string "X")
+    ; constant = (fun c ->
+      let body = (Global.lookup_constant c).const_body in
+      (match body with
+      | Declarations.OpaqueDef _ -> placeholder
+      | _ -> c))
+    ; constr_pattern = (fun _ _ -> Pattern.PMeta None)
+    ; constr_expr = (fun _ _ -> CHole (None, IntroAnonymous, None))
+    ; glob_constr = (fun _ _ -> Glob_term.GHole (Evar_kinds.GoalEvar, IntroAnonymous, None))
+  }
 
 
 module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : TacticianStructures) -> struct
@@ -88,6 +146,7 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
     let split = String.split_on_char ' ' str in
     List.map Hashtbl.hash split
 
+
   let tactic_local_context_sexpr ctx tac =
     let tac = Tactic_normalize.tactic_normalize @@ Tactic_normalize.tactic_strict @@ tactic_repr tac in
     let args, tac = Tactic_one_variable.tactic_one_variable tac in
@@ -104,6 +163,15 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
       ; Std.sexp_of_list Std.sexp_of_int @@ syntactic_feats tac
       ; Std.sexp_of_list Std.sexp_of_int @@ args ]
 
+  let tactic_normalize tac mapper =
+    let tac = NormalizeMapper.glob_tactic_expr_map mapper (tactic_repr tac) in
+    let tac =  tactic_make tac in
+    let hash = tactic_hash tac in
+    let tac_str =  LH.sexpr_to_string (tactic_sexpr tac) in
+    tac_str, hash
+
+
+
   let generate_step ((name, status), ls) =
     match cache_type name with
     | `File ->
@@ -112,7 +180,7 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
           List.iter (fun { before; after; preds; parents; _ } ->
               (* let ps = proof_state_to_simple_ints before in *) 
               let ps =  proof_state_to_complex_ints_counts_no_kind before in 
-              let preds = List.rev_map (fun (tactic, after) ->
+              (* let preds = List.rev_map (fun (tactic, after) ->
                 let disappear_feats, appear_feats = 
                   if after = None then [(-1, -1)], [(-1, -1)] 
                   else get_tac_semantic before (Option.get after) in
@@ -123,27 +191,32 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
                     [ tactic_local_context_sexpr (proof_state_hypotheses before) tac
                     ; Std.sexp_of_list (Conv.sexp_of_pair Std.sexp_of_int Std.sexp_of_int) df
                     ; Std.sexp_of_list (Conv.sexp_of_pair Std.sexp_of_int Std.sexp_of_int) af
-                    ]) preds in
+                    ]) preds in *)
               (* let neg = List.filter (fun neg_tac -> tac != neg_tac) neg in *)
-              let parent_tacs = List.map (fun (_, { executions; tactic }) -> tactic_hash tactic) parents in
-              let lcontext = proof_state_hypotheses before in
+              let parent_tacs = List.map (fun (_, { executions; tactic }) -> 
+                let _tac_str, hash = tactic_normalize tactic optimized_mapper in
+                let syn = syntactic_feats (tactic_repr tactic) in 
+                Sexplib.Pre_sexp.List [Std.sexp_of_int hash; Std.sexp_of_list Std.sexp_of_int @@ syn]
+                ) parents in
+              (* let lcontext = proof_state_hypotheses before in
               let mk_feats t = 
                 let feat_map = term_sexpr_to_complex_ints_no_kind (Int.hash 2000) 2 Int.Map.empty (term_repr t) in
                 Int.Map.fold (fun feat count acc -> (feat, count) :: acc) feat_map [] in
-              let lcontext = List.map (function
+               let lcontext = List.map (function
                   | Context.Named.Declaration.LocalAssum (id, typ) ->
                     List.sort_uniq (fun (feat, _count)  (feat', _count') -> Int.compare feat feat') (mk_feats typ)
                   | Context.Named.Declaration.LocalDef (id, typ, trm) ->
                     List.sort_uniq (fun (feat, _count)  (feat', _count') -> Int.compare feat feat') (mk_feats typ @ mk_feats trm)
-                ) lcontext in
+                ) lcontext in *)
               let line = Sexplib.Pre_sexp.List
                   [ Std.sexp_of_list (Conv.sexp_of_pair Std.sexp_of_int Std.sexp_of_int) ps
-                  ; tactic_local_context_sexpr (proof_state_hypotheses before) tac
+                  ; Std.sexp_of_int (tactic_hash tac)
+                  (*; tactic_local_context_sexpr (proof_state_hypotheses before) tac
                   ; Sexplib.Pre_sexp.List preds
                   ; Std.sexp_of_list (Conv.sexp_of_pair Std.sexp_of_int Std.sexp_of_int) disappear_feats
-                  ; Std.sexp_of_list (Conv.sexp_of_pair Std.sexp_of_int Std.sexp_of_int) appear_feats
-                  ; Std.sexp_of_list Std.sexp_of_int @@ parent_tacs
-                  ; Std.sexp_of_list (Std.sexp_of_list (Conv.sexp_of_pair Std.sexp_of_int Std.sexp_of_int)) lcontext
+                  ; Std.sexp_of_list (Conv.sexp_of_pair Std.sexp_of_int Std.sexp_of_int) appear_feats *)
+                  ; Sexplib.Pre_sexp.List parent_tacs
+                  (* ; Std.sexp_of_list (Std.sexp_of_list (Conv.sexp_of_pair Std.sexp_of_int Std.sexp_of_int)) lcontext *)
                   ] in
               output_string (data_file ()) (Sexp.to_string line ^ "\n")
             ) outcomes
