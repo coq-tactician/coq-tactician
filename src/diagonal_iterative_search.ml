@@ -4,7 +4,7 @@ open Proofview
 open Notations
 
 let tclFoldPredictions max_reached tacs =
-  let rec aux tacs depth i =
+  let rec aux tacs depth =
       let open Proofview in
       match IStream.peek tacs with
       | IStream.Nil -> tclZERO (if depth then DepthEnd else PredictionsEnd)
@@ -15,26 +15,26 @@ let tclFoldPredictions max_reached tacs =
                let depth = depth || (match e with
                    | (DepthEnd, _) -> true
                    | _ -> false) in
-               aux tacs depth (i+1)) in
-  aux tacs false 0
+               aux tacs depth) in
+  aux tacs false
 
 (* TODO: max_reached is a hack, remove *)
-let tclSearchDiagonalDFS max_reached predict depth =
-  let rec aux (depth : int) : int tactic =
+let tclSearchDiagonalDFS max_reached predict max_dfs =
+  let rec aux (max_dfs : int) : int tactic =
     if max_reached () then tclZERO PredictionsEnd else
       Goal.goals >>= function
-      | [] -> tclUNIT depth
+      | [] -> tclUNIT max_dfs
       | _ ->
         predict >>= fun predictions ->
         tclFoldPredictions max_reached
           (mapi
              (fun i {focus; tactic; confidence} ->
-                let ndepth = depth - i in
-                if ndepth <= 0 then tclZERO DepthEnd else
+                let n_max_dfs = Stdlib.Int.shift_right max_dfs i in
+                if n_max_dfs <= 0 then tclZERO DepthEnd else
                   if confidence = Float.neg_infinity then tclZERO PredictionsEnd else (* TODO: Hack *)
-                    (tactic >>= fun _ -> aux (ndepth - 1)))
+                    (tactic >>= fun _ -> aux (n_max_dfs - 1)))
              predictions) >>= aux in
-  aux depth >>= fun _ -> tclUNIT ()
+  aux max_dfs >>= fun _ -> tclUNIT ()
 
 let rec tclSearchDiagonalIterative d max_reached predict : unit tactic =
   (* (tclLIFT (NonLogical.print_info (Pp.str ("Iterative depth: " ^ string_of_int d)))) <*> *)
@@ -44,6 +44,8 @@ let rec tclSearchDiagonalIterative d max_reached predict : unit tactic =
     (function
       | (PredictionsEnd, _) ->
         Tacticals.New.tclZEROMSG (Pp.str "Tactician failed: there are no more tactics left")
-      | _ -> tclSearchDiagonalIterative (d + 1) max_reached predict)
+      | _ ->
+        (* Feedback.msg_notice Pp.(str "----------- new iteration : " ++ int ( d * 2)); *)
+        tclSearchDiagonalIterative (d * 2) max_reached predict)
 
-let () = register_search_strategy "diagonal iterative search" (tclSearchDiagonalIterative 10)
+let () = register_search_strategy "diagonal iterative search" (tclSearchDiagonalIterative 8)
