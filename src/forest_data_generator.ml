@@ -100,10 +100,10 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
       else feat_to_diff_and_count (feat, count) tl 
 
   let get_state_diff_and_count int_and_count int_and_count'=
-    List.fold_left (fun acc (int_feat, count) -> 
+    List.rev (List.fold_left (fun acc (int_feat, count) -> 
       let diff = feat_to_diff_and_count (int_feat, count) int_and_count' in
       if diff != (-1, -1) then (diff::acc) else acc
-    ) [] int_and_count 
+    ) [] int_and_count) 
 
   let get_tac_semantic_aux before_state after_state = 
     let int_and_count = proof_state_to_complex_ints_counts_no_kind before_state in
