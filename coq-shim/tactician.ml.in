@@ -246,10 +246,17 @@ let tactician_extra_flags () = retrieve_flags "injection-flags"
 
 let tactician_wrappers () = retrieve_flags "injection-wrappers"
 
+(* This can be replaced with Filename.null once we drop support for OCaml < 4.11 *)
+let null_file =
+  match Sys.os_type with
+  | "Win32" -> "NULL"
+  | "Cygwin" -> "/dev/null"
+  | _ -> "/dev/null"
+
 (* TODO: At some point we might consider using https://github.com/Chris00/ocaml-bwrap *)
 let inject_bwrap cmd args =
   let perms_supported =
-    let ec = Sys.command ("bwrap --dev-bind / / --perms 0755 --tmpfs " ^ Sys.getcwd () ^ " true > " ^ Filename.null ^ " 2>&1") in
+    let ec = Sys.command ("bwrap --dev-bind / / --perms 0755 --tmpfs " ^ Sys.getcwd () ^ " true > " ^ null_file ^ " 2>&1") in
     ec = 0 in
   let coqc_real = tactician_lib/"coqc.real" in
   let coqtop_real = tactician_lib/"coqtop.real" in
@@ -352,7 +359,7 @@ let inject_path cmd args =
   | Error _ -> `Error (false, "internal error")
 
 let bwrap_test () =
-  let ec = Sys.command ("bwrap --dev-bind / / true > " ^ Filename.null ^ " 2>&1") in
+  let ec = Sys.command ("bwrap --dev-bind / / true > " ^ null_file ^ " 2>&1") in
   ec = 0
 
 let exec_command cmd args =
