@@ -25,15 +25,18 @@ let tclSearchDiagonalDFS max_reached predict max_dfs =
       Goal.goals >>= function
       | [] -> tclUNIT max_dfs
       | _ ->
-        predict >>= fun predictions ->
-        tclFoldPredictions max_reached
-          (mapi
-             (fun i {focus; tactic; confidence} ->
-                let n_max_dfs = Stdlib.Int.shift_right max_dfs i in
-                if n_max_dfs <= 0 then tclZERO DepthEnd else
-                  if confidence = Float.neg_infinity then tclZERO PredictionsEnd else (* TODO: Hack *)
-                    (tactic >>= fun _ -> aux (n_max_dfs - 1)))
-             predictions) >>= aux in
+        let independent =
+          tclFOCUS 1 1
+            (predict >>= fun predictions ->
+             tclFoldPredictions max_reached
+               (mapi
+                  (fun i {focus; tactic; confidence} ->
+                     let n_max_dfs = Stdlib.Int.shift_right max_dfs i in
+                     if n_max_dfs <= 0 then tclZERO DepthEnd else
+                     if confidence = Float.neg_infinity then tclZERO PredictionsEnd else (* TODO: Hack *)
+                       (tactic >>= fun _ -> aux (n_max_dfs - 1)))
+                  predictions) >>= aux) in
+        tclONCE independent >>= aux in
   aux max_dfs >>= fun _ -> tclUNIT ()
 
 let rec tclSearchDiagonalIterative d max_reached predict : unit tactic =
