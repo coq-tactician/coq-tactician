@@ -518,8 +518,7 @@ module F (TS: TacticianStructures) = struct
 
   let proof_state_to_complex_ints_counts_no_kind max_length ps =
     let feats = proof_state_to_complex_ints_map_no_kind max_length ps in
-    let feats_with_count = Int.Map.fold (fun feat count acc -> (feat, count) :: acc) feats [] in
-    List.sort_uniq (fun (feat, _count)  (feat', _count') -> Int.compare feat feat') feats_with_count
+    List.rev (Int.Map.fold (fun feat count acc -> (feat, count) :: acc) feats []) 
 
   let proof_state_to_complex_ints_counts_no_kind ps = proof_state_to_complex_ints_counts_no_kind 2 ps 
 
