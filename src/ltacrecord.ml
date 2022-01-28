@@ -915,7 +915,9 @@ let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO:
       let s = string_tac tac in
       (* TODO: Move this to annotation time *)
       if (String.equal s "admit" || String.equal s "synth" || String.is_prefix "synth with cache" s
-          || String.is_prefix "tactician ignore" s)
+          || String.is_prefix "tactician ignore" s || String.is_prefix "fix" s || String.is_prefix "cofix" s
+          || String.is_prefix "change_no_check" s || String.is_prefix "exact_no_checK" s || String.is_prefix "native_cast_no_check" s
+          || String.is_prefix "vm_cast_no_check" s)
       then () else add_to_db2 id (execs, tac) sideff const path;
       try (* This is purely for parsing bug detection and could be removed for performance reasons *)
         let _ = Pcoq.parse_string Pltac.tactic_eoi s in ()
