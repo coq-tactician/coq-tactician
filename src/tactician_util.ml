@@ -24,6 +24,7 @@ end
 
 module WithMonadNotations (M : Monad.Def) = struct
   include M
+  type 'a map = 'a -> 'a t
   let id = return
   let (<*>) f x     = f >>= fun f -> return (f x)
   let (let+) x f    = map f x
@@ -335,3 +336,25 @@ let goal_size (gl : Proofview.Goal.t) =
     ) ~init:0 hyps in
   let goal = econstr_size sigma goal in
   hyps + goal
+
+open Geninterp
+open Util
+open Ltac_plugin
+open Tacexpr
+let val_tag wit = val_tag (Genarg.topwit wit)
+let register_interp0 wit f =
+  let open Ftactic.Notations in
+  let interp ist v =
+    f ist v >>= fun v -> Ftactic.return (Val.inject (val_tag wit) v)
+  in
+  Geninterp.register_interp0 wit interp
+
+let wit_glbtactic : (Empty.t, glob_tactic_expr, glob_tactic_expr) Genarg.genarg_type =
+  let wit = Genarg.create_arg "glbtactic" in
+  let () = register_val0 wit None in
+  register_interp0 wit (fun ist v -> Ftactic.return v);
+  wit
+
+let register tac name =
+  let fullname = {mltac_plugin = "recording"; mltac_tactic = name} in
+  Tacenv.register_ml_tactic fullname [| tac |]

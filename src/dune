@@ -9,6 +9,7 @@
    inline_private_constants
    diagonal_iterative_search
    offline_evaluation_simulator_learner
+   decomposition_learner
    naiveknn_learner
    naiveknn_subst_learner
    trivial_learners
@@ -17,6 +18,7 @@
    knn
    find_tactic_syntax
    tactic_substitute
+   tactic_substitute2
    tactic_abstract
    search_strategy
    search_strategy_internal
@@ -37,7 +39,21 @@
    timeouttac
    tactician_util
    tactic_one_variable
-   extreme_tactic_normalize      
+   tacexpr_functor
+   tacexpr_convert
+   glob_term_functor
+   glob_term_convert
+   constrexpr_functor
+   constrexpr_convert
+   pattern_functor
+   pattern_convert
+   coq_ast_monadic_map
+   coq_ast_cata
+   coq_ast_sequence
+   coq_ast_map_elements
+   extreme_tactic_normalize
+   tactic_name_remove
+   proof_equality
  ))
  (libraries
    coq.plugins.ltac
@@ -56,6 +72,7 @@
  (modules (
    "known_ssr_witnesses"
    map_ssr_witnesses
+   ssr_ast_cata
  ))
  (libraries
    coq.plugins.ltac

@@ -215,3 +215,5 @@ let mapper r =
    are missing. In particular, non-recursive information is mostly not included. This includes no-recursive
    tactic extensions, binders, etc. *)
 let rec tactic_sexpr t = Node (fst @@ M.run @@ SexprMapper.glob_tactic_expr_map (mapper tactic_sexpr) t)
+let rec glob_constr_sexpr t = Node (fst @@ M.run @@ SexprMapper.glob_constr_map (mapper tactic_sexpr) t)
+let rec constr_expr_sexpr t = Node (fst @@ M.run @@ SexprMapper.constr_expr_map (mapper tactic_sexpr) t)

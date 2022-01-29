@@ -480,13 +480,27 @@ module MakeMapper (M: MapDef) = struct
     | Inl x -> let+ x = f x in Inl x
     | Inr x -> let+ x = g x in Inr x
 
+  let glob_red_flag_map f ({ rConst; _ } as flag) =
+    let+ rConst = List.map f rConst in
+    { flag with rConst }
+
   let red_expr_gen_map m f g h = function
     | Simpl (flg, x) ->
-      let+ x = option_map (fun (oc, x) ->
+      let+ flg = glob_red_flag_map g flg
+      and+ x = option_map (fun (oc, x) ->
           let+ oc = occurrences_expr_map m oc
           and+ x = union_map g h x in
           (oc, x)) x in
       Simpl (flg, x)
+    | Cbv flg ->
+      let+ flg = glob_red_flag_map g flg in
+      Cbv flg
+    | Cbn flg ->
+      let+ flg = glob_red_flag_map g flg in
+      Cbn flg
+    | Lazy flg ->
+      let+ flg = glob_red_flag_map g flg in
+      Lazy flg
     | Fold t ->
       let+ t = List.map f t in
       Fold t

@@ -7,7 +7,6 @@ open Ltacrecord
 open Tactic_annotate
 
 open Pcoq
-open G_ltac
 open Tacarg
 open Vernacextend
 open Pp
@@ -65,43 +64,22 @@ let pr_decomposition = function
   | Both -> str "Both"
   | Discard -> str "Discard"
 
-let vernac_solve ~pstate n info tcom b id =
-  let open Goal_select in
-  let skip = pre_vernac_solve pstate id in
-  if skip then pstate else
-    try
-      let pstate, status = Proof_global.map_fold_proof_endline (fun etac p ->
-          let with_end_tac = if b then Some etac else None in
-          let global = match n with SelectAll | SelectList _ -> true | _ -> false in
-          let info = Option.append info !print_info_trace in
-          let name = Proof_global.get_proof_name pstate in
-          let (p,status) =
-            try
-              Pfedit.solve n info (hide_interp_t global tcom None id name) ?with_end_tac p
-            with e -> (* We intentionally catch critical exceptions here *)
-              ignore (Unix.setitimer ITIMER_REAL {it_interval = 0.; it_value = 0.}); (* Reset possible dangling timer *)
-              Feedback.msg_warning (Pp.str ("Critical error encountered\n" ^ Printexc.to_string e));
-              (* In case of problems, simply solve without Tactician *)
-              Pfedit.solve n info (Tacinterp.hide_interp global tcom None) ?with_end_tac p
-          in
-          (* in case a strict subtree was completed,
-             go back to the top of the prooftree *)
-          let p = Proof.maximal_unfocus Vernacentries.command_focus p in
-          p,status) pstate in
-      if not status then Feedback.feedback Feedback.AddedAxiom;
-      pstate
-    with
-    | e when CErrors.noncritical e || e = CErrors.Timeout ->
-      save_exn id e; raise e
-
-let pr_ltac_use_default b =
-  if (snd b) then (* Bug: a space is inserted before "..." *) Pp.str ".." else Pp.mt ()
-
 open Attributes
 open Tacexpr
 open Libnames
 open Stdarg
 
+}
+
+TACTIC EXTEND subst_from
+| [ "subst" "from" "->" ne_var_list(l) ] -> { Ltacrecord.subst_from l true }
+| [ "subst" "from" "<-" ne_var_list(l) ] -> { Ltacrecord.subst_from l false }
+END
+
+{
+open G_ltac
+let pr_ltac_use_default b =
+  if (snd b) then (* Bug: a space is inserted before "..." *) Pp.str ".." else Pp.mt ()
 }
 
 GRAMMAR EXTEND Gram
@@ -125,7 +103,7 @@ VERNAC { tactician_mode } EXTEND VernacSolveTactician STATE proof
     VtSideff ([], VtNow)
     } -> {
     let g = Option.default (Goal_select.get_default_goal_selector ()) g in
-    vernac_solve g n t (snd def) (fst def)
+    Ltacrecord.vernac_solve g n t (snd def) (fst def)
   }
 END
 
@@ -211,10 +189,10 @@ END
 
 VERNAC COMMAND EXTEND TacticianAliasDecompositionSetting CLASSIFIED AS SIDEFF
 | [ "Tactician" "Alias" "Record" tactic(tac) tac_decomposition(td) ]
-  -> { () }
+  -> { modify_ast_alias_setting tac td }
 END
 
 VERNAC COMMAND EXTEND TacticianInternalTacticSetting CLASSIFIED AS SIDEFF
 | [ "Tactician" "Register" "Tactic" string(str) tactic(tac) ]
-  -> { () }
+  -> { modify_internal_tactics_setting str tac }
 END

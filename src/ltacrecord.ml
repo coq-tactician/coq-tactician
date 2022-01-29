@@ -544,10 +544,6 @@ let get_k_str ranking comp =
 
 let mk_ml_tac tac = fun args is -> tac
 
-let register tac name =
-  let fullname = {mltac_plugin = "recording"; mltac_tactic = name} in
-  register_ml_tactic fullname [| tac |]
-
 let run_ml_tac name = TacML (CAst.make ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = name}; mltac_index = 0}, []))
 
 (* Running predicted tactics *)
@@ -853,20 +849,6 @@ let save_exn id exn =
 
 (* Tactic recording tactic *)
 
-let val_tag wit = val_tag (Genarg.topwit wit)
-let register_interp0 wit f =
-  let open Ftactic.Notations in
-  let interp ist v =
-    f ist v >>= fun v -> Ftactic.return (Val.inject (val_tag wit) v)
-  in
-  Geninterp.register_interp0 wit interp
-
-let wit_glbtactic : (Empty.t, glob_tactic_expr, glob_tactic_expr) Genarg.genarg_type =
-  let wit = Genarg.create_arg "glbtactic" in
-  let () = register_val0 wit None in
-  register_interp0 wit (fun ist v -> Ftactic.return v);
-  wit
-
 let should_record b =
   b && !global_record
 
@@ -967,8 +949,15 @@ let ml_record_tac args is =
 let ml_push_state_tac args is =
   push_state_tac ()
 
+let ml_fail_strict_tac args is =
+  (*let num = Tacinterp.Value.cast (Genarg.topwit Tacarg.wit_tactic) (List.hd args) in*)
+  let tac = Tacinterp.Value.cast (Genarg.topwit wit_glbtactic) (List.hd args) in
+  Feedback.msg_warning Pp.(str "Strict failure: " ++ Pptactic.pr_glob_tactic (Global.env ()) tac);
+  Proofview.tclUNIT ()
+
 let () = register ml_record_tac "recordtac"
 let () = register ml_push_state_tac "pushstatetac"
+let () = register ml_fail_strict_tac "failstricttac"
 
 let run_record_tac (tac : glob_tactic_expr) : glob_tactic_expr =
   let enc = Genarg.in_gen (Genarg.glbwit wit_glbtactic) tac in
@@ -980,8 +969,14 @@ let run_pushs_state_tac (): glob_tactic_expr =
   TacML (CAst.make ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = "pushstatetac"}; mltac_index = 0},
                 []))
 
+let fail_strict_tac (tac : glob_tactic_expr) : glob_tactic_expr =
+  let enc = Genarg.in_gen (Genarg.glbwit wit_glbtactic) tac in
+  TacML (CAst.make ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = "failstricttac"}; mltac_index = 0},
+                    [TacGeneric enc]))
+
 let record_tac_complete orig tac : glob_tactic_expr =
-  TacThen (run_pushs_state_tac (), TacThen (tac, run_record_tac orig))
+  (* let strict_tac = Tactic_normalize.tactic_strict tac in *)
+  TacThen (run_pushs_state_tac (), TacThen ((* TacFirst [strict_tac; TacThen (fail_strict_tac tac, *) tac, run_record_tac orig))
 
 let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO: Implement self-learning *)
   let open Proofview in
@@ -1033,8 +1028,129 @@ let hide_interp_t global t ot id name =
       hide_interp (Proofview.Goal.env gl)
     end
 
+let vernac_solve ~pstate n info tcom b id =
+  let print_error ~pstate ~pstate1 ~pstate2 =
+    let open Proofview in
+    let open Notations in
+    let tac =
+      let open Proofview in
+      Proofview.tclENV >>= fun env ->
+      let ist = Genintern.empty_glob_sign env in
+      let t1 = Tacintern.intern_pure_tactic ist tcom in
+      let t2 = decompose_annotate t1 (fun _ t -> t) in
+      Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
+      let msg = Pp.(
+        str "Tactician found a bug in it's tactical decomposition. Please report." ++ fnl () ++
+        Pptactic.pr_glob_tactic (Global.env ()) t1 ++ fnl () ++
+        Pptactic.pr_glob_tactic (Global.env ()) t2 ++ fnl ()
+        (* Printer.pr_open_subgoals_diff ~diffs:true ~oproof:pstate1 pstate2 ++ fnl () ++ *)
+        (* Printer.pr_open_subgoals_diff ~diffs:true ~oproof:pstate2 pstate1 *)
+      ) in
+      Feedback.msg_warning msg; tclUNIT () in
+    ignore (Pfedit.solve n info tac pstate) in
+  let open Goal_select in
+  let skip = pre_vernac_solve pstate id in
+  if skip then pstate else
+    try
+      let pstate, status = Proof_global.map_fold_proof_endline (fun etac p ->
+          let with_end_tac = if b then Some etac else None in
+          let global = match n with SelectAll | SelectList _ -> true | _ -> false in
+          let info = Option.append info G_ltac.(!print_info_trace) in
+          let name = Proof_global.get_proof_name pstate in
+          let (pstate1,status1) =
+            Pfedit.solve n info (Tacinterp.hide_interp global tcom None) ?with_end_tac p
+          in
+          let p, status =
+            try
+              let (pstate2,status2) =
+                Pfedit.solve n info (hide_interp_t global tcom None id name) ?with_end_tac p in
+              if Proof_equality.pstate_equal ~pstate1 ~pstate2 then
+                pstate2, status2
+              else
+                (print_error ~pstate:p ~pstate1 ~pstate2;
+                 pstate1, status1)
+            with
+            | e when CErrors.noncritical e ->
+              ignore (Unix.setitimer ITIMER_REAL {it_interval = 0.; it_value = 0.}); (* Reset possible dangling timer *)
+              let msg = Pp.(str "Tactician's tactical decomposition crashed. Please report.") in
+              Feedback.msg_warning msg;
+              pstate1, status1
+            | e ->
+              ignore (Unix.setitimer ITIMER_REAL {it_interval = 0.; it_value = 0.}); (* Reset possible dangling timer *)
+              Feedback.msg_warning (Pp.str ("Critical error encountered\n" ^ Printexc.to_string e));
+              pstate1, status1
+          in
+         (* in case a strict subtree was completed,
+             go back to the top of the prooftree *)
+          let p = Proof.maximal_unfocus Vernacentries.command_focus p in
+          p,status) pstate in
+      if not status then Feedback.feedback Feedback.AddedAxiom;
+      pstate
+    with
+    | e when CErrors.noncritical e || e = CErrors.Timeout ->
+      save_exn id e; raise e
+
 let tactician_ignore t =
   let open Proofview in
   let open Notations in
   get_record () >>= fun b ->
   set_record false <*> t <*> set_record b
+
+let subst_one dep_proof_ok x (hyp,rhs,dir) =
+  let open Termops in
+  let module NamedDecl = Context.Named.Declaration in
+  let open Logic in
+  let open Names in
+  let open Tacticals.New in
+  let open Locus in
+  let open Tactics in
+  let open Equality in
+  let open EConstr in
+  Proofview.Goal.enter begin fun gl ->
+  let env = Proofview.Goal.env gl in
+  let sigma = Tacmach.New.project gl in
+  let hyps = Proofview.Goal.hyps gl in
+  let concl = Proofview.Goal.concl gl in
+  (* The set of hypotheses using x *)
+  let dephyps =
+    List.rev (pi3 (List.fold_right (fun dcl (dest,deps,allhyps) ->
+      let id = NamedDecl.get_id dcl in
+      if not (Id.equal id hyp)
+         && List.exists (fun y -> occur_var_in_decl env sigma y dcl) deps
+      then
+        (* let id_dest = if !regular_subst_tactic then dest else MoveLast in *)
+        let id_dest = dest in
+        (dest,id::deps,(id_dest,id)::allhyps)
+      else
+        (MoveBefore id,deps,allhyps))
+      hyps
+      (MoveBefore x,[x],[]))) in (* In practice, no dep hyps before x, so MoveBefore x is good enough *)
+  (* Decides if x appears in conclusion *)
+  let depconcl = occur_var env sigma x concl in
+  let need_rewrite = not (List.is_empty dephyps) || depconcl in
+  tclTHENLIST
+    ((if need_rewrite then
+      [revert (List.map snd dephyps);
+       general_rewrite dir AtLeastOneOccurrence true dep_proof_ok (mkVar hyp);
+       (tclMAP (fun (dest,id) -> intro_move (Some id) dest) dephyps)]
+      else
+       [Proofview.tclUNIT ()]) @
+     [tclTRY (clear [x; hyp])])
+  end
+
+let subst_from hyps dir =
+  let open Proofview in
+  let open Notations in
+  let subst_one_from gl hyp =
+    let c = Tacmach.New.pf_get_hyp_typ hyp gl in
+    let sigma = Goal.sigma gl in
+    try
+      let _, _, (_, lhs, rhs) = Hipattern.find_eq_data_decompose gl c in
+      match dir with
+      | true when EConstr.isVar sigma lhs -> subst_one true (EConstr.destVar sigma lhs) (hyp, rhs, dir)
+      | false when EConstr.isVar sigma rhs -> subst_one true (EConstr.destVar sigma rhs) (hyp, lhs, dir)
+      | _ -> Tacticals.New.tclZEROMSG Pp.(str "Hypothesis could not be substituted.")
+    with Constr_matching.PatternMatchingFailure ->
+      Tacticals.New.tclZEROMSG Pp.(str "Hypothesis could not be substituted.") in
+  Proofview.Goal.enter @@ fun gl ->
+  Tacticals.New.tclMAP (subst_one_from gl) hyps

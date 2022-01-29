@@ -25,3 +25,20 @@ VERNAC COMMAND EXTEND TacticianSuggest CLASSIFIED AS QUERY STATE proof_query
            Tactician_ltac1_record_plugin.Ltacrecord.userPredict
            (Proof_global.get_proof pstate) in () }
 END
+
+TACTIC EXTEND third_if_not_equal
+| [ "third" "if" "not" "equal" "(" tactic(t1) ")" "(" tactic(t2) ")" "(" tactic(t3) ")" ] -> {
+  let t1 = Tacinterp.tactic_of_value ist t1 in
+  let t2 = Tacinterp.tactic_of_value ist t2 in
+  let t3 = Tacinterp.tactic_of_value ist t3 in
+  Tactician_ltac1_record_plugin.Proof_equality.third_if_not_equal_tactic t1 t2 t3 }
+END
+
+VERNAC COMMAND EXTEND ThirdIfNotEqual CLASSIFIED AS SIDEFF STATE proof
+| [ "Third" "If" "Not" "Equal" "(" tactic(t1) ")" "(" tactic(t2) ")" "(" tactic(t3) ")" ] -> {
+  fun ~pstate ->
+    let t1 = Tacinterp.interp t1 in
+    let t2 = Tacinterp.interp t2 in
+    let t3 = Tacinterp.interp t3 in
+    Tactician_ltac1_record_plugin.Proof_equality.third_if_not_equal_command ~pstate t1 t2 t3 }
+END

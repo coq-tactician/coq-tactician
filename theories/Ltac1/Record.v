@@ -17,6 +17,41 @@ Declare ML Module "ppx_deriving_runtime".
 Declare ML Module "ppx_deriving_yojson_runtime".
 
 Declare ML Module "tactician_ltac1_record_plugin".
+
+Tactician Register Tactic "clear" clear.
+Tactician Register Tactic "injection_x_as" injection _ as.
+Tactician Register Tactic "injection_x" injection _.
+Tactician Register Tactic "discriminate_x" discriminate _.
+Tactician Register Tactic "intro_x" intro X.
+Tactician Register Tactic "intro" intro.
+Tactician Register Tactic "replace_with_by" replace _ with _ by idtac.
+Tactician Register Tactic "intros_until" intros until X.
+
+(* TODO: This is a hack to deal with the decomposition of 'intros [=]'. To be improved. *)
+Tactic Notation "intro_equality_hnf" hyp(H) :=
+hnf in H;
+match type of H with
+| _ ?x ?y =>
+  let x' := eval hnf in x in
+  replace x with x' in H by reflexivity;
+  let y' := eval hnf in y in
+  replace y with y' in H by reflexivity;
+  let H' := fresh in rename H into H'
+end.
+Tactic Notation "intro_equality_clear" hyp(H) :=
+let p := fresh in let T := type of H in assert (p:T) by reflexivity; clear p H.
+Tactician Register Tactic "intro_equality_hnf" intro_equality_hnf X.
+Tactician Register Tactic "intro_equality_clear" intro_equality_clear X.
+
+(* TODO: Hack to decompose the '->' intropattern. To be improved. *)
+Tactic Notation "intropattern" "subst" "->" hyp(H) :=
+first [subst from -> H | rewrite >H].
+Tactic Notation "intropattern" "subst" "<-" hyp(H) :=
+first [subst from <- H | rewrite <- >H].
+
+Tactician Register Tactic "intropattern_subst_l" intropattern subst -> X.
+Tactician Register Tactic "intropattern_subst_r" intropattern subst <- X.
+
 Export Set Default Proof Mode "Tactician Ltac1".
 
 Tactician Record Then Decompose.
@@ -24,17 +59,17 @@ Tactician Record Dispatch Decompose.
 Tactician Record Extend Decompose.
 Tactician Record Thens Decompose.
 Tactician Record Thens3parts Decompose.
-Tactician Record First Keep.
+Tactician Record First Decompose.
 Tactician Record Complete Keep.
 Tactician Record Solve Keep.
 Tactician Record Or Keep.
 Tactician Record Once Keep.
 Tactician Record ExactlyOnce Keep.
 Tactician Record IfThenCatch Keep.
-Tactician Record Orelse Keep.
-Tactician Record Do Keep.
+Tactician Record Orelse Decompose.
+Tactician Record Do Decompose.
 Tactician Record Timeout Keep.
-Tactician Record Repeat Keep.
+Tactician Record Repeat Decompose.
 Tactician Record Progress Keep.
 
 (*
@@ -52,25 +87,26 @@ Tactician Record Progress Keep.
 Tactician Record Abstract Keep.
 Tactician Record LetIn Keep.
 Tactician Record Match Keep.
-Tactician Record MatchGoal Keep.
-Tactician Record Arg Keep.
+Tactician Record MatchGoal Decompose.
+Tactician Record Arg Decompose.
 Tactician Record Select Decompose. (* TODO: This setting should be kept like this until we implement
                                       an override in tactic_annotate in case we are in 'synth with cache' *)
 Tactician Record ML Keep.
 Tactician Record Alias Keep.
 Tactician Record Call Keep.
-Tactician Record IntroPattern Keep.
-Tactician Record Apply Keep.
+Tactician Record IntroPattern Decompose.
+Tactician Record Apply Decompose.
 Tactician Record Elim Keep.
 Tactician Record Case Keep.
 Tactician Record MutualFix Keep.
 Tactician Record MutualCofix Keep.
-Tactician Record Assert Keep.
+Tactician Record Assert Decompose.
 Tactician Record Generalize Keep.
 Tactician Record LetTac Keep.
-Tactician Record InductionDestruct Keep.
-Tactician Record Reduce Keep.
+Tactician Record InductionDestruct Decompose.
+Tactician Record Reduce Decompose.
 Tactician Record Change Keep.
-Tactician Record Rewrite Keep.
-Tactician Record RewriteMulti Keep.
+Tactician Record Rewrite Decompose.
+Tactician Record RewriteMulti Decompose.
 Tactician Record Inversion Keep.
+
