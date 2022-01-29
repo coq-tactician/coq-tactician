@@ -148,7 +148,8 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
 
 
   let tactic_local_context_sexpr ctx tac =
-    let tac = Tactic_normalize.tactic_normalize @@ Tactic_normalize.tactic_strict @@ tactic_repr tac in
+    let tac = Tactic_name_remove.tactic_name_remove @@ tactic_repr tac in
+    let tac = Tactic_normalize.tactic_normalize @@ Tactic_normalize.tactic_strict @@ tac in
     let args, tac = Tactic_one_variable.tactic_one_variable tac in
     let ctxids = List.map Context.Named.Declaration.get_id ctx in
     let arg_index arg = Tactician_util.safe_index0 Names.Id.equal arg ctxids in
