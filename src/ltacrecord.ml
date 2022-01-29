@@ -894,9 +894,9 @@ let run_predictions () =
   let open Proofview in
   let open Notations in
   let individual_prediction =
-    predict () >>= fun (learner, cont) -> cont >>= fun p ->
-    runTactics 0 p >>= fun s ->
-    Goal.enter_one @@ fun gl -> tclUNIT (get_state_id_goal_top gl, s) in
+    (* predict () >>= fun (learner, cont) -> cont >>= fun p -> *)
+    (* runTactics 200 p >>= fun s -> *)
+    Goal.enter_one @@ fun gl -> tclUNIT (get_state_id_goal_top gl, []) in
   tclLIFT (NonLogical.make (fun () -> CWarnings.get_flags ())) >>= fun oldFlags ->
   let setFlags () = tclLIFT (NonLogical.make (fun () ->
       Dumpglob.continue (); CWarnings.set_flags (oldFlags))) in
