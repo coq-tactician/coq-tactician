@@ -720,6 +720,23 @@ let commonSearch max_exec =
              dec_search_recursion_depth () >>= fun () -> setFlags () <*> tclUNIT (wit, !tac_exec_count))
             (fun (e, i) -> setFlags () <*> tclZERO ~info:i e))
 
+let type_check t =
+  let open Proofview in
+  let open Notations in
+  Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
+  let gls = List.map Goal.goal gls in
+  t >>= fun res ->
+  tclENV >>= fun env -> tclEVARMAP >>= fun sigma ->
+  List.iter (fun ev -> Feedback.msg_info Pp.(Evar.print ev ++ bool (Evd.is_defined sigma ev))) gls;
+  let _ = List.fold_left (fun sigma ev ->
+      let Evd.{ evar_body; evar_concl; _ } as info = Evd.find sigma ev in
+      let env = Environ.reset_with_named_context (Evd.evar_filtered_hyps info) env in
+      match evar_body with
+      | Evd.Evar_empty -> Feedback.msg_notice (Evar.print ev); sigma
+      | Evd.Evar_defined term -> Typing.check env sigma term evar_concl
+    ) sigma gls in
+  tclUNIT res
+
 let benchmarked_field : bool Evd.Store.field = Evd.Store.field ()
 let get_benchmarked () =
   modify_field benchmarked_field (fun b -> b, b) (fun () -> false)
@@ -753,7 +770,7 @@ let benchmarkSearch name : unit Proofview.tactic =
       timeout_command (tclENV >>= fun env ->
                        tclLIFT (NonLogical.print_info (Pp.(str "Start proof search for " ++ full_name))) <*>
                        tclLIFT print_name <*>
-                       commonSearch max_exec >>=
+                       type_check (commonSearch max_exec) >>=
                        fun m -> tclLIFT (print_success env m start_time))
 
 let nested_search_solutions_field : (glob_tactic_expr * int) list list Evd.Store.field = Evd.Store.field ()
@@ -915,7 +932,9 @@ let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO:
       let s = string_tac tac in
       (* TODO: Move this to annotation time *)
       if (String.equal s "admit" || String.equal s "synth" || String.is_prefix "synth with cache" s
-          || String.is_prefix "tactician ignore" s)
+          || String.is_prefix "tactician ignore" s || String.is_prefix "fix" s || String.is_prefix "cofix" s
+          || String.is_prefix "change_no_check" s || String.is_prefix "exact_no_checK" s || String.is_prefix "native_cast_no_check" s
+          || String.is_prefix "vm_cast_no_check" s)
       then () else add_to_db2 id (execs, tac) sideff const path;
       try (* This is purely for parsing bug detection and could be removed for performance reasons *)
         let _ = Pcoq.parse_string Pltac.tactic_eoi s in ()
@@ -958,3 +977,4 @@ let tactician_ignore t =
   let open Notations in
   get_record () >>= fun b ->
   set_record false <*> t <*> set_record b
+
