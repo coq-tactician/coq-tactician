@@ -25,3 +25,7 @@ VERNAC COMMAND EXTEND TacticianSuggest CLASSIFIED AS QUERY STATE proof_query
            Tactician_ltac1_record_plugin.Ltacrecord.userPredict
            (Proof_global.get_proof pstate) in () }
 END
+
+TACTIC EXTEND type_check
+| [ "type_check" tactic(t) ] ->   { Tactician_ltac1_record_plugin.Ltacrecord.type_check (Tacinterp.tactic_of_value ist t) }
+END
