@@ -908,6 +908,7 @@ let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO:
   let open Notations in
   let const = Names.Constant.make2 (Global.current_modpath ()) (Names.Label.of_id name) in
   let path = Lib.make_path name in
+  Benchmark.add_lemma path;
   let save_db env sideff (db : localdb) =
     let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic env t) in
     let string_tac t = Pp.string_of_ppcmds (tac_pp t) in
