@@ -35,6 +35,7 @@ let write_info () =
   | Some p ->
     let info = { info with lemmas = List.map Libnames.string_of_path @@ List.map fst @@ Libnames.Spmap.bindings !lemmas } in
     let info = Marshal.to_bytes info [] in
+    print_endline ("port: " ^ string_of_int p);
     let s = Unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
     Unix.connect s @@ Unix.ADDR_INET (Unix.inet_addr_loopback, p);
     let c = Unix.out_channel_of_descr s in
