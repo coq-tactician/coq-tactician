@@ -41,6 +41,8 @@ let write_info () =
     Unix.connect s @@ Unix.ADDR_INET (Unix.inet_addr_loopback, p);
     let c = Unix.out_channel_of_descr s in
     output_bytes c info;
-    close_out c
+    (* We intentionally keep the socket open. It is closed when the process exits. This way, the receiving process can know when
+       all .vo files have been written. *)
+    (* close_out c *) ()
 
 let () = Declaremods.append_end_library_hook write_info
