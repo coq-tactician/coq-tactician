@@ -5,7 +5,7 @@ let data_file =
   let file = ref None in
   (fun () ->
      match !file with
-     | None -> let filename = Option.default "" Ltacrecord.base_filename ^ ".eval" in
+     | None -> let filename = Option.default "" Tactician_util.base_filename ^ ".eval" in
        let k = Ltacrecord.open_permanently filename in
        file := Some k;
        k
