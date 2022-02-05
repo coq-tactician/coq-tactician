@@ -2,11 +2,11 @@
 Definition private_constant_placeholder (x : Type) := x.
 Register private_constant_placeholder as tactician.private_constant_placeholder.
 
-Declare ML Module "ltac_plugin".
-Declare ML Module "firstorder_plugin".
-Declare ML Module "extraction_plugin".
-Declare ML Module "funind_plugin".
-Declare ML Module "tactician_ltac1_record_plugin".
+Declare ML Module "ltac_plugin:coq-core.plugins.ltac".
+Declare ML Module "firstorder_plugin:coq-core.plugins.firstorder".
+Declare ML Module "extraction_plugin:coq-core.plugins.extraction".
+Declare ML Module "funind_plugin:coq-core.plugins.funind".
+Declare ML Module "tactician_ltac1_record_plugin:coq-tactician.record-plugin".
 Export Set Default Proof Mode "Tactician Ltac1".
 
 Tactician Record Then Decompose.

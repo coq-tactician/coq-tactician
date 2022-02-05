@@ -1,4 +1,4 @@
-DECLARE PLUGIN "tactician_ltac1_record_plugin"
+DECLARE PLUGIN "coq-tactician.record-plugin"
 
 {
 

@@ -1,6 +1,6 @@
 From Tactician Require Export Ltac1.Record.
 
-Declare ML Module "tactician_ltac1_tactics_plugin".
+Declare ML Module "tactician_ltac1_tactics_plugin:coq-tactician.tactics-plugin".
 
 Tactic Notation (at level 5) "search" "with" "cache" tactic3(t) := fail
   "'search with cache' has been renamed to 'synth with cache'".

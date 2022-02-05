@@ -291,7 +291,7 @@ let section_notation_helper prods e =
 (* TODO: Determining where we have to call this exactly is tricky business *)
 let load_plugins () =
   let open Mltop in
-  let plugins = [("ssreflect_plugin", "tactician_ssreflect_plugin")] in
+  let plugins = [("coq-core.plugins.ssreflect", "coq-tactician.ssreflect-plugin")] in
   let load (dep, target) =
     if module_is_known dep && not (module_is_known target) then
       declare_ml_modules false [target] in
