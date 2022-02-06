@@ -453,9 +453,9 @@ let get_tactic_trace gl =
   get_field_goal2 tactic_trace_field gl (fun _ -> [])
 
 let mk_outcome (st, sts) =
-  (* let mem = (List.map TS.tactic_make (get_tactic_trace st)) in *)
+  let mem = (List.map TS.tactic_make (get_tactic_trace st)) in
   let st : proof_state = goal_to_proof_state st in
-  { parents = [] (* List.map (fun tac -> (st (\* TODO: Fix *\), { executions = []; tactic = tac })) mem *)
+  { parents = List.map (fun tac -> (st (* TODO: Fix *), { executions = []; tactic = tac })) mem
   ; siblings = End
   ; before = st
   ; after = [] (* List.map goal_to_proof_state sts *) }
