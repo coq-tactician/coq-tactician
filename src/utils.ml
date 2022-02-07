@@ -15,6 +15,27 @@ let accuracy l1 l2 =
     let correct = List.filter (fun (x, y) -> x = y) pairs in
     float_of_int (List.length correct) /. float_of_int (List.length pairs)
 
+let rec sum = function
+    | [] -> 0.
+    | h :: t -> h +. sum t
+
+let avg l =
+    (sum l) /. (float_of_int (List.length l))
+
+let rmse labels predictions =
+    assert (List.length labels = List.length predictions);
+    let pairs = List.combine labels predictions in
+    let se (x, y) = ((float_of_int x) -. y) ** 2. in
+    let ses = List.map se pairs in
+    (avg ses) ** 0.5
+
+let accuracy_binreg labels predictions =
+    assert (List.length labels = List.length predictions);
+    let pairs = List.combine labels predictions in
+    let ok (x, y) = if x == 0 then y < 0.5 else y >= 0.5 in
+    let correct = List.map ok pairs in
+    avg (List.map (fun x -> if x then 1. else 0.) correct)
+
 let array_subset x inds =
     Array.of_list (List.map (fun i -> x.(i)) inds)
 
@@ -51,6 +72,17 @@ let rec init_seg l n =
     | [] -> failwith "init_seg"
     | h :: t -> if n = 1 then [h] else h :: init_seg t (n-1)
 
+let init_seg_and_tail l n =
+    let rec aux acc n = function
+        | [] -> (List.rev acc, [])
+        | h :: t ->
+            if n = 0 then (List.rev acc, h :: t) else aux (h :: acc) (n-1) t
+    in aux [] n l
+
+let random_split l n =
+    let sl = shuffle l in
+    init_seg_and_tail sl n
+
 let choose_randoms l n =
     init_seg (shuffle l) n
 
@@ -69,13 +101,27 @@ let time f x =
     Printf.printf "Execution time: %f s\n%!" (Sys.time() -. t);
     fx
 
+let map f l =
+  let rec loop acc = function
+    | [] -> List.rev acc
+    | x :: xs -> loop (f x :: acc) xs in
+  loop [] l
+
+let combine l1 l2 =
+  let rec loop acc q1 q2 =
+    match q1, q2 with
+    | [], _ -> List.rev acc
+    | _, [] -> List.rev acc
+    | h1 :: t1, h2 :: t2 -> loop ((h1, h2) :: acc) t1 t2 in
+  loop [] l1 l2
+
 let load_features file =
     let lines = read_lines file in
     let split = Str.split_delim (Str.regexp " ") in
-    List.map (fun l -> List.map int_of_string (split l)) lines
+    map (fun l -> List.map int_of_string (split l)) lines
 
 let load_labels file =
-    List.map int_of_string (read_lines file)
+    map int_of_string (read_lines file)
 
 let print_label label =
     Printf.printf "%n\n" label
@@ -113,3 +159,5 @@ let rec min_list = function
 let rec max_list = function
     | [] -> invalid_arg "empty list"
     | h :: t -> List.fold_left max h t
+
+

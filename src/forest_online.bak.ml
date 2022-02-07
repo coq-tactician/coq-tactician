@@ -3,67 +3,81 @@ module Make = functor (Data : Tree_online.DATA) -> struct
 
     let empty = []
 
-    let add forest example =
+    (*
+    let add ?(n_feas=1) ?(min_impur=0.5) ?(max_depth=100) ?(n_trees=100)
+        forest example =
+        let n = List.length forest in
+        let add_tree = (n = 0) || ((Random.int n = 0) && n < n_trees) in
         let updated_trees =
-            List.map (fun tree -> Tree.add tree example) forest in
-(*
-            let parmap_forest = Parmap.L forest in
-            Parmap.parmap (fun tree -> Tree.add tree example) parmap_forest in
-*)
-        let n_trees = List.length forest in
-        let add_new_tree = (n_trees = 0) || (Random.int n_trees = 0) in
-        if add_new_tree then Tree.leaf example :: updated_trees
-        else updated_trees
+            List.map
+            (fun tree -> Tree.add ~n_feas ~min_impur ~max_depth tree example)
+            forest in
+        if add_tree then Tree.leaf example :: updated_trees else updated_trees
+    *)
+
+    let add ?(min_impur=0.5) ?(n_trees=1000) ?(part=0.2)
+        forest example =
+        let n = List.length forest in
+        let add_tree = n < n_trees in
+        let k = int_of_float (part *. float_of_int n) in
+        let k = min n (max 1 k) in
+        let trees_to_update, trees_rest = Utils.random_split forest k in
+        let updated_trees =
+            List.map (fun tree -> Tree.add ~min_impur tree example)
+            trees_to_update in
+        let forest = updated_trees @ trees_rest in
+        if add_tree then Tree.leaf example :: forest else forest
 
     let forest examples =
         Data.fold_left add empty examples
 
-(*
-    let forest tree n examples =
-        let initseg = List.init n (fun i -> i) in
-        List.map (fun _ -> tree (Data.random_subset examples)) initseg
-*)
-
     let vote votes =
-        let tbl = Hashtbl.create 10 in (* about 10 classes assumed *)
-        let update cl =
-            if Hashtbl.mem tbl cl then
-                Hashtbl.replace tbl cl ((Hashtbl.find tbl cl) + 1)
-            else
-                Hashtbl.add tbl cl 1
-        in
-        List.iter update votes;
-        let update_max_cl cl v (max_cls, max_v) =
-            match compare v max_v with
-            | 1  -> ([cl], v)
-            | 0  -> (cl :: max_cls, v)
-            | -1 -> (max_cls, max_v)
-            | _  -> failwith "Illegal value of compare." in
-        let max_freq_cls = Hashtbl.fold update_max_cl tbl ([], 1) in
-        match max_freq_cls with
-        | ([], _) ->
-            failwith "At least one class needs to have maximal frequency."
-        | ([x], _) -> x
-        | (l, _) -> Utils.choose_random l
+        let freqs = Utils.freqs votes in
+        List.sort (fun (_, c1) (_, c2) -> compare c2 c1) freqs
 
+    type 'a pred =
+        | Label of 'a
+        | Ranking of ('a list)
+        | Ranking_with_scores of (('a * float) list)
 
-    let freqs votes =
-        let tbl = Hashtbl.create 10 in
-        let update cl =
-            if Hashtbl.mem tbl cl then
-                Hashtbl.replace tbl cl ((Hashtbl.find tbl cl) + 1)
-            else
-                Hashtbl.add tbl cl 1
-        in
-        List.iter update votes;
-        let sum = Hashtbl.fold (fun c n s -> n + s) tbl 0 in
-        let sum = float_of_int sum in
-        let keys = List.of_seq (Hashtbl.to_seq_keys tbl) in
-        List.map
-            (fun cl -> ((float_of_int (Hashtbl.find tbl cl)) /. sum, cl)) keys
-
-    let classify_1 forest example =
+    let score forest example =
         let votes = List.map (Tree.classify example) forest in
-        let votes = List.map List.hd votes in
-        freqs votes
+        vote votes
+
+    let predict ?(pred_type="label") forest example =
+        let scores = score forest example in
+        if pred_type = "label" then
+            let l = match scores with
+            | (l, _) :: _ -> l
+            | [] -> failwith "empty list of voting scores" in
+            Label l
+        else if pred_type = "rank" then
+            Ranking (List.map (fun (l, _) -> l) scores)
+        else failwith "unknown prediction type specified"
+
+    let classify forest example =
+        let scores = score forest example in
+        match scores with
+        | [] -> failwith "empty list of voting scores"
+        | (l, _) :: _ -> l
+
+    let stats forest =
+        let l = List.length forest in
+        let ds_sum = List.fold_left (fun s t -> s + Tree.depth t) 0 forest in
+        let ds_avg = (float_of_int ds_sum) /. (float_of_int l) in
+        let ns_sum = List.fold_left (fun s t -> s + Tree.max_node t) 0 forest in
+        let nns_sum = List.fold_left (fun s t -> s + Tree.n_nodes t) 0 forest in
+        let nns_avg = (float_of_int nns_sum) /. (float_of_int l) in
+        let ns_sum_lab =
+            List.fold_left (fun s t -> s + Tree.max_labels_node t) 0 forest in
+        let ns_avg = (float_of_int ns_sum) /. (float_of_int l) in
+        let ns_avg_lab = (float_of_int ns_sum_lab) /. (float_of_int l) in
+        let () = Printf.printf "\nNumber of trees: %n\n" l in
+        let () = Printf.printf "Avg depth of trees: %f\n" ds_avg in
+        let () = Printf.printf "Avg n. of nodes in trees: %f\n" nns_avg in
+        let () = Printf.printf "Avg largest node of trees: %f\n" ns_avg in
+        let () = Printf.printf
+            "Avg largest n. of labels in node of trees: %f\n" ns_avg_lab in
+        let () = Printf.printf "\n" in ()
+
 end
