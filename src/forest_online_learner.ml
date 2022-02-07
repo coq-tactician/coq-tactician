@@ -29,7 +29,6 @@ module OnlineForest : TacticianOnlineLearnerType = functor (TS : TacticianStruct
       List.fold_left (fun db out -> add db out.before tac) db outcomes
 
     let predict forest f =
-      let () = print_endline "aa" in
       if f = [] then IStream.empty else
       let feats = proof_state_to_complex_ints_no_kind (List.hd f).state in
       let example = Data.unlabeled feats in
