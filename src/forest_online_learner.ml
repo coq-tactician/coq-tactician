@@ -22,7 +22,7 @@ module OnlineForest : TacticianOnlineLearnerType = functor (TS : TacticianStruct
       Forest.add
       ~min_impur:0.5
       ~n_trees:1000
-      ~part:0.2
+      ~part:0.1
       forest (Data.labeled (feats, obj))
 
     let learn db _loc outcomes tac =
