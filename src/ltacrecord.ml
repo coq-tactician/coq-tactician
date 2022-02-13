@@ -571,7 +571,6 @@ let benchmarkSearch name time deterministic : unit Proofview.tactic =
   let abstract_time = time in
   let timeout_command = if deterministic then fun x -> x else tclTIMEOUT2 abstract_time in
   let max_exec = if deterministic then Some abstract_time else None in
-  let full_name = Libnames.pr_path name in
   let print_success env (wit, count) start_time =
     let tcs, m = List.split (List.map (fun {tac;focus;prediction_index} ->
         ((tac, focus), prediction_index)) wit) in
@@ -583,18 +582,17 @@ let benchmarkSearch name time deterministic : unit Proofview.tactic =
                                         ; witness = tstring
                                         ; time = tdiff
                                         ; inferences = count }));
-    (print_info (Pp.(str "Proof found for " ++ full_name ++ str "!"))) in
+  in
   let print_name () =
       Benchmark.(send_bench_result (Started (Libnames.string_of_path name))) in
   get_benchmarked () >>= fun benchmarked ->
   if benchmarked then tclUNIT () else
     set_benchmarked () <*>
     let start_time = Unix.gettimeofday () in
-    Feedback.msg_notice (Pp.(str "Start proof search for " ++ full_name));
     print_name ();
     timeout_command (tclENV >>= fun env ->
                      commonSearch max_exec >>=
-                     fun m -> tclLIFT (print_success env m start_time))
+                     fun m -> print_success env m start_time; tclUNIT ())
 
 let nested_search_solutions_field : (glob_tactic_expr * int) list list Evd.Store.field = Evd.Store.field ()
 let push_nested_search_solutions tcs =
