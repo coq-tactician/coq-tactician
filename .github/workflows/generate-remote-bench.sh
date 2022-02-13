@@ -19,7 +19,7 @@ jobs:
           echo "${{ secrets.BENCH_KEY }}" > bench-key
           chmod 600 bench-key
           BENCHID=$(ssh -i bench-key -o StrictHostKeyChecking=no -o LogLevel=error \
-              ${{ secrets.BENCH_HOST }} coq-tactician http://github.com/${{ github.repository }}.git \
+              ${{ secrets.BENCH_HOST }} coq-tactician https://github.com/${{ github.repository }}.git \
               $GITHUB_SHA 0 coq-tactician-stdlib)
           echo $BENCHID
           echo "::set-output name=benchid::$BENCHID"
