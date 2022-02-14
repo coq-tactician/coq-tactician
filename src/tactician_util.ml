@@ -335,3 +335,64 @@ let goal_size (gl : Proofview.Goal.t) =
     ) ~init:0 hyps in
   let goal = econstr_size sigma goal in
   hyps + goal
+
+(* Find the current file name *)
+open Loadpath
+
+let select_v_file ~warn loadpath base =
+  let find ext =
+    let loadpath = List.map fst loadpath in
+    try
+      let name = Names.Id.to_string base ^ ext in
+      let lpath, file =
+        System.where_in_path ~warn loadpath name in
+      Some (lpath, file)
+    with Not_found -> None in
+  match find ".v" with
+  | None ->
+    Error LibNotFound
+  | Some res ->
+    Ok res
+
+let load_path_to_physical t =
+  let printed = pp t in
+  let path = match Pp.repr printed with
+  | Pp.Ppcmd_box (_, k) -> (match Pp.repr k with
+    | Pp.Ppcmd_glue ks -> (match Pp.repr (List.nth ks 2) with
+      | Pp.Ppcmd_string s -> s
+      | _ -> assert false)
+    | _ -> assert false)
+  | _ -> assert false in
+  path
+
+let filter_path f =
+  let rec aux = function
+  | [] -> []
+  | p :: l ->
+    if f (logical p) then (load_path_to_physical p, logical p) :: aux l
+    else aux l
+  in
+  aux (get_load_paths ())
+
+let locate_absolute_library dir : CUnix.physical_path locate_result =
+  (* Search in loadpath *)
+  let pref, base = Libnames.split_dirpath dir in
+  let loadpath = filter_path (fun dir -> Names.DirPath.equal dir pref) in
+  match loadpath with
+  | [] -> Error LibUnmappedDir
+  | _ ->
+    match select_v_file ~warn:false loadpath base with
+    | Ok (_, file) -> Ok file
+    | Error fail -> Error fail
+
+let try_locate_absolute_library dir =
+  match locate_absolute_library dir with
+  | Ok res -> Some res
+  | Error LibUnmappedDir ->
+    None
+  | Error LibNotFound ->
+    None
+
+let base_filename =
+  let dirpath = Global.current_dirpath () in
+  Option.map (fun f -> Filename.remove_extension f) (try_locate_absolute_library dirpath)

@@ -35,6 +35,7 @@
    tactic_sexpr
    timeouttac
    tactician_util
+   benchmark
  ))
  (libraries
    coq.plugins.ltac
