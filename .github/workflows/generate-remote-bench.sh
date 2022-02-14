@@ -23,6 +23,16 @@ jobs:
               $GITHUB_SHA 0 coq-tactician-stdlib)
           echo $BENCHID
           echo "::set-output name=benchid::$BENCHID"
+
+      - id: cancel
+        name: Cancel
+        if: ${{ cancelled() }}
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} terminate ${{ needs.submit.outputs.benchid }}
 EOF
 
 NEEDS="[submit]"
@@ -34,7 +44,7 @@ ATTACH=$(cat <<'EOF'
           set -o pipefail
           set +e
           timeout 355m ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
-                  ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}
+                  ${{ secrets.BENCH_HOST }} attach ${{ needs.submit.outputs.benchid }}
           EXIT=$?
           echo "Exit code $EXIT"
           if [ $EXIT -eq 124 ]; then
