@@ -24,9 +24,12 @@ jobs:
           echo $BENCHID
           echo "::set-output name=benchid::$BENCHID"
 
+  cancel:
+    runs-on: ubuntu-latest
+    if: ${{ cancelled() }}
+    steps:
       - id: cancel
         name: Cancel
-        if: ${{ cancelled() }}
         run: |
           echo "${{ needs.submit.outputs.benchid }}"
           echo "${{ secrets.ATTACH_KEY }}" > attach-key
