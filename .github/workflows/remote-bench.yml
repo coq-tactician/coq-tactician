@@ -19,18 +19,6 @@ jobs:
           echo $BENCHID
           echo "::set-output name=benchid::$BENCHID"
 
-  cancel:
-    runs-on: ubuntu-latest
-    if: ${{ cancelled() }}
-    steps:
-      - id: cancel
-        name: Cancel
-        run: |
-          echo "${{ needs.submit.outputs.benchid }}"
-          echo "${{ secrets.ATTACH_KEY }}" > attach-key
-          chmod 600 attach-key
-          ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
-              ${{ secrets.BENCH_HOST }} terminate ${{ needs.submit.outputs.benchid }}
   attach0:
     runs-on: ubuntu-latest
     needs: [submit]
@@ -56,6 +44,15 @@ jobs:
           else
               exit $EXIT
           fi
+      - id: cancel
+        name: Cancel
+        if: ${{ cancelled() }}
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} terminate ${{ needs.submit.outputs.benchid }}
   attach1:
     runs-on: ubuntu-latest
     needs: [submit, attach0]
@@ -81,6 +78,15 @@ jobs:
           else
               exit $EXIT
           fi
+      - id: cancel
+        name: Cancel
+        if: ${{ cancelled() }}
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} terminate ${{ needs.submit.outputs.benchid }}
   attach2:
     runs-on: ubuntu-latest
     needs: [submit, attach1]
@@ -106,6 +112,15 @@ jobs:
           else
               exit $EXIT
           fi
+      - id: cancel
+        name: Cancel
+        if: ${{ cancelled() }}
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} terminate ${{ needs.submit.outputs.benchid }}
   attach3:
     runs-on: ubuntu-latest
     needs: [submit, attach2]
@@ -131,6 +146,15 @@ jobs:
           else
               exit $EXIT
           fi
+      - id: cancel
+        name: Cancel
+        if: ${{ cancelled() }}
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} terminate ${{ needs.submit.outputs.benchid }}
   attach4:
     runs-on: ubuntu-latest
     needs: [submit, attach3]
@@ -156,6 +180,15 @@ jobs:
           else
               exit $EXIT
           fi
+      - id: cancel
+        name: Cancel
+        if: ${{ cancelled() }}
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} terminate ${{ needs.submit.outputs.benchid }}
   attach5:
     runs-on: ubuntu-latest
     needs: [submit, attach4]
@@ -181,6 +214,15 @@ jobs:
           else
               exit $EXIT
           fi
+      - id: cancel
+        name: Cancel
+        if: ${{ cancelled() }}
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} terminate ${{ needs.submit.outputs.benchid }}
   attach6:
     runs-on: ubuntu-latest
     needs: [submit, attach5]
@@ -206,6 +248,15 @@ jobs:
           else
               exit $EXIT
           fi
+      - id: cancel
+        name: Cancel
+        if: ${{ cancelled() }}
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} terminate ${{ needs.submit.outputs.benchid }}
   attach7:
     runs-on: ubuntu-latest
     needs: [submit, attach6]
@@ -231,6 +282,15 @@ jobs:
           else
               exit $EXIT
           fi
+      - id: cancel
+        name: Cancel
+        if: ${{ cancelled() }}
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} terminate ${{ needs.submit.outputs.benchid }}
   attach8:
     runs-on: ubuntu-latest
     needs: [submit, attach7]
@@ -256,6 +316,15 @@ jobs:
           else
               exit $EXIT
           fi
+      - id: cancel
+        name: Cancel
+        if: ${{ cancelled() }}
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} terminate ${{ needs.submit.outputs.benchid }}
   attach9:
     runs-on: ubuntu-latest
     needs: [submit, attach8]
@@ -281,6 +350,15 @@ jobs:
           else
               exit $EXIT
           fi
+      - id: cancel
+        name: Cancel
+        if: ${{ cancelled() }}
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} terminate ${{ needs.submit.outputs.benchid }}
   attach10:
     runs-on: ubuntu-latest
     needs: [submit, attach9]
@@ -306,6 +384,15 @@ jobs:
           else
               exit $EXIT
           fi
+      - id: cancel
+        name: Cancel
+        if: ${{ cancelled() }}
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} terminate ${{ needs.submit.outputs.benchid }}
   attach11:
     runs-on: ubuntu-latest
     needs: [submit, attach10]
@@ -331,6 +418,15 @@ jobs:
           else
               exit $EXIT
           fi
+      - id: cancel
+        name: Cancel
+        if: ${{ cancelled() }}
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} terminate ${{ needs.submit.outputs.benchid }}
   attach12:
     runs-on: ubuntu-latest
     needs: [submit, attach11]
@@ -356,6 +452,15 @@ jobs:
           else
               exit $EXIT
           fi
+      - id: cancel
+        name: Cancel
+        if: ${{ cancelled() }}
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} terminate ${{ needs.submit.outputs.benchid }}
   attach13:
     runs-on: ubuntu-latest
     needs: [submit, attach12]
@@ -381,3 +486,12 @@ jobs:
           else
               exit $EXIT
           fi
+      - id: cancel
+        name: Cancel
+        if: ${{ cancelled() }}
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} terminate ${{ needs.submit.outputs.benchid }}
