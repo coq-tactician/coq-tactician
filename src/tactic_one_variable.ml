@@ -48,4 +48,4 @@ let mapper = { FreeVarsDef.default_mapper with
              }
 
 let tactic_one_variable t =
-  M.run [] @@ FreeVarsMapper.glob_tactic_expr_map mapper t
+  M.run (FreeVarsMapper.glob_tactic_expr_map mapper t) []

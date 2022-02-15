@@ -33,7 +33,7 @@ let mapper = { AbstractDef.default_mapper with
              }
 
 let tactic_abstract t =
-  let args, t = M.run [] [] @@ AbstractMapper.glob_tactic_expr_map mapper t in
+  let args, t = M.run (AbstractMapper.glob_tactic_expr_map mapper t) [] [] in
   List.rev args, t
 
 module M2 = WriterMonad
