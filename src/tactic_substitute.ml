@@ -1,7 +1,7 @@
 open Map_all_the_things
 open Genarg
 open Names
-open Tactician_util
+open Monad_util
 
 module FreeVarsDef = struct
   module M = WriterMonad
@@ -54,4 +54,4 @@ let mapper f = { SubstituteDef.default_mapper with
                             if List.exists (Id.equal id) ids then return id else return (f id)))
                }
 
-let tactic_substitute f t = M.run [] @@ SubstituteMapper.glob_tactic_expr_map (mapper f) t
+let tactic_substitute f t = M.run (SubstituteMapper.glob_tactic_expr_map (mapper f) t) []

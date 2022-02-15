@@ -36,6 +36,7 @@
    timeouttac
    tactician_util
    benchmark
+   monad_util
  ))
  (libraries
    coq.plugins.ltac
