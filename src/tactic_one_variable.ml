@@ -1,12 +1,12 @@
 open Map_all_the_things
 open Genarg
 open Names
-open Tactician_util
+open Monad_util
 open Glob_term
 
 module FreeVarsDef = struct
   module M = ReaderWriterMonad
-      (struct type r = Id.t list type w = Id.t option list let id = [] let comb = List.append end)
+      (struct type w = Id.t option list let id = [] let comb = List.append end) (struct type r = Id.t list end)
   include MapDefTemplate (M)
   let map_sort = "one_free_variable"
   let warnProblem wit =
