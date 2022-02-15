@@ -4,7 +4,7 @@ open Glob_term
 open Constrexpr
 open Pattern
 open Genarg
-open Tactician_util
+open Monad_util
 open Loc
 open Genintern
 open Tactypes

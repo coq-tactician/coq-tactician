@@ -9,7 +9,7 @@ open Locus
 open Tactics
 open Genredexpr
 open Genarg
-open Tactician_util
+open Monad_util
 
 module O = Glob_term
 module J = Constrexpr

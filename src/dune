@@ -52,6 +52,8 @@
    extreme_tactic_normalize
    tactic_name_remove
    proof_equality
+   benchmark
+   monad_util
  ))
  (libraries
    coq.plugins.ltac

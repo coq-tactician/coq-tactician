@@ -1,10 +1,10 @@
 open Map_all_the_things
 open Genarg
 open Names
-open Tactician_util
+open Monad_util
 
 module M = ReaderStateMonad
-  (struct type r = Id.t list type s = (Id.t * Id.t) list end)
+  (struct type r = Id.t list end) (struct type s = (Id.t * Id.t) list end)
 module AbstractDef = struct
   include MapDefTemplate(M)
   open M

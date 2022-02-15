@@ -3,7 +3,7 @@ open Tacexpr_functor
 open Glob_term_functor
 open Constrexpr_functor
 open Pattern_functor
-open Tactician_util
+open Monad_util
 open Coq_ast_monadic_map
 open Coq_ast_sequence
 open Genarg

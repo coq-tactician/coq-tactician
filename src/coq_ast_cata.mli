@@ -1,6 +1,6 @@
 open Ltac_plugin
 open Coq_ast_sequence
-open Tactician_util
+open Monad_util
 
 module Cata (M : Monad.Def) : sig
   open Sequence(M)
