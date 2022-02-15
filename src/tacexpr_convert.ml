@@ -1,7 +1,7 @@
 open Ltac_plugin
 open Coq_ast_monadic_map
 open Tacexpr_functor
-open Tactician_util
+open Monad_util
 
 module O = Tacexpr
 

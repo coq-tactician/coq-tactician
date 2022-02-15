@@ -1,7 +1,7 @@
 open Map_all_the_things
 open Genarg
 open Names
-open Tactician_util
+open Monad_util
 open Glob_term
 open Constrexpr
 open Ltac_plugin
@@ -95,4 +95,4 @@ let mapper env evd f =
     )
   }
 
-let tactic_substitute env evd f t = M.run [] @@ SubstituteMapper.glob_tactic_expr_map (mapper env evd f) t
+let tactic_substitute env evd f t = M.run (SubstituteMapper.glob_tactic_expr_map (mapper env evd f) t) []

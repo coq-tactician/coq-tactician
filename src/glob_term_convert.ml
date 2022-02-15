@@ -1,6 +1,6 @@
 open Coq_ast_monadic_map
 open Glob_term_functor
-open Tactician_util
+open Monad_util
 
 module O = Glob_term
 

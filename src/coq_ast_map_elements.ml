@@ -1,7 +1,7 @@
 open Ltac_plugin
 open Tactypes
 open Coq_ast_cata
-open Tactician_util
+open Monad_util
 open Tacexpr_functor
 open Constrexpr_functor
 open Coq_ast_monadic_map

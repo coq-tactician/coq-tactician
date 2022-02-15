@@ -5,7 +5,7 @@ open Features
 open Sexplib
 open Map_all_the_things
 open Mapping_helpers
-open Tactician_util
+open Monad_util
 open Genarg
 
 
@@ -13,7 +13,7 @@ let data_file =
   let file = ref None in
   (fun () ->
      match !file with
-     | None -> let filename = Option.default "" Ltacrecord.base_filename ^ ".sexpr" in
+     | None -> let filename = Option.default "" Tactician_util.base_filename ^ ".sexpr" in
        let k = Ltacrecord.open_permanently filename in
        file := Some k;
        k
