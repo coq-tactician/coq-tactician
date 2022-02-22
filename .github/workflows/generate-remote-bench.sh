@@ -19,10 +19,11 @@ jobs:
           echo "${{ secrets.BENCH_KEY }}" > bench-key
           chmod 600 bench-key
           BENCHID=$(ssh -i bench-key -o StrictHostKeyChecking=no -o LogLevel=error \
-              ${{ secrets.BENCH_HOST }} http://github.com/${{ github.repository }}.git \
-              $GITHUB_SHA coq-tactician-stdlib.8.10.dev \"\" \"Set Tactician Benchmark 40.\")
+              ${{ secrets.BENCH_HOST }} coq-tactician git+https://github.com/${{ github.repository }}.git \
+              $GITHUB_SHA 40 coq-tactician-stdlib)
           echo $BENCHID
           echo "::set-output name=benchid::$BENCHID"
+
 EOF
 
 NEEDS="[submit]"
@@ -34,7 +35,7 @@ ATTACH=$(cat <<'EOF'
           set -o pipefail
           set +e
           timeout 355m ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
-                  ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}
+                  ${{ secrets.BENCH_HOST }} attach ${{ needs.submit.outputs.benchid }}
           EXIT=$?
           echo "Exit code $EXIT"
           if [ $EXIT -eq 124 ]; then
@@ -43,6 +44,18 @@ ATTACH=$(cat <<'EOF'
           else
               exit $EXIT
           fi
+EOF
+)
+CANCEL=$(cat <<'EOF'
+      - id: cancel
+        name: Cancel
+        if: ${{ cancelled() }}
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} terminate ${{ needs.submit.outputs.benchid }}
 EOF
 )
 
@@ -59,6 +72,7 @@ for i in {0..13}; do
         name: Attach
         run: |
 $ATTACH
+$CANCEL
 EOF
     NEEDS="[submit, attach${i}]"
     IF="if: \${{ needs.attach${i}.outputs.finished == 'false' }}"

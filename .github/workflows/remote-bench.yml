@@ -14,10 +14,11 @@ jobs:
           echo "${{ secrets.BENCH_KEY }}" > bench-key
           chmod 600 bench-key
           BENCHID=$(ssh -i bench-key -o StrictHostKeyChecking=no -o LogLevel=error \
-              ${{ secrets.BENCH_HOST }} http://github.com/${{ github.repository }}.git \
-              $GITHUB_SHA coq-tactician-stdlib.8.10.dev \"\" \"Set Tactician Benchmark 40.\")
+              ${{ secrets.BENCH_HOST }} coq-tactician git+https://github.com/${{ github.repository }}.git \
+              $GITHUB_SHA 40 coq-tactician-stdlib)
           echo $BENCHID
           echo "::set-output name=benchid::$BENCHID"
+
   attach0:
     runs-on: ubuntu-latest
     needs: [submit]
@@ -34,7 +35,7 @@ jobs:
           set -o pipefail
           set +e
           timeout 355m ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
-                  ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}
+                  ${{ secrets.BENCH_HOST }} attach ${{ needs.submit.outputs.benchid }}
           EXIT=$?
           echo "Exit code $EXIT"
           if [ $EXIT -eq 124 ]; then
@@ -43,6 +44,15 @@ jobs:
           else
               exit $EXIT
           fi
+      - id: cancel
+        name: Cancel
+        if: ${{ cancelled() }}
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} terminate ${{ needs.submit.outputs.benchid }}
   attach1:
     runs-on: ubuntu-latest
     needs: [submit, attach0]
@@ -59,7 +69,7 @@ jobs:
           set -o pipefail
           set +e
           timeout 355m ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
-                  ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}
+                  ${{ secrets.BENCH_HOST }} attach ${{ needs.submit.outputs.benchid }}
           EXIT=$?
           echo "Exit code $EXIT"
           if [ $EXIT -eq 124 ]; then
@@ -68,6 +78,15 @@ jobs:
           else
               exit $EXIT
           fi
+      - id: cancel
+        name: Cancel
+        if: ${{ cancelled() }}
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} terminate ${{ needs.submit.outputs.benchid }}
   attach2:
     runs-on: ubuntu-latest
     needs: [submit, attach1]
@@ -84,7 +103,7 @@ jobs:
           set -o pipefail
           set +e
           timeout 355m ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
-                  ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}
+                  ${{ secrets.BENCH_HOST }} attach ${{ needs.submit.outputs.benchid }}
           EXIT=$?
           echo "Exit code $EXIT"
           if [ $EXIT -eq 124 ]; then
@@ -93,6 +112,15 @@ jobs:
           else
               exit $EXIT
           fi
+      - id: cancel
+        name: Cancel
+        if: ${{ cancelled() }}
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} terminate ${{ needs.submit.outputs.benchid }}
   attach3:
     runs-on: ubuntu-latest
     needs: [submit, attach2]
@@ -109,7 +137,7 @@ jobs:
           set -o pipefail
           set +e
           timeout 355m ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
-                  ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}
+                  ${{ secrets.BENCH_HOST }} attach ${{ needs.submit.outputs.benchid }}
           EXIT=$?
           echo "Exit code $EXIT"
           if [ $EXIT -eq 124 ]; then
@@ -118,6 +146,15 @@ jobs:
           else
               exit $EXIT
           fi
+      - id: cancel
+        name: Cancel
+        if: ${{ cancelled() }}
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} terminate ${{ needs.submit.outputs.benchid }}
   attach4:
     runs-on: ubuntu-latest
     needs: [submit, attach3]
@@ -134,7 +171,7 @@ jobs:
           set -o pipefail
           set +e
           timeout 355m ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
-                  ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}
+                  ${{ secrets.BENCH_HOST }} attach ${{ needs.submit.outputs.benchid }}
           EXIT=$?
           echo "Exit code $EXIT"
           if [ $EXIT -eq 124 ]; then
@@ -143,6 +180,15 @@ jobs:
           else
               exit $EXIT
           fi
+      - id: cancel
+        name: Cancel
+        if: ${{ cancelled() }}
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} terminate ${{ needs.submit.outputs.benchid }}
   attach5:
     runs-on: ubuntu-latest
     needs: [submit, attach4]
@@ -159,7 +205,7 @@ jobs:
           set -o pipefail
           set +e
           timeout 355m ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
-                  ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}
+                  ${{ secrets.BENCH_HOST }} attach ${{ needs.submit.outputs.benchid }}
           EXIT=$?
           echo "Exit code $EXIT"
           if [ $EXIT -eq 124 ]; then
@@ -168,6 +214,15 @@ jobs:
           else
               exit $EXIT
           fi
+      - id: cancel
+        name: Cancel
+        if: ${{ cancelled() }}
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} terminate ${{ needs.submit.outputs.benchid }}
   attach6:
     runs-on: ubuntu-latest
     needs: [submit, attach5]
@@ -184,7 +239,7 @@ jobs:
           set -o pipefail
           set +e
           timeout 355m ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
-                  ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}
+                  ${{ secrets.BENCH_HOST }} attach ${{ needs.submit.outputs.benchid }}
           EXIT=$?
           echo "Exit code $EXIT"
           if [ $EXIT -eq 124 ]; then
@@ -193,6 +248,15 @@ jobs:
           else
               exit $EXIT
           fi
+      - id: cancel
+        name: Cancel
+        if: ${{ cancelled() }}
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} terminate ${{ needs.submit.outputs.benchid }}
   attach7:
     runs-on: ubuntu-latest
     needs: [submit, attach6]
@@ -209,7 +273,7 @@ jobs:
           set -o pipefail
           set +e
           timeout 355m ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
-                  ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}
+                  ${{ secrets.BENCH_HOST }} attach ${{ needs.submit.outputs.benchid }}
           EXIT=$?
           echo "Exit code $EXIT"
           if [ $EXIT -eq 124 ]; then
@@ -218,6 +282,15 @@ jobs:
           else
               exit $EXIT
           fi
+      - id: cancel
+        name: Cancel
+        if: ${{ cancelled() }}
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} terminate ${{ needs.submit.outputs.benchid }}
   attach8:
     runs-on: ubuntu-latest
     needs: [submit, attach7]
@@ -234,7 +307,7 @@ jobs:
           set -o pipefail
           set +e
           timeout 355m ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
-                  ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}
+                  ${{ secrets.BENCH_HOST }} attach ${{ needs.submit.outputs.benchid }}
           EXIT=$?
           echo "Exit code $EXIT"
           if [ $EXIT -eq 124 ]; then
@@ -243,6 +316,15 @@ jobs:
           else
               exit $EXIT
           fi
+      - id: cancel
+        name: Cancel
+        if: ${{ cancelled() }}
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} terminate ${{ needs.submit.outputs.benchid }}
   attach9:
     runs-on: ubuntu-latest
     needs: [submit, attach8]
@@ -259,7 +341,7 @@ jobs:
           set -o pipefail
           set +e
           timeout 355m ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
-                  ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}
+                  ${{ secrets.BENCH_HOST }} attach ${{ needs.submit.outputs.benchid }}
           EXIT=$?
           echo "Exit code $EXIT"
           if [ $EXIT -eq 124 ]; then
@@ -268,6 +350,15 @@ jobs:
           else
               exit $EXIT
           fi
+      - id: cancel
+        name: Cancel
+        if: ${{ cancelled() }}
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} terminate ${{ needs.submit.outputs.benchid }}
   attach10:
     runs-on: ubuntu-latest
     needs: [submit, attach9]
@@ -284,7 +375,7 @@ jobs:
           set -o pipefail
           set +e
           timeout 355m ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
-                  ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}
+                  ${{ secrets.BENCH_HOST }} attach ${{ needs.submit.outputs.benchid }}
           EXIT=$?
           echo "Exit code $EXIT"
           if [ $EXIT -eq 124 ]; then
@@ -293,6 +384,15 @@ jobs:
           else
               exit $EXIT
           fi
+      - id: cancel
+        name: Cancel
+        if: ${{ cancelled() }}
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} terminate ${{ needs.submit.outputs.benchid }}
   attach11:
     runs-on: ubuntu-latest
     needs: [submit, attach10]
@@ -309,7 +409,7 @@ jobs:
           set -o pipefail
           set +e
           timeout 355m ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
-                  ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}
+                  ${{ secrets.BENCH_HOST }} attach ${{ needs.submit.outputs.benchid }}
           EXIT=$?
           echo "Exit code $EXIT"
           if [ $EXIT -eq 124 ]; then
@@ -318,6 +418,15 @@ jobs:
           else
               exit $EXIT
           fi
+      - id: cancel
+        name: Cancel
+        if: ${{ cancelled() }}
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} terminate ${{ needs.submit.outputs.benchid }}
   attach12:
     runs-on: ubuntu-latest
     needs: [submit, attach11]
@@ -334,7 +443,7 @@ jobs:
           set -o pipefail
           set +e
           timeout 355m ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
-                  ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}
+                  ${{ secrets.BENCH_HOST }} attach ${{ needs.submit.outputs.benchid }}
           EXIT=$?
           echo "Exit code $EXIT"
           if [ $EXIT -eq 124 ]; then
@@ -343,6 +452,15 @@ jobs:
           else
               exit $EXIT
           fi
+      - id: cancel
+        name: Cancel
+        if: ${{ cancelled() }}
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} terminate ${{ needs.submit.outputs.benchid }}
   attach13:
     runs-on: ubuntu-latest
     needs: [submit, attach12]
@@ -359,7 +477,7 @@ jobs:
           set -o pipefail
           set +e
           timeout 355m ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
-                  ${{ secrets.BENCH_HOST }} ${{ needs.submit.outputs.benchid }}
+                  ${{ secrets.BENCH_HOST }} attach ${{ needs.submit.outputs.benchid }}
           EXIT=$?
           echo "Exit code $EXIT"
           if [ $EXIT -eq 124 ]; then
@@ -368,3 +486,12 @@ jobs:
           else
               exit $EXIT
           fi
+      - id: cancel
+        name: Cancel
+        if: ${{ cancelled() }}
+        run: |
+          echo "${{ needs.submit.outputs.benchid }}"
+          echo "${{ secrets.ATTACH_KEY }}" > attach-key
+          chmod 600 attach-key
+          ssh -tt -i attach-key -o StrictHostKeyChecking=no -o LogLevel=error \
+              ${{ secrets.BENCH_HOST }} terminate ${{ needs.submit.outputs.benchid }}
