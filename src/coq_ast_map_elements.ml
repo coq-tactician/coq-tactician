@@ -1,15 +1,11 @@
-open Ltac_plugin
-open Tactypes
 open Coq_ast_cata
 open Monad_util
 open Tacexpr_functor
 open Constrexpr_functor
 open Coq_ast_monadic_map
-open Names
 
 module CAst (M : Monad.Def) = struct
   open Cata(M)
-  open M
   open WithMonadNotations(M)
   module Mapper = Mapper(M)
   open Monad.Make(M)

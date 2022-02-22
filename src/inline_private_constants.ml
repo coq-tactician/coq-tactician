@@ -54,7 +54,7 @@ let inline_tactic env t =
 
 let inline env { outcomes; tactic; name; status; path } =
   let rec inline_constr c = match Constr.kind c with
-    | Const (const, u) ->
+    | Const (const, _u) ->
       if Environ.mem_constant const env then c else
         (* Total hack of course, because this is not typable. However, since Tactician generally does not
            store sigma contexts, evars are not typable anyway. When that changes, this should be fixed. *)

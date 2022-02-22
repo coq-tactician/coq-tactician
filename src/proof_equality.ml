@@ -82,7 +82,7 @@ let evars_equal evd1 evd2 (equal : (Evar.t * Evar.t) list) =
     in
     compare_head_gen_with kind1 kind2 evar_equal eq_universes eq_sorts eq_constr' 0 t1 t2
 
-  (** equality function on hypothesis contexts *)
+  (* equality function on hypothesis contexts *)
   and eq_named_context_val ctx1 ctx2 =
     let open Context.Named.Declaration in
     let c1 = EConstr.named_context_of_val ctx1 and c2 = EConstr.named_context_of_val ctx2 in
@@ -115,7 +115,7 @@ let evars_equal evd1 evd2 (equal : (Evar.t * Evar.t) list) =
     eq_named_context_val ei1.evar_hyps ei2.evar_hyps &&
     eq_evar_body ei1.evar_body ei2.evar_body
 
-  (** Equality function on goals *)
+  (* Equality function on goals *)
   and evar_equal evar1 evar2 =
     match Evar.Map.find_opt evar1 !left_evar_map, Evar.Map.find_opt evar2 !right_evar_map with
     | Some evar2', Some evar1' when Evar.equal evar1 evar1' && Evar.equal evar2 evar2' ->

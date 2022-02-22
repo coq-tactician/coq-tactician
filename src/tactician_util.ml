@@ -61,7 +61,6 @@ let econstr_size evd c = constr_size @@ EConstr.to_constr evd c
 
 let goal_size (gl : Proofview.Goal.t) =
   let open Proofview in
-  let open Notations in
   let sigma = Proofview.Goal.sigma gl in
   let hyps = Goal.hyps gl in
   let goal = Goal.concl gl in

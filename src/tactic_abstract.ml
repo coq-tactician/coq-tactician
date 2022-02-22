@@ -40,7 +40,6 @@ module M2 = WriterMonad
   (struct type w = Constant.t list let comb = List.append let id = [] end)
 module ConstantsDef = struct
   include MapDefTemplate(M2)
-  open M2
   let map_sort = "abstract"
   let warnProblem wit =
     Feedback.msg_warning (Pp.(str "Tactician is having problems with " ++
@@ -49,7 +48,7 @@ module ConstantsDef = struct
   let default wit = { raw = (fun _ -> warnProblem (ArgumentType wit); id)
                     ; glb = (fun _ -> warnProblem (ArgumentType wit); id)}
 
-  let with_binders ids x = x
+  let with_binders _ids x = x
 end
 module ConstantsMapper = MakeMapper(ConstantsDef)
 open ConstantsDef
