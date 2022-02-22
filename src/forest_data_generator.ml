@@ -1,7 +1,6 @@
 open Tactic_learner
 open Ltac_plugin
 open Learner_helper
-open Features
 open Sexplib
 open Map_all_the_things
 open Mapping_helpers
@@ -32,15 +31,15 @@ end
 
 module NormalizeMapper = MakeMapper(NormalizeDef)
   open NormalizeDef
-  open Helpers(NormalizeDef)  
-  type 'a k = 'a NormalizeDef.t  
+  open Helpers(NormalizeDef)
+  type 'a k = 'a NormalizeDef.t
   let placeholder = match Coqlib.lib_ref "tactician.private_constant_placeholder" with
   | Names.GlobRef.ConstRef const -> const
   | _ -> assert false
-        
+
   (* optimized *)
   let optimized_mapper = { NormalizeDef.default_mapper with
-    glob_constr_and_expr = (fun (expr, _) g -> g (expr, None))}  
+    glob_constr_and_expr = (fun (expr, _) g -> g (expr, None))}
   let tactic_normalize_optimized = NormalizeMapper.glob_tactic_expr_map optimized_mapper
   let opaque_mapper = { NormalizeDef.default_mapper with
     glob_constr_and_expr = (fun (expr, _) g -> g (expr, None))
@@ -50,15 +49,15 @@ module NormalizeMapper = MakeMapper(NormalizeDef)
         match body with
         | Declarations.OpaqueDef _ -> placeholder
         | _ -> c))}
-    
+
   (* constants *)
   let constants_mapper = { NormalizeDef.default_mapper with
     glob_constr_and_expr = (fun (expr, _) g -> g (expr, None))
     ; variable = (fun _ -> Names.Id.of_string "X")
     ; constant = (fun c -> placeholder)}
-    
+
   (* no-terms *)
-    
+
   let no_terms_mapper = { NormalizeDef.default_mapper with
     glob_constr_and_expr = (fun (expr, _) g -> g (expr, None))
     ; variable = (fun _ -> Names.Id.of_string "X")
@@ -77,7 +76,6 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
   module LH = Learner_helper.L(TS)
   module FH = Features.F(TS)
   open TS
-  open LH
   open FH
   module LSHF = Naiveknn_learner.ComplexNaiveKnn(TS)
   (* module LSHF = Naiveknn_learner.SimpleNaiveKnn(TS) *)
@@ -90,41 +88,41 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
   let last_model = Summary.ref ~name:"dataset-generator-learner-lastmodel" []
 
   let empty () = {database = []; lshf = LSHF.empty ()}
-    
+
   let rec feat_to_diff_and_count (feat, count) feats_and_counts' =
     match feats_and_counts' with
     | [] -> (feat, count)
-    | (feat', count'):: tl-> 
+    | (feat', count'):: tl->
       if feat == feat' then
         (if count > count' then (feat, count - count') else (-1,-1))
-      else feat_to_diff_and_count (feat, count) tl 
+      else feat_to_diff_and_count (feat, count) tl
 
   let get_state_diff_and_count int_and_count int_and_count'=
-    List.rev (List.fold_left (fun acc (int_feat, count) -> 
+    List.rev (List.fold_left (fun acc (int_feat, count) ->
       let diff = feat_to_diff_and_count (int_feat, count) int_and_count' in
       if diff != (-1, -1) then (diff::acc) else acc
-    ) [] int_and_count) 
+    ) [] int_and_count)
 
-  let get_tac_semantic_aux before_state after_state = 
+  let get_tac_semantic_aux before_state after_state =
     let int_and_count = proof_state_to_complex_ints_counts_no_kind before_state in
     let int_and_count' = proof_state_to_complex_ints_counts_no_kind after_state in
     let disappear_feats = get_state_diff_and_count int_and_count int_and_count' in
     let appear_feats = get_state_diff_and_count int_and_count' int_and_count in
     disappear_feats, appear_feats
 
-  let get_tac_semantic before_state after_states = 
-    (* let proof_state_to_simple_features = (fun state -> (proof_state_to_simple_features 2 state)) in *) 
-    let disappear_feats, appear_feats = 
+  let get_tac_semantic before_state after_states =
+    (* let proof_state_to_simple_features = (fun state -> (proof_state_to_simple_features 2 state)) in *)
+    let disappear_feats, appear_feats =
     if after_states != [] then
       List.fold_left (
-        fun (disappear_feats_acc, appear_feats_acc) after_state -> 
+        fun (disappear_feats_acc, appear_feats_acc) after_state ->
           let disappear_feats', appear_feats' = get_tac_semantic_aux before_state after_state in
           disappear_feats_acc@disappear_feats', appear_feats_acc@appear_feats'
-      )  ([], []) after_states 
+      )  ([], []) after_states
     else proof_state_to_complex_ints_counts_no_kind before_state, []
     in
-    (* List.sort_uniq (fun (feat1, num1) (feat2, num2) -> Int.compare feat1 feat2) *) disappear_feats, 
-    (* List.sort_uniq (fun (feat1, num1) (feat2, num2) -> Int.compare feat1 feat2) *) appear_feats 
+    (* List.sort_uniq (fun (feat1, num1) (feat2, num2) -> Int.compare feat1 feat2) *) disappear_feats,
+    (* List.sort_uniq (fun (feat1, num1) (feat2, num2) -> Int.compare feat1 feat2) *) appear_feats
 
   let cache_type name =
     let dirp = Global.current_dirpath () in
@@ -178,34 +176,34 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
       output_string (data_file ()) "#lemma\n";
       List.iter (fun (outcomes, tac) ->
           List.iter (fun { before; after; preds; parents; _ } ->
-              (* let ps = proof_state_to_simple_ints before in *) 
-              let ps =  proof_state_to_complex_ints_counts_no_kind before in 
+              (* let ps = proof_state_to_simple_ints before in *)
+              let ps =  proof_state_to_complex_ints_counts_no_kind before in
               let preds = List.rev_map (fun (tactic, after) ->
                 let disappear_feats, appear_feats = 
-                  if after = None then [(-1, -1)], [(-1, -1)] 
+                  if after = None then [(-1, -1)], [(-1, -1)]
                   else get_tac_semantic before (Option.get after) in
                   (tactic, disappear_feats, appear_feats)) preds in
-              let disappear_feats, appear_feats = get_tac_semantic before after in 
+              let disappear_feats, appear_feats = get_tac_semantic before after in
               let preds = List.rev_map (fun (tac, df, af) ->
                   Sexplib.Pre_sexp.List
                     [ tactic_local_context_sexpr (proof_state_hypotheses before) tac
                     ; Std.sexp_of_list (Conv.sexp_of_pair Std.sexp_of_int Std.sexp_of_int) df
                     ; Std.sexp_of_list (Conv.sexp_of_pair Std.sexp_of_int Std.sexp_of_int) af
-                    ]) preds in 
+                    ]) preds in
               (* let neg = List.filter (fun neg_tac -> tac != neg_tac) neg in *)
-              let parent_tacs = List.map (fun (_, { executions; tactic }) -> 
+              let parent_tacs = List.map (fun (_, { executions; tactic }) ->
                 let _tac_str, hash = tactic_normalize tactic optimized_mapper in
-                let syn = syntactic_feats (tactic_repr tactic) in 
+                let syn = syntactic_feats (tactic_repr tactic) in
                 Sexplib.Pre_sexp.List [Std.sexp_of_int hash; Std.sexp_of_list Std.sexp_of_int @@ syn]
-                ) parents in 
-              let lcontext = proof_state_hypotheses before in 
-              let mk_feats t = 
+                ) parents in
+              let lcontext = proof_state_hypotheses before in
+              let mk_feats t =
                 let feat_map = term_sexpr_to_complex_ints_no_kind (Int.hash 2000) 2 Int.Map.empty (term_repr t) in
                 List.rev (Int.Map.fold (fun feat count acc -> (feat, count) :: acc) feat_map []) in
                let lcontext = List.map (function
                   | Context.Named.Declaration.LocalAssum (id, typ) -> mk_feats typ
                   | Context.Named.Declaration.LocalDef (id, typ, trm) -> (mk_feats typ @ mk_feats trm)
-                ) lcontext in 
+                ) lcontext in
               let line = Sexplib.Pre_sexp.List
                   [ Std.sexp_of_list (Conv.sexp_of_pair Std.sexp_of_int Std.sexp_of_int) ps
                   (* ; Std.sexp_of_int (tactic_hash tac) *)
@@ -214,7 +212,7 @@ module DatasetGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tact
                   ; Std.sexp_of_list (Conv.sexp_of_pair Std.sexp_of_int Std.sexp_of_int) disappear_feats
                   ; Std.sexp_of_list (Conv.sexp_of_pair Std.sexp_of_int Std.sexp_of_int) appear_feats 
                   ; Sexplib.Pre_sexp.List parent_tacs
-                  ; Std.sexp_of_list (Std.sexp_of_list (Conv.sexp_of_pair Std.sexp_of_int Std.sexp_of_int)) lcontext 
+                  ; Std.sexp_of_list (Std.sexp_of_list (Conv.sexp_of_pair Std.sexp_of_int Std.sexp_of_int)) lcontext
                   ] in
               output_string (data_file ()) (Sexp.to_string line ^ "\n")
             ) outcomes

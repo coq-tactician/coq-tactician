@@ -1,5 +1,4 @@
 open Tactic_learner
-open Names
 
 let data_file =
   let file = ref None in
@@ -137,7 +136,7 @@ module OfflineEvaluationSimulatorLearner : TacticianOnlineLearnerType = functor 
          (*  | Discharged -> print_endline "discharged"); *)
      | _ -> ());
     { learners; data }
-  let predict db situations = IStream.empty
+  let predict _db _situations = IStream.empty
   let evaluate db _ _ = 0., db
 
   (* We have to do some reversals before the evaluation *)

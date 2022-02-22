@@ -2,7 +2,7 @@
 (library
  (name tactician_ltac1_record_plugin)
  (public_name coq-tactician.record-plugin)
- (flags :standard -rectypes -w -27 -warn-error -A)
+ (flags :standard -rectypes -w -27)
  (modules (
    "g_ltac1_record"
    ltacrecord
@@ -14,7 +14,6 @@
    trivial_learners
    lshf_learner
    forest_data_generator
-   knn
    find_tactic_syntax
    tactic_substitute
    tactic_abstract
