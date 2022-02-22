@@ -34,7 +34,7 @@ module PrintLearner : TacticianOnlineLearnerType = functor (TS : TacticianStruct
       ) outcomes;
     print_endline "\n"; ()
   let predict () situations =
-    List.iteri (fun i {parents; siblings; state} ->
+    List.iteri (fun i {parents=_; siblings=_; state} ->
         print_endline ("Situation " ^ string_of_int i);
         print_endline (proof_state_to_string state (Global.env ()) Evd.empty)
       ) situations;

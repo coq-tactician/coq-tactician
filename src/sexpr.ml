@@ -64,7 +64,7 @@ let inductive2s i = global2s (GlobRef.IndRef i)
 let constructor2s c =
   [global2s (GlobRef.ConstructRef c); inductive2s (fst c)]
 
-let case_info2s {ci_ind; ci_npar; ci_cstr_ndecls; ci_cstr_nargs; ci_relevance; ci_pp_info} =
+let case_info2s {ci_ind; _} =
   inductive2s ci_ind (* TODO: More info? *)
 
 let constr_to_glob_constr t env sigma =
