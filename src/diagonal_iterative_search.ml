@@ -28,7 +28,7 @@ let tclSearchDiagonalDFS max_reached predict depth =
         predict >>= fun predictions ->
         tclFoldPredictions max_reached
           (mapi
-             (fun i {focus; tactic; confidence} ->
+             (fun i {focus=_; tactic; confidence} -> (* TODO: At some point we should start using the focus *)
                 let ndepth = depth - i in
                 if ndepth <= 0 then tclZERO DepthEnd else
                   if confidence = Float.neg_infinity then tclZERO PredictionsEnd else (* TODO: Hack *)

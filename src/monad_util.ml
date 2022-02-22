@@ -8,6 +8,9 @@ module type MonadTransformerType = sig
 
   val lift : 'a wrapped -> 'a t
   val run : 'a t -> 'a repr_t
+
+  val unrun : 'a repr_t -> 'a t
+  (** Escape hatch. Use with care. *)
 end
 
 module type MonadNotations = sig
@@ -72,8 +75,9 @@ end = struct
   let ask = fun r -> Wrapped.return r
   let local f x = fun r -> x (f r)
 
-  let run m = m
-  let lift x = fun r -> x
+  let lift x = fun _ -> x
+  let run m = m [@@inline]
+  let unrun m = m [@@inline]
 end
 module ReaderMonad = ReaderMonadT(IdentityMonad)
 
@@ -122,10 +126,11 @@ end = struct
     let+ w, x = x in
     f w, x
 
-  let run m = m
   let lift x =
     let+ x = x in
     R.id, x
+  let run m = m [@@inline]
+  let unrun m = m [@@inline]
 end
 module WriterMonad = WriterMonadT(IdentityMonad)
 
@@ -167,10 +172,11 @@ end = struct
   let put s = fun _ -> Wrapped.return (s, ())
   let modify f = fun s -> Wrapped.return (f s, ())
 
-  let run m = m
   let lift m = fun s ->
     let+ m = m in
     s, m
+  let run m = m [@@inline]
+  let unrun m = m [@@inline]
 end
 module StateMonad = StateMonadT(IdentityMonad)
 
@@ -189,6 +195,8 @@ module ReaderWriterMonadT
   val pass : ('a * (w -> w)) t -> 'a t
   val listen : 'a t -> ('a * w) t
   val censor : (w -> w) -> 'a t -> 'a t
+
+  val mapT : ((w * 'a) Wrapped.t -> (w * 'b) Wrapped.t) -> 'a t -> 'b t
 end = struct
   open W
   open R
@@ -201,7 +209,9 @@ end = struct
   let local f m = mapT (RM.local f) m
 
   let lift x = lift @@ RM.lift x
+  let mapT f m = mapT (RM.mapT f) m
   let run m = RM.run @@ run m
+  let unrun m = unrun @@ RM.unrun m
 end
 module ReaderWriterMonad = ReaderWriterMonadT(IdentityMonad)
 
@@ -218,6 +228,8 @@ module ReaderStateMonadT
   val get : s t
   val put : s -> unit t
   val modify : (s -> s) -> unit t
+
+  val mapT : ((s * 'a) Wrapped.t -> (s * 'b) Wrapped.t) -> 'a t -> 'b t
 end = struct
   open R
   open S
@@ -231,7 +243,9 @@ end = struct
   let get = lift SM.get
 
   let lift x = lift @@ SM.lift x
+  let mapT f m = mapT (SM.mapT f) m
   let run m r s = SM.run (run m r) s
+  let unrun m = unrun (fun r -> SM.unrun (m r))
 end
 module ReaderStateMonad = ReaderStateMonadT(IdentityMonad)
 
@@ -250,6 +264,8 @@ module StateWriterMonadT
   val pass : ('a * (w -> w)) t -> 'a t
   val listen : 'a t -> ('a * w) t
   val censor : (w -> w) -> 'a t -> 'a t
+
+  val mapT : ((s * (w * 'a)) Wrapped.t -> (s * (w * 'b)) Wrapped.t) -> 'a t -> 'b t
 end = struct
   open S
   open W
@@ -263,7 +279,9 @@ end = struct
   let get = lift SM.get
 
   let lift x = lift @@ SM.lift x
+  let mapT f m = mapT (SM.mapT f) m
   let run m s = SM.run (run m) s
+  let unrun m = unrun @@ SM.unrun m
 end
 module StateWriterMonad = StateWriterMonadT(IdentityMonad)
 
@@ -285,6 +303,8 @@ module ReaderStateWriterMonadT
   val pass : ('a * (w -> w)) t -> 'a t
   val listen : 'a t -> ('a * w) t
   val censor : (w -> w) -> 'a t -> 'a t
+
+  val mapT : ((s * (w * 'a)) Wrapped.t -> (s * (w * 'b)) Wrapped.t) -> 'a t -> 'b t
 end = struct
   open R
   open S
@@ -301,5 +321,8 @@ end = struct
   let get = lift RSM.get
 
   let lift x = lift @@ RSM.lift x
+  let mapT f m = mapT (RSM.mapT f) m
   let run m r s = RSM.run (run m) r s
+  let unrun m = unrun @@ RSM.unrun m
 end
+module ReaderStateWriterMonad = ReaderStateWriterMonadT(IdentityMonad)

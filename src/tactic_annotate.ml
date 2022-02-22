@@ -90,7 +90,6 @@ let substitute_runtime_terms =
     Tactician_util.register_interp0 wit (fun ist v -> Ftactic.return v);
     wit in
   let implementation annotate tac is =
-    let open Proofview in
     let open Proofview.Notations in
     Proofview.tclENV >>= fun env ->
     Proofview.tclEVARMAP >>= fun evd ->
@@ -102,10 +101,13 @@ let substitute_runtime_terms =
     let lfun = Names.Id.Map.filter (fun id _ -> not @@ Names.Id.Map.mem id map) is.lfun in
     Tacinterp.eval_tactic_ist { is with lfun } tac
   in
-  let ml_implementation [annotate; tac] is =
-    let annotate = Tacinterp.Value.cast (Genarg.topwit wit_annotate) annotate in
-    let tac = Tacinterp.Value.cast (Genarg.topwit Tactician_util.wit_glbtactic) tac in
-    implementation annotate tac is in
+  let ml_implementation args is =
+    match args with
+    | [annotate; tac] ->
+      let annotate = Tacinterp.Value.cast (Genarg.topwit wit_annotate) annotate in
+      let tac = Tacinterp.Value.cast (Genarg.topwit Tactician_util.wit_glbtactic) tac in
+      implementation annotate tac is
+    | _ -> assert false in
   let () = Tactician_util.register ml_implementation "substitute_runtime_terms" in
   (fun annotate tac ->
      let annotate = Genarg.in_gen (Genarg.glbwit wit_annotate) annotate in
@@ -340,7 +342,6 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
     in aux ls in
   let intro_patterns_convert eflg loc (ps : _ Tactypes.intro_pattern_expr CAst.t list) =
     let open Tacexpr in
-    let open Tactypes in
     let rec aux ps i =
       match ps with
       | [] -> TacId []
@@ -440,7 +441,7 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
             they reference has already been instrumented. *)
          x, fun x _ -> x)
     | TacCall c -> (if inner_record Call then
-        TacCall (CAst.map (fun (a, b) -> (a, List.map (fun a -> fst (annotate_arg x)) b)) c) else x), r
+        TacCall (CAst.map (fun (a, b) -> (a, List.map (fun a -> fst (annotate_arg a)) b)) c) else x), r
     | TacFreshId _ -> x, r
     | Tacexp t -> Tacexp (annotate t), fun x _ -> x
     | TacPretype _ -> x, r

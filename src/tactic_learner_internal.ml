@@ -76,8 +76,8 @@ module TS = struct
 
   let proof_state_goal ps = snd ps
 
-  let proof_state_equal ps1 ps2 = false
-  let proof_state_independent ps = false
+  let proof_state_equal _ps1 _ps2 = false
+  let proof_state_independent _ps = false
 
   type tactic = glob_tactic_expr * int Lazy.t
   let tactic_sexpr (tac, _) = s2s (Pp.string_of_ppcmds (Sexpr.format_oneline (
@@ -85,9 +85,9 @@ module TS = struct
   let tactic_repr (tac, _) = tac
   let tactic_make tac = tactic_make tac
   let tactic_hash (_, hash) = Lazy.force hash
-  let tactic_local_variables (tac, _) = []
-  let tactic_substitute tac ls = tac
-  let tactic_globally_equal tac1 tac2 = false
+  let tactic_local_variables (_tac, _) = []
+  let tactic_substitute tac _ls = tac
+  let tactic_globally_equal _tac1 _tac2 = false
 
   (* Proof tree with sharing. Behaves as a Directed Acyclic Tree. *)
   type proof_dag =
@@ -175,7 +175,7 @@ let new_learner name (module Learner : TacticianOnlineLearnerType) =
 
   (* Note: This is lazy to give people a chance to set GOptions before a learner gets initialized *)
   let model = Summary.ref
-                ~freeze:(fun ~marshallable x -> Lazy.from_val @@ Lazy.force x)
+                ~freeze:(fun ~marshallable:_ x -> Lazy.from_val @@ Lazy.force x)
       ~name:("tactician-model-" ^ name)
       (lazy (Learner.empty ())) in
 
@@ -223,4 +223,4 @@ let disable_queue () =
 let register_online_learner name learner : unit =
   current_learner := new_learner name learner
 
-let register_offline_learner name learner : unit = ()
+let register_offline_learner _name _learner : unit = ()
