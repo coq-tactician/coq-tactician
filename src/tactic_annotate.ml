@@ -135,7 +135,7 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
     | ConstrMayEval _ -> x, r
     | Reference _ -> x, r
     | TacCall c -> (if inner_record Call then
-        TacCall (CAst.map (fun (a, b) -> (a, List.map (fun a -> fst (annotate_arg x)) b)) c) else x), r
+        TacCall (CAst.map (fun (a, b) -> (a, List.map (fun a -> fst (annotate_arg a)) b)) c) else x), r
     | TacFreshId _ -> x, r
     | Tacexp t -> Tacexp (annotate t), fun x _ -> x
     | TacPretype _ -> x, r

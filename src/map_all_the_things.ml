@@ -9,7 +9,7 @@ open Genredexpr
 open Pattern
 open Constrexpr
 open Tactics
-open Tactician_util
+open Monad_util
 open Genintern
 open Loc
 open Names
