@@ -34,12 +34,13 @@ let ptimeout n tac =
           in
           try
             let (_, status) = Unix.waitpid [] pid in
+            (* TODO: Clean up this mess *)
             (match status with
             | Unix.WEXITED 0 -> clean ();
             | _ -> (match status with
-                | Unix.WEXITED n -> (); (* assert false *)
+                | Unix.WEXITED _ -> (); (* assert false *)
                 | Unix.WSIGNALED n -> if n != -11 then () (* assert false *) else ()
-                | Unix.WSTOPPED n -> () (* assert false *)));
+                | Unix.WSTOPPED _ -> () (* assert false *)));
             ignore (Unix.waitpid [] pid2);
             Proofview.tclUNIT ()
           with

@@ -67,7 +67,7 @@ let pr_decomposition = function
 
 let vernac_solve ~pstate n info tcom b id =
   let open Goal_select in
-  let skip = pre_vernac_solve pstate id in
+  let skip = pre_vernac_solve id in
   if skip then pstate else
     try
       let pstate, status = Proof_global.map_fold_proof_endline (fun etac p ->

@@ -75,9 +75,9 @@ end = struct
   let ask = fun r -> Wrapped.return r
   let local f x = fun r -> x (f r)
 
-  let lift x = fun r -> x
-  let run m = m [@inline]
-  let unrun m = m [@inline]
+  let lift x = fun _ -> x
+  let run m = m [@@inline]
+  let unrun m = m [@@inline]
 end
 module ReaderMonad = ReaderMonadT(IdentityMonad)
 
@@ -129,8 +129,8 @@ end = struct
   let lift x =
     let+ x = x in
     R.id, x
-  let run m = m [@inline]
-  let unrun m = m [@inline]
+  let run m = m [@@inline]
+  let unrun m = m [@@inline]
 end
 module WriterMonad = WriterMonadT(IdentityMonad)
 
@@ -175,8 +175,8 @@ end = struct
   let lift m = fun s ->
     let+ m = m in
     s, m
-  let run m = m [@inline]
-  let unrun m = m [@inline]
+  let run m = m [@@inline]
+  let unrun m = m [@@inline]
 end
 module StateMonad = StateMonadT(IdentityMonad)
 

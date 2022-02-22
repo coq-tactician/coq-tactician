@@ -197,10 +197,10 @@ module F (TS: TacticianStructures) = struct
       (* Interesting leafs *)
       | Rel _ -> add_atom TRel f
       | Evar _ -> add_atom TEvar f
-      | Construct (c, u) -> add_atom (TConstruct c) f
-      | Ind (i, u) -> add_atom (TInd i) f
+      | Construct (c, _u) -> add_atom (TConstruct c) f
+      | Ind (i, _u) -> add_atom (TInd i) f
       | Var id -> add_atom (TVar id) f
-      | Const (c, u) -> add_atom (TConst c) f
+      | Const (c, _u) -> add_atom (TConst c) f
       | Int n -> add_atom (TInt n) f
       | Float n -> add_atom (TFloat n) f
 
@@ -210,7 +210,7 @@ module F (TS: TacticianStructures) = struct
 
       (* Recursion for grammar we don't handle *)
       (* TODO: Handle binders with feature substitution *)
-      | LetIn (id, body1, typ, body2) ->
+      | LetIn (_id, body1, typ, body2) ->
         aux_reset_fold f [body1; typ; body2]
       | Case (_, term, typ, cases) ->
         aux_reset_fold f (term::typ::(Array.to_list cases))
@@ -330,7 +330,7 @@ module F (TS: TacticianStructures) = struct
       | Construct (c, _) -> verti_atom (TConstruct c) features role
       | Ind (c, _) -> verti_atom (TInd c) features role
       | Var id -> verti_atom (TVar id) features role
-      | Const (c, u) -> verti_atom (TConst c) features role
+      | Const (c, _u) -> verti_atom (TConst c) features role
       | Int n -> verti_atom (TInt n) features role
       | Float n -> verti_atom (TFloat n) features role
       | _ ->
@@ -361,7 +361,7 @@ module F (TS: TacticianStructures) = struct
         | Construct (c, _) -> process_atom (TConstruct c)
         | Ind (c, _) -> process_atom (TInd c)
         | Var id -> process_atom (TVar id)
-        | Const (c, u) -> process_atom (TConst c)
+        | Const (c, _u) -> process_atom (TConst c)
         | Int n -> process_atom (TInt n)
         | Float n -> process_atom (TFloat n)
 
