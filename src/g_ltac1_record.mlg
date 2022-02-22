@@ -71,6 +71,7 @@ let pr_ltac_use_default b =
 open Attributes
 open Tacexpr
 open Libnames
+open Stdarg
 
 }
 
@@ -96,7 +97,7 @@ VERNAC { tactician_mode } EXTEND VernacSolveTactician STATE proof
     } -> { fun ~pstate ->
     let with_end_tac = snd def in
     let id = fst def in
-    let skip = pre_vernac_solve pstate id in
+    let skip = pre_vernac_solve id in
     if skip then pstate else try
       let g = Option.default (Goal_select.get_default_goal_selector ()) g in
       let global = match g with Goal_select.SelectAll | Goal_select.SelectList _ -> true | _ -> false in
@@ -187,4 +188,14 @@ END
 VERNAC COMMAND EXTEND TacticianDecompositionSetting CLASSIFIED AS SIDEFF
 | [ "Tactician" "Record" tac_ast(ta) tac_decomposition(td) ]
   -> { modify_ast_setting ta td }
+END
+
+VERNAC COMMAND EXTEND TacticianAliasDecompositionSetting CLASSIFIED AS SIDEFF
+| [ "Tactician" "Alias" "Record" tactic(tac) tac_decomposition(td) ]
+  -> { () }
+END
+
+VERNAC COMMAND EXTEND TacticianInternalTacticSetting CLASSIFIED AS SIDEFF
+| [ "Tactician" "Register" "Tactic" string(str) tactic(tac) ]
+  -> { () }
 END
