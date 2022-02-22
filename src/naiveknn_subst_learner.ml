@@ -81,7 +81,7 @@ module NaiveKnnSubst (SF : sig type second_feat end) = functor (TS : TacticianSt
 
     let remove_dups ranking =
       let ranking_map = List.fold_left
-          (fun map (score, ({obj; substituted_hash; _} as entry)) ->
+          (fun map (score, ({substituted_hash; _} as entry)) ->
              (* TODO: this is a total hack *)
              IntMap.update
                (substituted_hash (* (tactic_make tac') *))
@@ -152,7 +152,6 @@ module ComplexNaiveSubstKnn : TacticianOnlineLearnerType = functor (TS : Tactici
   module FH = F(TS)
   module LH = L(TS)
   open FH
-  open LH
   let learn db _status outcomes tac = learn db _status outcomes tac
       proof_state_to_complex_ints_no_kind
       context_complex_ints

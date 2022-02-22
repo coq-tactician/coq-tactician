@@ -128,7 +128,7 @@ module LSHF =
     let forest = insert db.forest feats obj in
     { forest; length; frequencies }
 
-  let learn db (name, status) outcomes tac to_feats =
+  let learn db (_name, _status) outcomes tac to_feats =
     List.fold_left (fun db out -> add db out.before tac to_feats) db outcomes
 
   let predict db f to_feats remove_kind tfidf =
