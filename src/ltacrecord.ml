@@ -426,6 +426,7 @@ let predict () =
       let { outcomes; tactic; name=_; status; path} = mk_data_in outcomes tactic const path in
       learner.learn (path, status) outcomes tactic
     ) learner db in
+  let predictor = learner.predict () in
   let cont =
     Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
     let situation = List.map (fun gl ->
@@ -437,7 +438,7 @@ let predict () =
     (* Coq stores goals in reverse order, so we present them in an intuitive order.
        Note that the tclFocus function also internally reverses the list, so focussing
        on goal zero will focus in the first goal of the reversed `situation` *)
-    tclUNIT (learner.predict (List.rev situation)) in
+    tclUNIT (predictor (List.rev situation)) in
   tclUNIT (learner, cont)
 
 let filterTactics p q (tacs : Tactic_learner_internal.TS.prediction IStream.t) =
