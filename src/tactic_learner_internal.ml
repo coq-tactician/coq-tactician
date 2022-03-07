@@ -19,7 +19,7 @@ let marshall_hash (tac : glob_tactic_expr) =
   let str : string = Marshal.to_string (tactic_normalize tac) [Marshal.No_sharing] in
   Hashtbl.hash_param 255 255 str
 
-let tactic_make tac = tac, lazy (marshall_hash tac)
+let tactic_make tac = tac, Lazy.from_val @@ marshall_hash tac
 
 module type TacticianStructures = sig
   type term
