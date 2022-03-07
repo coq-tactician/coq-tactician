@@ -25,6 +25,8 @@
    tactic_learner
    tactic_learner_internal
    tactic_normalize
+   extreme_tactic_normalize
+   tactic_one_variable
    tactic_annotate
    known_witnesses
    cook_tacexpr
@@ -53,6 +55,7 @@
    proof_equality
    benchmark
    monad_util
+   tactic_substitution_check_learner
  ))
  (libraries
    coq.plugins.ltac
