@@ -130,3 +130,9 @@ let try_locate_absolute_library dir =
 let base_filename =
   let dirpath = Global.current_dirpath () in
   Option.map (fun f -> Filename.remove_extension f) (try_locate_absolute_library dirpath)
+
+let with_flag flg f =
+  let original = CWarnings.get_flags () in
+  let added = original ^ "," ^ flg in
+  Fun.protect ~finally:(fun () -> CWarnings.set_flags original)
+    (fun () -> CWarnings.set_flags added; f ())
