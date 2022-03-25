@@ -174,7 +174,6 @@ let new_learner name (module Learner : TacticianOnlineLearnerType) =
 
   (* Note: This is lazy to give people a chance to set GOptions before a learner gets initialized *)
   let model = Summary.ref
-                ~freeze:(fun ~marshallable:_ x -> Lazy.from_val @@ Lazy.force x)
       ~name:("tactician-model-" ^ name)
       (lazy (Learner.empty ())) in
 
