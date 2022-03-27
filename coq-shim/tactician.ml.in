@@ -240,7 +240,9 @@ let retrieve_flags file =
   String.concat " " @@
   List.filter_map (fun d -> if Sys.file_exists (d/file) then Some (read_args (d/file)) else None) @@
   List.concat @@
-  List.map (fun d -> Array.to_list @@ Array.map (fun sd -> d/sd) @@ Sys.readdir d) plugins
+  (* TODO: We sort the items in the directory to get a deterministic order. In the future, the user should
+     probably choose the proper order. *)
+  List.map (fun d -> List.map (fun sd -> d/sd) @@ List.sort String.compare @@ Array.to_list @@ Sys.readdir d) plugins
 
 let tactician_extra_flags () = retrieve_flags "injection-flags"
 
