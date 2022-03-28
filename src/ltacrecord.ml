@@ -61,8 +61,18 @@ let subst_outcomes (s, { outcomes; tactic; name; status=_; path }) =
       ; before = subst_pf before
       ; after = List.map subst_pf after }) outcomes in
   let name = Mod_subst.subst_constant s name in
-  let path' = (* TODO: This is a bit of a hack, improve *)
-    Libnames.path_of_string @@ Names.Constant.to_string name in
+  let path' =
+    (* TODO: This is not ideal, but seems to work in practice *)
+    let open Names in
+    let (mp, id) = KerName.repr @@ Constant.user name in
+    let rec modpath_to_dirpath = function
+      | MPfile dp -> DirPath.repr dp
+      | MPbound b ->
+        let (_, id, dp) = MBId.repr b in
+        id :: DirPath.repr dp
+      | MPdot (mp, l) -> Label.to_id l :: modpath_to_dirpath mp in
+    Libnames.make_path (DirPath.make @@ modpath_to_dirpath mp) @@ Label.to_id id in
+
   { outcomes; name; tactic = subst_tac tactic
   ; status = Substituted path; path = path' }
 
@@ -179,9 +189,9 @@ let load_plugins () =
 
 let in_db : data_in -> Libobject.obj =
   Libobject.(declare_object { (default_object "LTACRECORD") with
-                              cache_function = (fun (_,({ outcomes; tactic; name=_; status; path } : data_in)) ->
+                              cache_function = (fun ((path, _),({ outcomes; tactic; name=_; status; path=_ } : data_in)) ->
                                   learner_learn (path, status) outcomes tactic)
-                            ; load_function = (fun _ (_, { outcomes; tactic; name; status; path }) ->
+                            ; load_function = (fun _ ((path, _), { outcomes; tactic; name; status; path=_ }) ->
                                   if Names.KerName.equal (Names.Constant.canonical name) (Names.Constant.user name) then
                                     if !global_record then learner_learn (path, status) outcomes tactic else ())
                             ; open_function = (fun _ (_, _) -> ())
@@ -197,7 +207,7 @@ let in_db : data_in -> Libobject.obj =
                             })
 
 let add_to_db (x : data_in) =
-  Lib.add_anonymous_leaf (in_db x)
+  ignore(Lib.add_leaf (Names.Label.to_id @@ Names.Constant.label x.name) (in_db x))
 
 (* Types and accessors for state in the proof monad *)
 type localdb = ((Proofview.Goal.t * Proofview.Goal.t list) list * glob_tactic_expr) list
