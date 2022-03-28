@@ -2,7 +2,7 @@
 (library
  (name tactician_ltac1_record_plugin)
  (public_name coq-tactician.record-plugin)
- (flags :standard -rectypes -w -27 -warn-error -A)
+ (flags :standard -rectypes -w -27)
  (modules (
    "g_ltac1_record"
    ltacrecord
@@ -13,7 +13,6 @@
    naiveknn_subst_learner
    trivial_learners
    lshf_learner
-   knn
    find_tactic_syntax
    tactic_substitute
    tactic_abstract
@@ -24,6 +23,8 @@
    tactic_learner
    tactic_learner_internal
    tactic_normalize
+   extreme_tactic_normalize
+   tactic_one_variable
    tactic_annotate
    known_witnesses
    cook_tacexpr
@@ -36,6 +37,8 @@
    timeouttac
    tactician_util
    benchmark
+   monad_util
+   tactic_substitution_check_learner
  ))
  (libraries
    coq.plugins.ltac
