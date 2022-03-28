@@ -30,7 +30,7 @@ let tclSearchDiagonalDFS max_reached predict max_dfs =
             (predict >>= fun predictions ->
              tclFoldPredictions max_reached
                (mapi
-                  (fun i {focus; tactic; confidence} ->
+                  (fun i {focus=_; tactic; confidence} -> (* TODO: At some point we should start using the focus *)
                      let n_max_dfs = Stdlib.Int.shift_right max_dfs i in
                      if n_max_dfs <= 0 then tclZERO DepthEnd else
                      if confidence = Float.neg_infinity then tclZERO PredictionsEnd else (* TODO: Hack *)
