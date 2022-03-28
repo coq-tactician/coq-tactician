@@ -125,7 +125,7 @@ type data_status =
   | Substituted of Libnames.full_path (* path of the substituted constant (does not exist) *)
   | Discharged of Libnames.full_path (* path of the substituted constant (does not exist) *)
 
-type origin = Libnames.full_path * data_status
+type origin = KerName.t * Libnames.full_path * data_status
 
 type data_in = { outcomes : TS.outcome list; tactic : TS.tactic ; name : Constant.t; status : data_status; path : Libnames.full_path }
 

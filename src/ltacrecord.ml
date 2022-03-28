@@ -188,11 +188,11 @@ let load_plugins () =
 
 let in_db : data_in -> Libobject.obj =
   Libobject.(declare_object { (default_object "LTACRECORD") with
-                              cache_function = (fun ((path, _),({ outcomes; tactic; name=_; status; path=_ } : data_in)) ->
-                                  learner_learn (path, status) outcomes tactic)
-                            ; load_function = (fun _ ((path, _), { outcomes; tactic; name; status; path=_ }) ->
+                              cache_function = (fun ((path, kn),({ outcomes; tactic; name=_; status; path=_ } : data_in)) ->
+                                  learner_learn (kn, path, status) outcomes tactic)
+                            ; load_function = (fun _ ((path, kn), { outcomes; tactic; name; status; path=_ }) ->
                                   if Names.KerName.equal (Names.Constant.canonical name) (Names.Constant.user name) then
-                                    if !global_record then learner_learn (path, status) outcomes tactic else ())
+                                    if !global_record then learner_learn (kn, path, status) outcomes tactic else ())
                             ; open_function = (fun _ (_, _) -> ())
                             ; classify_function = (fun data -> Libobject.Substitute data)
                             ; subst_function = (fun x ->
@@ -433,8 +433,8 @@ let predict () =
   get_localdb () >>= fun db -> get_name () >>= fun (const, path) ->
   let learner = learner_get () in
   let learner = List.fold_left (fun learner (outcomes, tactic) ->
-      let { outcomes; tactic; name=_; status; path} = mk_data_in outcomes tactic const path in
-      learner.learn (path, status) outcomes tactic
+      let { outcomes; tactic; name; status; path} = mk_data_in outcomes tactic const path in
+      learner.learn (Names.Constant.canonical name, path, status) outcomes tactic
     ) learner db in
   let predictor = learner.predict () in
   let cont =
