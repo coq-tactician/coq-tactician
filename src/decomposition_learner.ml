@@ -28,7 +28,7 @@ module DecompositionLearner : TacticianOnlineLearnerType = functor (TS : Tactici
     let dirp = Global.current_dirpath () in
     if Libnames.is_dirpath_prefix_of dirp (Libnames.dirpath name) then `File else `Dependency
 
-  let learn db (name, status) outcomes tac =
+  let learn db (kn, name, status) outcomes tac =
     let outcomes = List.map (fun _ -> tac) outcomes in
     let db = match cache_type name with
     | `File -> outcomes @ db
