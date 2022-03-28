@@ -1,5 +1,4 @@
 open Tactic_learner
-open Names
 
 let data_file =
   let file = ref None in
@@ -45,7 +44,7 @@ module OfflineEvaluationSimulatorLearner : TacticianOnlineLearnerType = functor 
   let new_learners () = List.map (fun (n, l) -> n, new_learner l) learners
 
   type model = { learners : dynamic_learner list
-               ; data : (data_status * Libnames.full_path * (outcome list * tactic) list) list }
+               ; data : (data_status * Names.KerName.t * Libnames.full_path * (outcome list * tactic) list) list }
 
   let last_model = Summary.ref ~name:"offline-evaluation-simulator-learner-lastmodel" []
   let persistent_data = ref (List.init (List.length learners) (fun _ -> []))
@@ -64,24 +63,24 @@ module OfflineEvaluationSimulatorLearner : TacticianOnlineLearnerType = functor 
     let k = Tactician_util.safe_index0 (fun x y -> tactic_hash x = tactic_hash y) tac preds in
     Option.default (-1) k
 
-  let next_knn learner status path ls =
-      List.fold_left (fun learner (outcomes, tac) -> learner.learn (path, status) outcomes tac) learner ls
+  let next_knn learner kn status path ls =
+      List.fold_left (fun learner (outcomes, tac) -> learner.learn (kn, path, status) outcomes tac) learner ls
 
-  let eval_intra_step acc (status, path, ls) =
+  let eval_intra_step acc (status, kn, path, ls) =
     match cache_type path with
     | `File ->
       List.fold_left (fun acc (outcomes, tac) ->
           List.fold_left (fun (learner, acc) outcome ->
               let k = calculate_k learner outcome tac in
-              learner.learn (path, status) [outcome] tac, k::acc
+              learner.learn (kn, path, status) [outcome] tac, k::acc
             ) acc outcomes
         ) acc ls
-    | `Dependency -> next_knn (fst acc) status path ls, snd acc
+    | `Dependency -> next_knn (fst acc) kn status path ls, snd acc
 
   let eval_intra data learner =
     List.rev @@ snd @@ List.fold_left eval_intra_step (learner, []) data
 
-  let eval_intra_partial_step acc (status, path, ls) =
+  let eval_intra_partial_step acc (status, kn, path, ls) =
     match cache_type path with
     | `File ->
       List.fold_left (fun (learner, acc) (outcomes, tac) ->
@@ -89,15 +88,15 @@ module OfflineEvaluationSimulatorLearner : TacticianOnlineLearnerType = functor 
               let k = calculate_k learner outcome tac in
               k::acc
             ) acc outcomes in
-          learner.learn (path, status) outcomes tac, acc
+          learner.learn (kn, path, status) outcomes tac, acc
         ) acc ls
-    | `Dependency -> next_knn (fst acc) status path ls, snd acc
+    | `Dependency -> next_knn (fst acc) kn status path ls, snd acc
 
   let eval_intra_partial data learner =
     List.rev @@ snd @@ List.fold_left eval_intra_partial_step (learner, []) data
 
-  let eval_inter_step (learner, acc) (status, name, ls) =
-    let next_knn = next_knn learner status name ls in
+  let eval_inter_step (learner, acc) (status, kn, name, ls) =
+    let next_knn = next_knn learner kn status name ls in
     match cache_type name with
     | `File ->
       let acc = List.fold_left (fun acc (outcomes, tac) ->
@@ -111,17 +110,17 @@ module OfflineEvaluationSimulatorLearner : TacticianOnlineLearnerType = functor 
   let eval_inter data learner =
     List.rev @@ snd @@ List.fold_left eval_inter_step (learner, []) data
 
-  let learn db (path, status) outcomes tac =
+  let learn db (kn, path, status) outcomes tac =
     let update_learner learner = match db.data with
-    | (pstatus, ppath, ls)::_ when not @@ Libnames.eq_full_path path ppath ->
-      next_knn learner pstatus ppath ls
+    | (pstatus, pkn, ppath, ls)::_ when not @@ Libnames.eq_full_path path ppath ->
+      next_knn learner kn pstatus ppath ls
     | _ -> learner
     in
     let learners = List.map update_learner db.learners in
     let data = match db.data with
-      | (pstatus, ppath, ls)::data when Libnames.eq_full_path path ppath ->
-        (pstatus, ppath, (outcomes, tac)::ls)::data
-      | _ -> (status, path, [outcomes, tac])::db.data in
+      | (pstatus, pkn, ppath, ls)::data when Libnames.eq_full_path path ppath ->
+        (pstatus, pkn, ppath, (outcomes, tac)::ls)::data
+      | _ -> (status, kn, path, [outcomes, tac])::db.data in
     last_model := data;
     (match cache_type path, status with
      | `File, Original ->
@@ -137,12 +136,12 @@ module OfflineEvaluationSimulatorLearner : TacticianOnlineLearnerType = functor 
          (*  | Discharged -> print_endline "discharged"); *)
      | _ -> ());
     { learners; data }
-  let predict db situations = IStream.empty
+  let predict _db _situations = IStream.empty
   let evaluate db _ _ = 0., db
 
   (* We have to do some reversals before the evaluation *)
   let preprocess model =
-    List.rev_map (fun (state, name, ls) -> state, name, List.rev ls) model
+    List.rev_map (fun (kn, state, name, ls) -> kn, state, name, List.rev ls) model
 
   let rec transpose lss long =
     let row = List.map (fun ls -> List.nth_opt ls 0) lss in
