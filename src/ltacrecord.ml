@@ -560,22 +560,27 @@ let commonSearch max_exec =
              dec_search_recursion_depth () >>= fun () -> setFlags () <*> tclUNIT (wit, !tac_exec_count))
             (fun (e, i) -> setFlags () <*> tclZERO ~info:i e))
 
-let type_check t =
+let type_check t fail =
   let open Proofview in
   let open Notations in
   Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
   let gls = List.map Goal.goal gls in
   t >>= fun res ->
   tclENV >>= fun env -> tclEVARMAP >>= fun sigma ->
-  List.iter (fun ev -> Feedback.msg_info Pp.(Evar.print ev ++ bool (Evd.is_defined sigma ev))) gls;
-  let _ = List.fold_left (fun sigma ev ->
-      let Evd.{ evar_body; evar_concl; _ } as info = Evd.find sigma ev in
-      let env = Environ.reset_with_named_context (Evd.evar_filtered_hyps info) env in
-      match evar_body with
-      | Evd.Evar_empty -> Feedback.msg_notice (Evar.print ev); sigma
-      | Evd.Evar_defined term -> Typing.check env sigma term evar_concl
-    ) sigma gls in
-  tclUNIT res
+  try
+    ignore (List.fold_left (fun sigma ev ->
+        let Evd.{ evar_body; evar_concl; _ } as info = Evd.find sigma ev in
+        let env = Environ.reset_with_named_context (Evd.evar_filtered_hyps info) env in
+        match evar_body with
+        | Evd.Evar_empty -> sigma
+        | Evd.Evar_defined term -> Typing.check env sigma term evar_concl
+      ) sigma gls);
+    tclUNIT res
+  with
+  |Type_errors.TypeError (env, err) ->
+    fail (`Type_error (env, sigma, err)) res
+  | Pretype_errors.PretypeError (env, map, err) ->
+    fail (`Pretype_error (env, map, err)) res
 
 let benchmarked_field : bool Evd.Store.field = Evd.Store.field ()
 let get_benchmarked () =
@@ -608,7 +613,18 @@ let benchmarkSearch name time deterministic : unit Proofview.tactic =
     let start_time = Unix.gettimeofday () in
     print_name ();
     timeout_command (tclENV >>= fun env ->
-                     type_check (commonSearch max_exec) >>=
+                     let type_check_fail err (wit, _) =
+                       let tcs, m = List.split (List.map (fun {tac;focus;prediction_index} ->
+                           ((tac, focus), prediction_index)) wit) in
+                       let tstring = synthesize_tactic env tcs in
+                       let err = match err with
+                         | `Type_error (env, sigma, err) ->
+                           Himsg.explain_type_error env sigma @@ Type_errors.map_ptype_error EConstr.of_constr err
+                         | `Pretype_error (env, sigma, err) -> Himsg.explain_pretype_error env sigma err in
+                       let msg = Pp.(str "Typing failure of the following tactic:" ++ fnl () ++
+                                     tstring ++ fnl () ++ str "Typing error:" ++ fnl () ++ err) in
+                       CErrors.anomaly msg in
+                     type_check (commonSearch max_exec) type_check_fail >>=
                      fun m -> print_success env m start_time; tclUNIT ())
 
 let nested_search_solutions_field : (glob_tactic_expr * int) list list Evd.Store.field = Evd.Store.field ()
