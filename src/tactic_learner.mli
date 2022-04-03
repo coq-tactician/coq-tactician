@@ -47,6 +47,7 @@ module type TacticianStructures = sig
     { parents  : (proof_state * proof_step) list
     ; siblings : proof_dag
     ; before   : proof_state
+    ; term     : term
     ; after    : proof_state list }
 
   type prediction =
