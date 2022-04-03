@@ -60,10 +60,10 @@ let inline env { outcomes; tactic; name; status; path } =
            store sigma contexts, evars are not typable anyway. When that changes, this should be fixed. *)
         of_kind @@ Evar (Evar.unsafe_of_int 0, [||])
     | _ -> Constr.map inline_constr c in
-  let inline_proof_state (ctx, goal) =
+  let inline_proof_state (ctx, goal, evar) =
     let ctx = List.map (Context.Named.Declaration.map_constr inline_constr) ctx in
     let goal = inline_constr goal in
-    (ctx, goal) in
+    ctx, goal, evar in
   let rec inline_proof_dag = function
     | End -> End
     | Step step -> Step (inline_proof_step step)

@@ -48,7 +48,7 @@ let subst_outcomes (s, { outcomes; tactic; name; status=_; path }) =
         | Named.Declaration.LocalDef (id, term, typ) ->
           Named.Declaration.LocalDef (id, subst_mps s term, subst_mps s typ)
       ) in
-  let subst_pf (hyps, g) = Mod_subst.(subst_named_context hyps, subst_mps s g) in
+  let subst_pf (hyps, g, evar) = Mod_subst.(subst_named_context hyps, subst_mps s g, evar) in
   let rec subst_pd = function
     | End -> End
     | Step ps -> Step (subst_ps ps)
