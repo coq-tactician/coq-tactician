@@ -26,6 +26,7 @@ module type TacticianStructures = sig
   type proof_state
   val proof_state_hypotheses  : proof_state -> named_context
   val proof_state_goal        : proof_state -> term
+  val proof_state_evar        : proof_state -> Evar.t
   val proof_state_equal       : proof_state -> proof_state -> bool
   val proof_state_independent : proof_state -> bool
 
@@ -70,11 +71,11 @@ module TS = struct
   let term_sexpr t = constr2s t
   let term_repr t = t
 
-  type proof_state = named_context * term
+  type proof_state = named_context * term * Evar.t
 
-  let proof_state_hypotheses ps = fst ps
-
-  let proof_state_goal ps = snd ps
+  let proof_state_hypotheses (hyps, _, _) = hyps
+  let proof_state_goal (_, goal, _) = goal
+  let proof_state_evar (_, _, evar) = evar
 
   let proof_state_equal _ps1 _ps2 = false
   let proof_state_independent _ps = false
@@ -119,7 +120,7 @@ let goal_to_proof_state ps =
   let to_term t = EConstr.to_constr ~abort_on_undefined_evars:false map t in
   let goal = to_term (Goal.concl ps) in
   let hyps = EConstr.Unsafe.to_named_context (Proofview.Goal.hyps ps) in
-  (hyps, goal)
+  hyps, goal, Goal.goal ps
 
 type data_status =
   | Original
