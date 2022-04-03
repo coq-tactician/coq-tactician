@@ -337,13 +337,13 @@ let push_tactic_trace tac =
 let get_tactic_trace gl =
   get_field_goal2 tactic_trace_field gl (fun _ -> [])
 
-let mk_outcome (st, _sts) =
+let mk_outcome (st, sts) =
   (* let mem = (List.map TS.tactic_make (get_tactic_trace st)) in *)
   let st : proof_state = goal_to_proof_state st in
   { parents = [] (* List.map (fun tac -> (st (\* TODO: Fix *\), { executions = []; tactic = tac })) mem *)
   ; siblings = End
   ; before = st
-  ; after = [] (* List.map goal_to_proof_state sts *) }
+  ; after = List.map goal_to_proof_state sts }
 
 let mk_data_in outcomes tactic name path =
   let tactic = TS.tactic_make tactic in
@@ -503,7 +503,7 @@ let tacpredict max_reached =
                push_witness { tac = t; focus; prediction_index = i } <*>
                (tac_exec_count := 1 + !tac_exec_count;
                 tclDebugTac t env false) >>= fun () ->
-               Goal.goals >>= fun gls ->
+               Goal.goals >>= fun gls -> record_map (fun x -> x) gls >>= fun gls ->
                let outcome = mk_outcome (gl, gls) in
                tclUNIT (snd @@ learner.evaluate outcome (t, h)))) in
     let transform i (r : Tactic_learner_internal.TS.prediction) =
