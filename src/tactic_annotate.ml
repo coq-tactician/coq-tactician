@@ -566,7 +566,7 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
             let by' = TacGeneric (Genarg.in_gen (Genarg.glbwit Extraargs.wit_by_arg_tac) None) in
             let tac = TacAlias (CAst.make ?loc (e, [s; t; cls; by'])) in
             (match by with
-             | None -> tac
+             | None -> rself tac
              | Some by -> tacthenlast (rself tac) (annotate by))
           | e, [s; t; Tacexp by] when Names.KerName.equal e @@ internal_tactics_ref_lookup "setoid_replace_with_by" ->
             let tac = TacAlias (CAst.make ?loc (internal_tactics_ref_lookup "setoid_replace_with", [s; t])) in
