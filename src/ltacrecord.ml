@@ -709,9 +709,15 @@ let fail_strict_tac (tac : glob_tactic_expr option) : glob_tactic_expr =
   TacML (CAst.make ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = "failstricttac"}; mltac_index = 0},
                     [TacGeneric enc]))
 
+(* This still needs some kind of nicer solution. See https://github.com/coq-tactician/coq-tactician/issues/14 *)
 let record_tac_complete orig tac : glob_tactic_expr = (* TODO: Implement self-learning *)
   (* let strict_tac = Tactic_normalize.tactic_strict tac in *)
   TacThen (run_pushs_state_tac (), TacThen ((* TacFirst [strict_tac; TacThen (fail_strict_tac tac, *) tac, run_record_tac orig))
+
+let record_tac_complete_ml orig tac =
+  let open Proofview in
+  let open Notations in
+  push_state_tac () >>= fun () -> tac >>= fun () -> record_tac orig
 
 let hide_interp_t global t ot rtac const path =
   let open Proofview in
@@ -720,10 +726,10 @@ let hide_interp_t global t ot rtac const path =
     let ist = Genintern.empty_glob_sign env in
     let t = Tacintern.intern_pure_tactic ist t in
     let t = Tacinterp.eval_tactic @@ rtac t in
-    let t = empty_localdb () >>= fun _ -> set_name (const, path) <*> t in
-    match ot with
-    | None -> t
-    | Some t' -> Tacticals.New.tclTHEN t t'
+    let t = match ot with
+      | None -> t
+      | Some t' -> Tacticals.New.tclTHEN t (record_tac_complete_ml None t') in
+    empty_localdb () >>= fun _ -> set_name (const, path) <*> t
   in
   if global then
     Proofview.tclENV >>= fun env ->
