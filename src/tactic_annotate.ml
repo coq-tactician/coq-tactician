@@ -115,8 +115,8 @@ let substitute_runtime_terms =
      TacML (CAst.make ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = "substitute_runtime_terms"}; mltac_index = 0},
                        [TacGeneric annotate; TacGeneric tac])))
 
-let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_tactic_expr -> glob_tactic_expr) : glob_tactic_expr =
-  let rself t = r t t in
+let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr option -> glob_tactic_expr -> glob_tactic_expr) : glob_tactic_expr =
+  let rself t = r (Some t) t in
   let mkatom loc atom =
     let t = TacAtom (CAst.make ?loc:loc atom) in
     rself t in
@@ -332,7 +332,9 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
       | RepeatStar -> r (repeat (onerewrite))
       | RepeatPlus -> r (tacthenfirst (onerewrite) (repeat (onerewrite)))
       | UpTo n -> r (don n (TacTry (onerewrite))) in
-    let r = if outer_record RewriteMulti then r (TacAtom (CAst.make ?loc:loc (TacRewrite (flg, [(b, mult, trm)], inc, byorig)))) else fun x -> x in
+    let r = if outer_record RewriteMulti then
+        r (Some (TacAtom (CAst.make ?loc:loc (TacRewrite (flg, [(b, mult, trm)], inc, byorig)))))
+      else fun x -> x in
     if inner_record RewriteMulti then at r else r (TacAtom (CAst.make ?loc:loc (TacRewrite (flg, [(b, mult, trm)], inc, byorig)))) in
   let decompose_rewrite loc flg inc ls by byorig =
     let rec aux = function
@@ -354,7 +356,7 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
         TacThen (intro, tac) in
     aux ps 0 in
   let rec annotate_atomic a : glob_tactic_expr =
-    let router ast t = if outer_record ast then r (TacAtom a) t else t in
+    let router ast t = if outer_record ast then r (Some (TacAtom a)) t else t in
     let at = TacAtom a in
     match a.v with
     | TacIntroPattern (eflg, ls) ->
@@ -439,16 +441,16 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
          (* Feedback.msg_warning (Pp.str "reference encountered"); *)
          (* We intentionally do not record references. The assumption here is that the tactical expression
             they reference has already been instrumented. *)
-         x, fun x _ -> x)
+         x, fun _ x -> x)
     | TacCall c -> (if inner_record Call then
         TacCall (CAst.map (fun (a, b) -> (a, List.map (fun a -> fst (annotate_arg a)) b)) c) else x), r
     | TacFreshId _ -> x, r
-    | Tacexp t -> Tacexp (annotate t), fun x _ -> x
+    | Tacexp t -> Tacexp (annotate t), fun _ x -> x
     | TacPretype _ -> x, r
     | TacNumgoals -> x, r
   (* TODO: Improve efficiency of the annotation recursion *)
   and annotate (tac : glob_tactic_expr) : glob_tactic_expr =
-    let router ast t = if outer_record ast then r tac t else t in
+    let router ast t = if outer_record ast then r (Some tac) t else t in
     let rinner ast t = if inner_record ast then annotate t else t in
     match tac with
     | TacAtom a         ->                 annotate_atomic a
@@ -525,14 +527,15 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
     | TacFun (args, t) -> TacFun (args, annotate t) (* Probably not outer-recordable *)
     | TacArg x ->
       let x', r2 = if inner_record Arg then annotate_arg x.v else x.v, r in
-      let res = r2 tac @@ TacArg (CAst.make ?loc:x.loc x') in
-      if outer_record Arg then r tac res else res
+      let res = r2 (Some tac) @@ TacArg (CAst.make ?loc:x.loc x') in
+      if outer_record Arg then r (Some tac) res else res
     | TacSelect (i, t)       ->            router Select (TacSelect (i, rinner Select t))
     | TacML CAst.{loc; v=(e, args)} ->
       let args = if inner_record ML then List.map (fun a -> fst (annotate_arg a)) args else args in
       router ML (TacML (CAst.make ?loc (e, args))) (* TODO: Decompose interesting known tactics (such as ssreflect) *)
     | TacAlias CAst.{loc; v=(e, args)} ->
-      let tactician_cache = CString.is_prefix "Tactician.Ltac1.Tactics.synth_with_cache"
+      (* TODO: Get rid of this hack*)
+      let tactician_cache = CString.is_prefix "Tactician.Ltac1.Tactics.synth_with_cache" 
           (Names.KerName.to_string e) in
       let al = Tacenv.interp_alias e in
       match ast_alias_setting_lookup e with
@@ -546,7 +549,7 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
           let args = if inner_record Alias || tactician_cache then
               List.map (fun a -> fst (annotate_arg a)) args else args in
           let t = TacAlias (CAst.make ?loc (e, args)) in
-          if outer_record Alias && not tactician_cache then r tac t else t in
+          if outer_record Alias && not tactician_cache then r (Some tac) t else t in
         try
           match e, args with
           | e, [TacGeneric term; TacGeneric pat] when Names.KerName.equal e @@ internal_tactics_ref_lookup "injection_x_as" ->

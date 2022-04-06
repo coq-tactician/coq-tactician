@@ -76,7 +76,7 @@ let inline env { outcomes; tactic; name; status; path } =
     ; before = inline_proof_state before
     ; after = List.map inline_proof_state after } in
   { outcomes = List.map inline_outcome outcomes
-  ; tactic = tactic_make @@ inline_tactic env @@ tactic_repr tactic
+  ; tactic = Option.map (fun tac -> tactic_make @@ inline_tactic env @@ tactic_repr tac) tactic
   ; name; status; path }
 
 let inline env sideff t =

@@ -53,7 +53,7 @@ let subst_outcomes (s, { outcomes; tactic; name; status=_; path }) =
     | Step ps -> Step (subst_ps ps)
   and subst_ps {executions; tactic} =
     { executions = List.map (fun (ps, pd) -> subst_pf ps, subst_pd pd) executions
-    ; tactic = subst_tac tactic } in
+    ; tactic = Option.map subst_tac tactic } in
   let outcomes = List.map (fun {parents; siblings; before; after} ->
       { parents = List.map (fun (psa, pse) -> (subst_pf psa, subst_ps pse)) parents
       ; siblings = subst_pd siblings
@@ -72,7 +72,7 @@ let subst_outcomes (s, { outcomes; tactic; name; status=_; path }) =
       | MPdot (mp, l) -> Label.to_id l :: modpath_to_dirpath mp in
     Libnames.make_path (DirPath.make @@ modpath_to_dirpath mp) @@ Label.to_id id in
 
-  { outcomes; name; tactic = subst_tac tactic
+  { outcomes; name; tactic = Option.map subst_tac tactic
   ; status = Substituted path; path = path' }
 
 let tmp_ltac_defs = Summary.ref ~name:"TACTICIANTMPSECTION" []
@@ -107,12 +107,12 @@ let rebuild_outcomes { outcomes; tactic; name; status=_; path } =
     | Step ps -> Step (rebuild_ps ps)
   and rebuild_ps {executions; tactic} =
     { executions = List.map (fun (ps, pd) -> ps, rebuild_pd pd) executions
-    ; tactic = rebuild_tac tactic } in
+    ; tactic = Option.map rebuild_tac tactic } in
   let outcomes = List.map (fun {parents; siblings; before; after} ->
       { parents = List.map (fun (psa, pse) -> (psa, rebuild_ps pse)) parents
       ; siblings = rebuild_pd siblings
       ; before; after }) outcomes in
-  { outcomes; tactic = rebuild_tac tactic
+  { outcomes; tactic = Option.map rebuild_tac tactic
   ; name; status = Discharged path; path = Lib.make_path @@ Libnames.basename path }
 
 let discharge_outcomes env { outcomes; tactic; name; status; path } =
@@ -125,12 +125,12 @@ let discharge_outcomes env { outcomes; tactic; name; status; path } =
       | Step ps -> Step (genarg_print_ps ps)
     and genarg_print_ps {executions; tactic} =
       { executions = List.map (fun (ps, pd) -> ps, genarg_print_pd pd) executions
-      ; tactic = genarg_print_tac tactic } in
+      ; tactic = Option.map genarg_print_tac tactic } in
     let outcomes = List.map (fun {parents; siblings; before; after} ->
         { parents = List.map (fun (psa, pse) -> (psa, genarg_print_ps pse)) parents
         ; siblings = genarg_print_pd siblings
         ; before; after }) outcomes in
-    { outcomes; tactic = genarg_print_tac tactic; name; status; path }
+    { outcomes; tactic = Option.map genarg_print_tac tactic; name; status; path }
 
 let section_ltac_helper bodies =
   tmp_ltac_defs := []; (* Safe to discard tmp state from old section discharge *)
@@ -209,9 +209,9 @@ let add_to_db (x : data_in) =
   ignore(Lib.add_leaf (Names.Label.to_id @@ Names.Constant.label x.name) (in_db x))
 
 (* Types and accessors for state in the proof monad *)
-type localdb = ((Proofview.Goal.t * Proofview.Goal.t list) list * glob_tactic_expr) list
+type localdb = ((Proofview.Goal.t * Proofview.Goal.t list) list * glob_tactic_expr option) list
 type goal_stack = Proofview.Goal.t list list
-type tactic_trace = glob_tactic_expr list
+type tactic_trace = glob_tactic_expr option list
 type state_id_stack = int list
 
 let record_field : bool Evd.Store.field = Evd.Store.field ()
@@ -301,14 +301,20 @@ let push_state_id_stack () =
   fun _ -> tclUNIT ()
 
 let warn tac =
-  let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic (Global.env ()) t) in
-  (* The unshelve tactic is the only tactic known to generate goals that do not inherit state from their
-     parents (because those goals were on the shelf). We filter tactics expressions that contain this
-     tactic out of the warning. *)
-  let unshelve_ml = Tacexpr.{ mltac_name = { mltac_plugin = "ltac_plugin"; mltac_tactic = "unshelve" }
-                            ; mltac_index = 0 } in
-  if not (Find_tactic_syntax.contains_ml_tactic unshelve_ml tac) then
-    Feedback.msg_warning Pp.(str "Tactician has uncovered a bug in a tactic. Please report. " ++ tac_pp tac)
+  let msg tac =
+      Feedback.msg_warning Pp.(str "Tactician has uncovered a bug in a tactic. Please report. " ++ tac) in
+  match tac with
+  | None ->
+    msg (Pp.str "Unknown")
+  | Some tac ->
+    let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic (Global.env ()) t) in
+    (* The unshelve tactic is the only tactic known to generate goals that do not inherit state from their
+       parents (because those goals were on the shelf). We filter tactics expressions that contain this
+       tactic out of the warning. *)
+    let unshelve_ml = Tacexpr.{ mltac_name = { mltac_plugin = "ltac_plugin"; mltac_tactic = "unshelve" }
+                              ; mltac_index = 0 } in
+    if not (Find_tactic_syntax.contains_ml_tactic unshelve_ml tac) then
+      msg (tac_pp tac)
 
 let pop_state_id_stack tac2 =
   let open Proofview in
@@ -346,11 +352,11 @@ let mk_outcome (st, _sts) =
   ; after = [] (* List.map goal_to_proof_state sts *) }
 
 let mk_data_in outcomes tactic name path =
-  let tactic = TS.tactic_make tactic in
+  let tactic = Option.map TS.tactic_make tactic in
   let outcomes = List.map mk_outcome outcomes in
   { outcomes; tactic; name; status = Original; path }
 
-let add_to_db2 id ((outcomes, tactic) : (Proofview.Goal.t * Proofview.Goal.t list) list * glob_tactic_expr)
+let add_to_db2 id ((outcomes, tactic) : (Proofview.Goal.t * Proofview.Goal.t list) list * glob_tactic_expr option)
     sideff name path =
   let data = mk_data_in outcomes tactic name path in
   add_to_db data;
@@ -651,7 +657,7 @@ let push_state_tac () =
     push_state_id_stack () <*> Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
     push_goal_stack gls
 
-let record_tac (tac2 : glob_tactic_expr) : unit Proofview.tactic =
+let record_tac (tac2 : glob_tactic_expr option) : unit Proofview.tactic =
   let open Proofview in
   let open Notations in
   let collect_states before_gls after_gls =
@@ -669,7 +675,7 @@ let record_tac (tac2 : glob_tactic_expr) : unit Proofview.tactic =
 
 let ml_record_tac args _is =
   (*let num = Tacinterp.Value.cast (Genarg.topwit Tacarg.wit_tactic) (List.hd args) in*)
-  let tac = Tacinterp.Value.cast (Genarg.topwit wit_glbtactic) (List.hd args) in
+  let tac = Tacinterp.Value.cast (Genarg.topwit @@ Genarg.wit_opt wit_glbtactic) (List.hd args) in
   record_tac tac
 
 let ml_push_state_tac _args _is =
@@ -677,16 +683,19 @@ let ml_push_state_tac _args _is =
 
 let ml_fail_strict_tac args is =
   (*let num = Tacinterp.Value.cast (Genarg.topwit Tacarg.wit_tactic) (List.hd args) in*)
-  let tac = Tacinterp.Value.cast (Genarg.topwit wit_glbtactic) (List.hd args) in
-  Feedback.msg_warning Pp.(str "Strict failure: " ++ Pptactic.pr_glob_tactic (Global.env ()) tac);
+  let tac = Tacinterp.Value.cast (Genarg.topwit @@ Genarg.wit_opt wit_glbtactic) (List.hd args) in
+  let tac = match tac with
+    | None -> Pp.str "Unknown"
+    | Some tac -> Pptactic.pr_glob_tactic (Global.env ()) tac in
+  Feedback.msg_warning Pp.(str "Strict failure: " ++ tac);
   Proofview.tclUNIT ()
 
 let () = register ml_record_tac "recordtac"
 let () = register ml_push_state_tac "pushstatetac"
 let () = register ml_fail_strict_tac "failstricttac"
 
-let run_record_tac (tac : glob_tactic_expr) : glob_tactic_expr =
-  let enc = Genarg.in_gen (Genarg.glbwit wit_glbtactic) tac in
+let run_record_tac (tac : glob_tactic_expr option) : glob_tactic_expr =
+  let enc = Genarg.in_gen (Genarg.glbwit @@ Genarg.wit_opt wit_glbtactic) tac in
   TacML (CAst.make ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = "recordtac"}; mltac_index = 0},
                     [TacGeneric enc]))
 
@@ -695,8 +704,8 @@ let run_pushs_state_tac (): glob_tactic_expr =
   TacML (CAst.make ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = "pushstatetac"}; mltac_index = 0},
                 []))
 
-let fail_strict_tac (tac : glob_tactic_expr) : glob_tactic_expr =
-  let enc = Genarg.in_gen (Genarg.glbwit wit_glbtactic) tac in
+let fail_strict_tac (tac : glob_tactic_expr option) : glob_tactic_expr =
+  let enc = Genarg.in_gen (Genarg.glbwit @@ Genarg.wit_opt wit_glbtactic) tac in
   TacML (CAst.make ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = "failstricttac"}; mltac_index = 0},
                     [TacGeneric enc]))
 
@@ -751,17 +760,21 @@ let vernac_solve ~pstate n info tcom b id =
     let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic env t) in
     let string_tac t = Pp.string_of_ppcmds (tac_pp t) in
     let tryadd (execs, tac) =
-      let s = string_tac tac in
-      (* TODO: Move this to annotation time *)
-      if (String.equal s "admit" || String.equal s "synth" || String.is_prefix "synth with cache" s
-          || String.is_prefix "tactician ignore" s)
-      then () else add_to_db2 id (execs, tac) sideff const path;
-      try (* This is purely for parsing bug detection and could be removed for performance reasons *)
-        let _ = Pcoq.parse_string Pltac.tactic_eoi s in ()
-      with _ ->
-        Feedback.msg_warning (Pp.str (
-            "Tactician detected a printing/parsing problem " ^
-            "for the following tactic. Please report. " ^ s)) in
+      let tac = match tac with
+        | None -> None
+        | Some tac ->
+          let s = string_tac tac in
+          (try (* This is purely for parsing bug detection and could be removed for performance reasons *)
+             let _ = Pcoq.parse_string Pltac.tactic_eoi s in ()
+           with _ ->
+             Feedback.msg_warning (Pp.str (
+                 "Tactician detected a printing/parsing problem " ^
+                 "for the following tactic. Please report. " ^ s)));
+          (* TODO: Move this to annotation time *)
+          if (String.equal s "admit" || String.equal s "synth" || String.is_prefix "synth with cache" s
+              || String.is_prefix "tactician ignore" s)
+          then None else Some tac in
+      add_to_db2 id (execs, tac) sideff const path in
     List.iter (fun trp -> tryadd trp) @@ List.rev db in
   (* Returns true if tactic execution should be skipped *)
   let pre_vernac_solve id =
@@ -790,7 +803,7 @@ let vernac_solve ~pstate n info tcom b id =
           let (pstate1,status1) =
             Pfedit.solve n info
               (add_bench @@ hide_interp_t global tcom None
-                 (fun t -> record_tac_complete t t) const path) ?with_end_tac p
+                 (fun t -> record_tac_complete (Some t) t) const path) ?with_end_tac p
           in
           let p, status =
             try

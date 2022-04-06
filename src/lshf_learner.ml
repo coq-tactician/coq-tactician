@@ -130,7 +130,10 @@ module LSHF =
     { forest; length; frequencies }
 
   let learn db (_kn, _path, _status) outcomes tac to_feats =
-    List.fold_left (fun db out -> add db out.before tac to_feats) db outcomes
+    match tac with
+    | None -> db
+    | Some tac ->
+      List.fold_left (fun db out -> add db out.before tac to_feats) db outcomes
 
   let predict db f to_feats remove_kind tfidf =
     if f = [] then IStream.of_list [] else
