@@ -42,3 +42,12 @@ VERNAC COMMAND EXTEND ThirdIfNotEqual CLASSIFIED AS SIDEFF STATE proof
     let t3 = Tacinterp.interp t3 in
     Tactician_ltac1_record_plugin.Proof_equality.third_if_not_equal_command ~pstate t1 t2 t3 }
 END
+
+TACTIC EXTEND type_check
+| [ "type_check" tactic(t) ] -> {
+  Tactician_ltac1_record_plugin.Ltacrecord.type_check (Tacinterp.tactic_of_value ist t)
+    (fun err () ->
+       match err with
+       | `Type_error (env, sigma, err) -> Proofview.tclZERO (Type_errors.TypeError (env, err))
+       | `Pretype_error (env, sigma, err) -> Proofview.tclZERO (Pretype_errors.PretypeError (env, sigma, err))) }
+END
