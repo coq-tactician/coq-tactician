@@ -718,49 +718,18 @@ let fail_strict_tac (tac : glob_tactic_expr) : glob_tactic_expr =
   TacML (CAst.make ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = "failstricttac"}; mltac_index = 0},
                     [TacGeneric enc]))
 
-let record_tac_complete orig tac : glob_tactic_expr =
+let record_tac_complete orig tac : glob_tactic_expr = (* TODO: Implement self-learning *)
   (* let strict_tac = Tactic_normalize.tactic_strict tac in *)
   TacThen (run_pushs_state_tac (), TacThen ((* TacFirst [strict_tac; TacThen (fail_strict_tac tac, *) tac, run_record_tac orig))
 
-let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO: Implement self-learning *)
-  let open Proofview in
-  let open Notations in
-  let const = Names.Constant.make2 (Global.current_modpath ()) (Names.Label.of_id name) in
-  let path = Lib.make_path name in
-  Benchmark.add_lemma path;
-  let save_db env sideff (db : localdb) =
-    let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic env t) in
-    let string_tac t = Pp.string_of_ppcmds (tac_pp t) in
-    let tryadd (execs, tac) =
-      let s = string_tac tac in
-      (* TODO: Move this to annotation time *)
-      if (String.equal s "admit" || String.equal s "synth" || String.is_prefix "synth with cache" s
-          || String.is_prefix "tactician ignore" s)
-      then () else add_to_db2 id (execs, tac) sideff const path;
-      try (* This is purely for parsing bug detection and could be removed for performance reasons *)
-        let _ = Pcoq.parse_string Pltac.tactic_eoi s in ()
-      with _ ->
-        Feedback.msg_warning (Pp.str (
-            "Tactician detected a printing/parsing problem " ^
-            "for the following tactic. Please report. " ^ s)) in
-    List.iter (fun trp -> tryadd trp) @@ List.rev db; tclUNIT () in
-  let rtac = decompose_annotate tac record_tac_complete in
-  let ptac = Tacinterp.eval_tactic rtac in
-  let ptac = set_name (const, path) <*> ptac <*> tclENV >>= fun env ->
-    tclEVARMAP >>= fun sigma ->
-    let sideff = Evd.eval_side_effects sigma in
-    empty_localdb () >>= save_db env sideff.seff_private in
-  match Benchmark.should_benchmark path with
-  | None -> ptac
-  | Some (time, deterministic) -> benchmarkSearch path time deterministic <*> ptac
-
-let hide_interp_t global t ot id name =
+let hide_interp_t global t ot rtac const path =
   let open Proofview in
   let open Notations in
   let hide_interp env =
     let ist = Genintern.empty_glob_sign env in
-    let te = Tacintern.intern_pure_tactic ist t in
-    let t = recorder te id name in
+    let t = Tacintern.intern_pure_tactic ist t in
+    let t = Tacinterp.eval_tactic @@ rtac t in
+    let t = empty_localdb () >>= fun _ -> set_name (const, path) <*> t in
     match ot with
     | None -> t
     | Some t' -> Tacticals.New.tclTHEN t t'
@@ -793,22 +762,49 @@ let vernac_solve ~pstate n info tcom b id =
       ) in
       Feedback.msg_warning msg; tclUNIT () in
     ignore (Pfedit.solve n info tac pstate) in
+  let name = Proof_global.get_proof_name pstate in
+  let const = Names.Constant.make2 (Global.current_modpath ()) (Names.Label.of_id name) in
+  let path = Lib.make_path name in
+  let save_db env sideff (db : localdb) =
+    let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic env t) in
+    let string_tac t = Pp.string_of_ppcmds (tac_pp t) in
+    let tryadd (execs, tac) =
+      let s = string_tac tac in
+      (* TODO: Move this to annotation time *)
+      if (String.equal s "admit" || String.equal s "synth" || String.is_prefix "synth with cache" s
+          || String.is_prefix "tactician ignore" s)
+      then () else add_to_db2 id (execs, tac) sideff const path;
+      try (* This is purely for parsing bug detection and could be removed for performance reasons *)
+        let _ = Pcoq.parse_string Pltac.tactic_eoi s in ()
+      with _ ->
+        Feedback.msg_warning (Pp.str (
+            "Tactician detected a printing/parsing problem " ^
+            "for the following tactic. Please report. " ^ s)) in
+    List.iter (fun trp -> tryadd trp) @@ List.rev db in
   let open Goal_select in
   let skip = pre_vernac_solve id in
   if skip then pstate else
     try
+      Benchmark.add_lemma path;
+      let add_bench tac =
+        match Benchmark.should_benchmark path with
+        | None -> tac
+        | Some (time, deterministic) -> Proofview.Notations.(benchmarkSearch path time deterministic <*> tac) in
       let pstate, status = Proof_global.map_fold_proof_endline (fun etac p ->
           let with_end_tac = if b then Some etac else None in
           let global = match n with SelectAll | SelectList _ -> true | _ -> false in
           let info = Option.append info G_ltac.(!print_info_trace) in
-          let name = Proof_global.get_proof_name pstate in
           let (pstate1,status1) =
-            Pfedit.solve n info (Tacinterp.hide_interp global tcom None) ?with_end_tac p
+            Pfedit.solve n info
+              (add_bench @@ hide_interp_t global tcom None
+                 (fun t -> record_tac_complete t t) const path) ?with_end_tac p
           in
           let p, status =
             try
               let (pstate2,status2) =
-                Pfedit.solve n info (hide_interp_t global tcom None id name) ?with_end_tac p in
+                Pfedit.solve n info
+                  (hide_interp_t global tcom None
+                     (fun t -> decompose_annotate t record_tac_complete) const path) ?with_end_tac p in
               if Proof_equality.pstate_equal ~pstate1 ~pstate2 then
                 pstate2, status2
               else
@@ -820,6 +816,12 @@ let vernac_solve ~pstate n info tcom b id =
               Feedback.msg_warning msg;
               pstate1, status1
           in
+          let env = Global.env () in
+          let Proof.{ sigma; _ } = Proof.data p in
+          let sideff = Evd.eval_side_effects sigma in
+          let store = Evd.get_extra_data sigma in
+          let data = Option.get @@ Evd.Store.get store localdb_field in
+          save_db env sideff.seff_private data;
          (* in case a strict subtree was completed,
              go back to the top of the prooftree *)
           let p = Proof.maximal_unfocus Vernacentries.command_focus p in
