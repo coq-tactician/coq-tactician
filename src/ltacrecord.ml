@@ -639,24 +639,6 @@ let qualid_of_global env r =
 
 (* End name globalization *)
 
-(* Returns true if tactic execution should be skipped *)
-let pre_vernac_solve id =
-  load_plugins ();
-  let env = Global.env () in
-  match Hashtbl.find_opt int64_to_knn id with
-  | Some (db, exn, sideff) ->
-    let add db_elem = add_to_db (Inline_private_constants.inline env sideff db_elem) in
-    (List.iter add @@ List.rev db; Hashtbl.remove int64_to_knn id;
-      match exn with
-      | None -> true
-      | Some exn -> raise exn)
-  | None -> Hashtbl.add int64_to_knn id ([], None, Safe_typing.empty_private_constants); false
-
-let save_exn id exn =
-  match Hashtbl.find_opt int64_to_knn id with
-  | Some (v, None, sideff) -> Hashtbl.replace int64_to_knn id (v, Some exn, sideff)
-  | _ -> assert false (* Should not happen *)
-
 (* Tactic recording tactic *)
 
 let should_record b =
@@ -781,7 +763,18 @@ let vernac_solve ~pstate n info tcom b id =
             "Tactician detected a printing/parsing problem " ^
             "for the following tactic. Please report. " ^ s)) in
     List.iter (fun trp -> tryadd trp) @@ List.rev db in
-  let open Goal_select in
+  (* Returns true if tactic execution should be skipped *)
+  let pre_vernac_solve id =
+    load_plugins ();
+    let env = Global.env () in
+    match Hashtbl.find_opt int64_to_knn id with
+    | Some (db, exn, sideff) ->
+      let add db_elem = add_to_db (Inline_private_constants.inline env sideff db_elem) in
+      (List.iter add @@ List.rev db; Hashtbl.remove int64_to_knn id;
+       match exn with
+       | None -> true
+       | Some exn -> raise exn)
+    | None -> Hashtbl.add int64_to_knn id ([], None, Safe_typing.empty_private_constants); false in
   let skip = pre_vernac_solve id in
   if skip then pstate else
     try
@@ -830,7 +823,10 @@ let vernac_solve ~pstate n info tcom b id =
       pstate
     with
     | e when CErrors.noncritical e || e = CErrors.Timeout ->
-      save_exn id e; raise e
+      (match Hashtbl.find_opt int64_to_knn id with
+       | Some (v, None, sideff) -> Hashtbl.replace int64_to_knn id (v, Some e, sideff)
+       | _ -> assert false (* Should not happen *));
+      raise e
 
 let tactician_ignore t =
   let open Proofview in
