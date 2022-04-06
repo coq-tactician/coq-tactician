@@ -29,12 +29,14 @@ module DecompositionLearner : TacticianOnlineLearnerType = functor (TS : Tactici
     if Libnames.is_dirpath_prefix_of dirp (Libnames.dirpath name) then `File else `Dependency
 
   let learn db (kn, name, status) outcomes tac =
-    let outcomes = List.map (fun _ -> tac) outcomes in
-    let db = match cache_type name with
-    | `File -> outcomes @ db
-    | `Dependency -> db in
-    last_model := db;
-    db
+    match tac with
+    | None -> db
+    | Some tac ->
+      let db = match cache_type name with
+        | `File -> tac::db
+        | `Dependency -> db in
+      last_model := db;
+      db
 
   let predict db situations = IStream.empty
   let evaluate db _ _ = 0., db

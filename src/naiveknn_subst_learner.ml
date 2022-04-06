@@ -73,7 +73,10 @@ module NaiveKnnSubst (SF : sig type second_feat end) = functor (TS : TacticianSt
       {entries = comb::purgedentries; length = l; frequencies = newfreq}
 
     let learn db _status outcomes tac ps_to_feat ctx_to_feat =
-      List.fold_left (fun db out -> add db out.before tac ps_to_feat ctx_to_feat) db outcomes
+      match tac with
+      | None -> db
+      | Some tac ->
+        List.fold_left (fun db out -> add db out.before tac ps_to_feat ctx_to_feat) db outcomes
 
     let remove_dups ranking =
       let ranking_map = List.fold_left

@@ -24,7 +24,7 @@ module OfflineEvaluationSimulatorLearner : TacticianOnlineLearnerType = functor 
     let module Learner = Learner(TS) in
     let rec recurse model =
       { learn = (fun origin exes tac ->
-            recurse @@ Lazy.from_val @@ Learner.learn (Lazy.force model) origin exes tac)
+            recurse @@ Lazy.from_val @@ Learner.learn (Lazy.force model) origin exes (Some tac))
       ; predict = (fun t ->
             Learner.predict (Lazy.force model) t)
       ; evaluate = (fun outcome tac ->
@@ -111,19 +111,22 @@ module OfflineEvaluationSimulatorLearner : TacticianOnlineLearnerType = functor 
     List.rev @@ snd @@ List.fold_left eval_inter_step (learner, []) data
 
   let learn db (kn, path, status) outcomes tac =
-    let update_learner learner = match db.data with
-    | (pstatus, pkn, ppath, ls)::_ when not @@ Libnames.eq_full_path path ppath ->
-      next_knn learner kn pstatus ppath ls
-    | _ -> learner
-    in
-    let learners = List.map update_learner db.learners in
-    let data = match db.data with
-      | (pstatus, pkn, ppath, ls)::data when Libnames.eq_full_path path ppath ->
-        (pstatus, pkn, ppath, (outcomes, tac)::ls)::data
-      | _ -> (status, kn, path, [outcomes, tac])::db.data in
-    last_model := data;
-    (match cache_type path, status with
-     | `File, Original ->
+    match tac with
+    | None -> db
+    | Some tac ->
+      let update_learner learner = match db.data with
+        | (pstatus, pkn, ppath, ls)::_ when not @@ Libnames.eq_full_path path ppath ->
+          next_knn learner kn pstatus ppath ls
+        | _ -> learner
+      in
+      let learners = List.map update_learner db.learners in
+      let data = match db.data with
+        | (pstatus, pkn, ppath, ls)::data when Libnames.eq_full_path path ppath ->
+          (pstatus, pkn, ppath, (outcomes, tac)::ls)::data
+        | _ -> (status, kn, path, [outcomes, tac])::db.data in
+      last_model := data;
+      (match cache_type path, status with
+       | `File, Original ->
          persistent_data := List.map2 (fun pdata learner ->
              List.fold_left (fun pdata outcome ->
                  calculate_k learner outcome tac :: pdata
@@ -134,8 +137,8 @@ module OfflineEvaluationSimulatorLearner : TacticianOnlineLearnerType = functor 
          (*  | Original -> print_endline "original" *)
          (*  | Substituted -> print_endline "substituted" *)
          (*  | Discharged -> print_endline "discharged"); *)
-     | _ -> ());
-    { learners; data }
+       | _ -> ());
+      { learners; data }
   let predict _db _situations = IStream.empty
   let evaluate db _ _ = 0., db
 

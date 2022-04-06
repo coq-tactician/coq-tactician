@@ -45,7 +45,7 @@ module type TacticianStructures = sig
     | Step of proof_step
   and proof_step =
     { executions : (proof_state * proof_dag) list
-    ; tactic     : tactic }
+    ; tactic     : tactic option }
 
   type situation =
     { parents  : (proof_state * proof_step) list
@@ -96,7 +96,7 @@ module TS = struct
     | Step of proof_step
   and proof_step =
     { executions : (proof_state * proof_dag) list
-    ; tactic     : tactic }
+    ; tactic     : tactic option }
 
   type situation =
     { parents  : (proof_state * proof_step) list
@@ -130,14 +130,15 @@ type data_status =
 
 type origin = KerName.t * Libnames.full_path * data_status
 
-type data_in = { outcomes : TS.outcome list; tactic : TS.tactic ; name : Constant.t; status : data_status; path : Libnames.full_path }
+type data_in = { outcomes : TS.outcome list; tactic : TS.tactic option ; name : Constant.t; status : data_status; path : Libnames.full_path }
 
 module type TacticianOnlineLearnerType =
   functor (TS : TacticianStructures) -> sig
     open TS
     type model
     val empty    : unit -> model
-    val learn    : model -> origin -> outcome list -> tactic -> model (* TODO: Add lemma dependencies *)
+    (* Sometimes we are unable to trace which tactic was executed. Then it is None *)
+    val learn    : model -> origin -> outcome list -> tactic option -> model (* TODO: Add lemma dependencies *)
     val predict  : model -> situation list -> prediction IStream.t (* TODO: Add global environment *)
     val evaluate : model -> outcome -> tactic -> float * model
   end
@@ -146,19 +147,20 @@ module type TacticianOfflineLearnerType =
   functor (TS : TacticianStructures) -> sig
     open TS
     type model
-    val add      : origin -> outcome list -> tactic -> unit (* TODO: Add lemma dependencies *)
+    (* Sometimes we are unable to trace which tactic was executed. Then it is None *)
+    val add      : origin -> outcome list -> tactic option -> unit (* TODO: Add lemma dependencies *)
     val train    : unit -> model
     val predict  : model -> situation list -> prediction IStream.t (* TODO: Add global environment *)
     val evaluate : model -> outcome -> tactic -> float
   end
 
 type functional_learner =
-  { learn : origin -> TS.outcome list -> TS.tactic -> functional_learner
+  { learn : origin -> TS.outcome list -> TS.tactic option -> functional_learner
   ; predict : unit -> TS.situation list -> TS.prediction IStream.t
   ; evaluate : TS.outcome -> TS.tactic -> functional_learner * float }
 
 type imperative_learner =
-  { imp_learn : origin -> TS.outcome list -> TS.tactic -> unit
+  { imp_learn : origin -> TS.outcome list -> TS.tactic option -> unit
   ; imp_predict : unit -> TS.situation list -> TS.prediction IStream.t
   ; imp_evaluate : TS.outcome -> TS.tactic -> float
   ; functional : unit -> functional_learner }

@@ -23,8 +23,12 @@ open TacticFinderDef
 let contains_ml_tactic ml t =
   let seen = ref KNset.empty in
   let rec contains_ml_tactic_ltac k =
-    let tac = Tacenv.interp_ltac k in
-    TacticFinderMapper.glob_tactic_expr_map mapper tac
+    if KNset.mem k !seen then
+      return ()
+    else
+      let tac = Tacenv.interp_ltac k in
+      seen := KNset.add k !seen;
+      map (fun _ -> ()) @@ TacticFinderMapper.glob_tactic_expr_map mapper tac
   and contains_ml_tactic_alias k =
     if KNset.mem k !seen then
       return ()

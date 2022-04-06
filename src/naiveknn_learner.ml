@@ -80,7 +80,10 @@ module NaiveKnn = functor (TS : TacticianStructures) -> struct
     { entries; frequencies }
 
   let learn db _status outcomes tac to_feat =
-    List.fold_left (fun db out -> add db out.before tac to_feat) db outcomes
+    match tac with
+    | None -> db
+    | Some tac ->
+      List.fold_left (fun db out -> add db out.before tac to_feat) db outcomes
 
   let predict { entries; frequencies } f to_feat tfidf =
     if f = [] then IStream.empty else

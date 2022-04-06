@@ -38,7 +38,7 @@ module type TacticianStructures = sig
     | Step of proof_step
   and proof_step =
     { executions : (proof_state * proof_dag) list
-    ; tactic     : tactic }
+    ; tactic     : tactic option }
 
   type situation =
     { parents  : (proof_state * proof_step) list
@@ -70,7 +70,8 @@ module type TacticianOnlineLearnerType =
     open S
     type model
     val empty    : unit -> model
-    val learn    : model -> origin -> outcome list -> tactic -> model (* TODO: Add lemma dependencies *)
+    (* Sometimes we are unable to trace which tactic was executed. Then it is None *)
+    val learn    : model -> origin -> outcome list -> tactic option -> model (* TODO: Add lemma dependencies *)
     val predict  : model -> situation list -> prediction IStream.t (* TODO: Add global environment *)
     val evaluate : model -> outcome -> tactic -> float * model
   end
@@ -79,7 +80,8 @@ module type TacticianOfflineLearnerType =
   functor (S : TacticianStructures) -> sig
     open S
     type model
-    val add      : origin -> outcome list -> tactic -> unit (* TODO: Add lemma dependencies *)
+    (* Sometimes we are unable to trace which tactic was executed. Then it is None *)
+    val add      : origin -> outcome list -> tactic option -> unit (* TODO: Add lemma dependencies *)
     val train    : unit -> model
     val predict  : model -> situation list -> prediction IStream.t (* TODO: Add global environment *)
     val evaluate : model -> outcome -> tactic -> float
