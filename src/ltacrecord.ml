@@ -808,15 +808,15 @@ let vernac_solve ~pstate n info tcom b id =
           let info = Option.append info G_ltac.(!print_info_trace) in
           let (pstate1,status1) =
             Pfedit.solve n info
-              (add_bench @@ hide_interp_t global tcom None
-                 (fun t -> record_tac_complete (Some t) t) const path) ?with_end_tac p
+              (add_bench @@ hide_interp_t global tcom with_end_tac
+                 (fun t -> record_tac_complete (Some t) t) const path) p
           in
           let p, status =
             try
               let (pstate2,status2) =
                 Pfedit.solve n info
-                  (hide_interp_t global tcom None
-                     (fun t -> decompose_annotate t record_tac_complete) const path) ?with_end_tac p in
+                  (hide_interp_t global tcom with_end_tac
+                     (fun t -> decompose_annotate t record_tac_complete) const path) p in
               if Proof_equality.pstate_equal ~pstate1 ~pstate2 then
                 pstate2, status2
               else
