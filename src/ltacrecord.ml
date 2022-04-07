@@ -497,6 +497,17 @@ let userPredict =
                         NonLogical.print_info (Pp.str "Ran out of suggestions to give...") else
                         Proofview.NonLogical.print_info (print_rank debug env r)))
 
+let term_from_goal sigma gl =
+  let open Proofview in
+  let Evd.{ evar_body; _ } = Evd.find sigma @@ Goal.goal gl in
+  match evar_body with
+  | Evd.Evar_empty ->
+    let ctx = Array.of_list @@
+      List.map (fun pt -> Constr.mkVar @@ Context.Named.Declaration.get_id pt) @@
+      Goal.hyps gl in
+    Constr.mkEvar (Goal.goal gl, ctx)
+  | Evd.Evar_defined term -> EConstr.to_constr sigma term
+
 let tac_exec_count = ref 0
 let tacpredict max_reached =
   let open Proofview in
@@ -514,10 +525,7 @@ let tacpredict max_reached =
                 tclDebugTac t env false) >>= fun () ->
                Goal.goals >>= fun gls -> record_map (fun x -> x) gls >>= fun gls ->
                tclEVARMAP >>= fun sigma ->
-               let Evd.{ evar_body; _ } = Evd.find sigma @@ Goal.goal gl in
-               let term = match evar_body with
-                 | Evd.Evar_empty -> Constr.mkEvar (Goal.goal gl, [||])
-                 | Evd.Evar_defined term -> EConstr.to_constr sigma term in
+               let term = term_from_goal sigma gl in
                let outcome = mk_outcome (gl, term, gls) in
                tclUNIT (snd @@ learner.evaluate outcome (t, h)))) in
     let transform i (r : Tactic_learner_internal.TS.prediction) =
@@ -704,10 +712,7 @@ let record_tac (tac2 : glob_tactic_expr option) : unit Proofview.tactic =
   tclEVARMAP >>= fun sigma ->
   let collect_states before_gls after_gls =
     List.map (fun gl_before ->
-        let Evd.{ evar_body; _ } = Evd.find sigma @@ Goal.goal gl_before in
-        let term = match evar_body with
-          | Evd.Evar_empty -> Constr.mkEvar (Goal.goal gl_before, [||])
-          | Evd.Evar_defined term -> EConstr.to_constr sigma term in
+        let term = term_from_goal sigma gl_before in
         let i = get_state_id_goal_top gl_before in
         (gl_before, term, List.filter_map (fun (j, gl_after) ->
              if i = j then Some gl_after else None) after_gls)) before_gls in
