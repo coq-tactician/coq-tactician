@@ -685,9 +685,29 @@ let pre_vernac_solve id =
   | Some (db, exn, sideff) ->
     let add db_elem = add_to_db (Inline_private_constants.inline env sideff db_elem) in
     (List.iter add @@ List.rev db; Hashtbl.remove int64_to_knn id;
-      match exn with
-      | None -> true
-      | Some exn -> raise exn)
+     match exn with
+     | None -> true
+     | Some exn ->
+       (* TODO: This is truly evil:
+          Because Tactician registers tactics as side-effecting, the tactics are run again at Qed-time.
+          Therefore, we have to actually prevent them from running. However, if tactics throw an exception, we still need to raise those,
+          because the `Fail` command expects them. That works. However, this now causes `Fail` to print failure messages during Qed.
+          In itself, this is not a huge problem, but it causes the IO-tests of some projects to fail (notably Iris). Therefore, we pull out
+          another hugely ugly hack to temporarily block the message of `Fail` from being printed by replacing the formatter.
+          This is extremely dangerous because it cannot be fully guaranteed that the formatter is being reset afterwards. *)
+       let ignore_one_formatter original =
+         let reset () = Topfmt.std_ft := original in
+         Format.(formatter_of_out_functions
+	                 { out_string = (fun _ _ _ -> reset ())
+                   ; out_flush = (fun _ -> reset ())
+                   ; out_newline = (fun _ -> reset ())
+                   ; out_spaces = (fun _ -> reset ())
+                   ; out_indent = (fun _ -> reset ())
+                   }) in
+       if not !Flags.quiet || !Vernacinterp.test_mode then begin
+         Topfmt.std_ft := ignore_one_formatter !Topfmt.std_ft;
+          raise exn
+       end else raise exn)
   | None -> Hashtbl.add int64_to_knn id ([], None, Safe_typing.empty_private_constants); false
 
 let save_exn id exn =
