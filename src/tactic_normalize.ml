@@ -53,6 +53,18 @@ let tactic_normalize = NormalizeMapper.glob_tactic_expr_map mapper
 
 let mapper = { NormalizeDef.default_mapper with
                glob_constr_and_expr = (fun (expr, _) g -> g (expr, None))
+             ; glob_constr_pattern_and_expr = (fun c cont ->
+                   let (bound, (c, _), pat) = cont c in
+                   match pat with
+                   | PRel 0 ->
+                     (* This is a dummy inserted for non-strict tactics. Therefore, we have to convert it. *)
+                     let _, pat =
+                       Tactician_util.with_flag "-cast-in-pattern"
+                         (fun () -> Patternops.pattern_of_glob_constr c) in
+                     let bound = Glob_ops.bound_glob_vars c in
+                     bound, (c, None), pat
+                   | _ -> bound, (c, None), pat
+                 )
              }
 
 let tactic_strict = NormalizeMapper.glob_tactic_expr_map mapper

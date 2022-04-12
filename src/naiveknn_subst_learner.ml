@@ -7,7 +7,6 @@ open Names
 module NaiveKnnSubst (SF : sig type second_feat end) = functor (TS : TacticianStructures) -> struct
   module LH = L(TS)
   open TS
-  open LH
   open SF
 
     type db_entry =
@@ -50,7 +49,6 @@ module NaiveKnnSubst (SF : sig type second_feat end) = functor (TS : TacticianSt
           | None -> Id.of_string "__knnpl"
           | Some _ -> id)
           (tactic_repr tac) in
-      Feedback.msg_info (Pp.str (sexpr_to_string (tactic_sexpr (tactic_make tac))));
       tactic_hash (tactic_make tac)
 
     let add db b obj ps_to_feat ctx_to_feat =
