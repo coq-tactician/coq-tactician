@@ -125,7 +125,7 @@ type data_status =
   | Substituted of Libnames.full_path (* path of the substituted constant (does not exist) *)
   | Discharged of Libnames.full_path (* path of the substituted constant (does not exist) *)
 
-type origin = Libnames.full_path * data_status
+type origin = KerName.t * Libnames.full_path * data_status
 
 type data_in = { outcomes : TS.outcome list; tactic : TS.tactic ; name : Constant.t; status : data_status; path : Libnames.full_path }
 
@@ -151,12 +151,12 @@ module type TacticianOfflineLearnerType =
 
 type functional_learner =
   { learn : origin -> TS.outcome list -> TS.tactic -> functional_learner
-  ; predict : TS.situation list -> TS.prediction IStream.t
+  ; predict : unit -> TS.situation list -> TS.prediction IStream.t
   ; evaluate : TS.outcome -> TS.tactic -> functional_learner * float }
 
 type imperative_learner =
   { imp_learn : origin -> TS.outcome list -> TS.tactic -> unit
-  ; imp_predict : TS.situation list -> TS.prediction IStream.t
+  ; imp_predict : unit -> TS.situation list -> TS.prediction IStream.t
   ; imp_evaluate : TS.outcome -> TS.tactic -> float
   ; functional : unit -> functional_learner }
 
@@ -165,22 +165,23 @@ let new_learner name (module Learner : TacticianOnlineLearnerType) =
   let rec functional model =
     { learn = (fun origin exes tac ->
           functional @@ Learner.learn model origin exes tac)
-    ; predict = (fun t ->
-          Learner.predict model t)
+    ; predict = (fun () ->
+          let predictor = Learner.predict model in
+          fun t -> predictor t)
     ; evaluate = (fun outcome tac ->
           let f, model = Learner.evaluate model outcome tac in
           functional @@ model, f) } in
 
   (* Note: This is lazy to give people a chance to set GOptions before a learner gets initialized *)
   let model = Summary.ref
-                ~freeze:(fun ~marshallable:_ x -> Lazy.from_val @@ Lazy.force x)
       ~name:("tactician-model-" ^ name)
       (lazy (Learner.empty ())) in
 
   { imp_learn = (fun origin exes tac ->
         model := Lazy.from_val @@ Learner.learn (Lazy.force !model) origin exes tac)
-  ; imp_predict = (fun t ->
-        Learner.predict (Lazy.force !model) t)
+  ; imp_predict = (fun () ->
+        let predict = Learner.predict (Lazy.force !model) in
+        fun t -> predict t)
   ; imp_evaluate = (fun outcome tac ->
         let f, m = Learner.evaluate (Lazy.force !model) outcome tac in
         model := Lazy.from_val m; f)
