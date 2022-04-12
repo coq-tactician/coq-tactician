@@ -27,7 +27,7 @@ automation.")
     dune
     (dune-site (>= 2.9.1))
     (opam-client (>= 2.1.0))
-    cmdliner
+    (cmdliner (>= 1.1.0))
     (coq (= dev))
     conf-git
     (bos (>= 0.2.1))

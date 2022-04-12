@@ -240,7 +240,9 @@ let retrieve_flags file =
   String.concat " " @@
   List.filter_map (fun d -> if Sys.file_exists (d/file) then Some (read_args (d/file)) else None) @@
   List.concat @@
-  List.map (fun d -> Array.to_list @@ Array.map (fun sd -> d/sd) @@ Sys.readdir d) plugins
+  (* TODO: We sort the items in the directory to get a deterministic order. In the future, the user should
+     probably choose the proper order. *)
+  List.map (fun d -> List.map (fun sd -> d/sd) @@ List.sort String.compare @@ Array.to_list @@ Sys.readdir d) plugins
 
 let tactician_extra_flags () = retrieve_flags "injection-flags"
 
@@ -381,8 +383,7 @@ let enable =
          tactics that do nothing except for 'search with cache ..', which simply executes the cached tactic. \
          This way, you can use the real Tactician while developing without needing a dependency on it."
     ] in
-  Term.(ret (const install_rcfile $ const ())),
-  Term.info "enable" ~doc ~man
+  Cmd.(v @@ info "enable" ~doc ~man) @@ Term.(ret (const install_rcfile $ const ()))
 
 let disable =
   let doc = "Remove the script that loads Tactician on Coq startup from your coqrc files." in
@@ -390,8 +391,7 @@ let disable =
     [ `P "This utility removes the following snippet from your 'coqrc' files, thereby disabling Tactician."
     ; `P coqrc_string
     ] in
-  Term.(ret (const remove_rcfile $ const ())),
-  Term.info "disable" ~doc ~man
+  Cmd.(v @@ info "disable" ~doc ~man) @@ Term.(ret (const remove_rcfile $ const ()))
 
 let inject =
   let doc = "Add hooks to Opam that allow Tactician to instrument the installation of Coq packages \
@@ -400,8 +400,7 @@ let inject =
     [ `P "This utility modifies Opam's configuration file with hooks that add Tactician support during \
          installation of Coq packages. This command can be reversed by running 'tactician eject'."
     ] in
-  Term.(ret (const inject $ (const ()))),
-  Term.info "inject" ~doc ~man
+  Cmd.(v @@ info "inject" ~doc ~man) @@ Term.(ret (const inject $ (const ())))
 
 let eject =
   let doc = "Remove hooks to Opam that allow Tactician to instrument the installation of Coq packages \
@@ -410,8 +409,7 @@ let eject =
                   'tactician inject'. After this, newly installed packages will no longer be instrumented \
                  by Tactician."
             ] in
-  Term.(ret (const eject $ const ())),
-  Term.info "eject" ~doc ~man
+  Cmd.(v @@ info "eject" ~doc ~man) @@ Term.(ret (const eject $ const ()))
 
 let recompile =
   let doc = "Find and recompile all installed Coq packages. This is mainly needed when you install or remove\
@@ -420,8 +418,7 @@ let recompile =
                   Tactician support. After that, all other packages also need to be reinstalled in order \
                   to be consistent with the new standard library. This utility will take care of that."
             ] in
-  Term.(ret (const stdlib $ const ())),
-  Term.info "recompile" ~doc ~man
+  Cmd.(v @@ info "recompile" ~doc ~man) @@ Term.(ret (const stdlib $ const ()))
 
 let command =
   let doc = "The command to execute" in
@@ -441,15 +438,14 @@ let exec =
             ; `Pre ("tactician exec make")
             ; `Pre ("tactician exec dune build")
             ] in
-  Term.(ret (const exec_command $ command $ args)),
-  Term.info "exec" ~doc ~man
+  Cmd.(v @@ info "exec" ~doc ~man) @@ Term.(ret (const exec_command $ command $ args))
 
-let default_cmd =
+let default_cmd, default_info =
   let doc = "Management utilities for the Tactician tactic learner and prover." in
   let sdocs = Manpage.s_common_options in
   let man_xrefs = [ `Cmd "enable"; `Cmd "disable"; `Cmd "inject"; `Cmd "eject"; `Cmd "recompile" ] in
   Term.(ret (const (`Help (`Pager, None)))),
-  Term.info "tactician" ~doc ~sdocs ~man_xrefs
+  Cmd.info "tactician" ~doc ~sdocs ~man_xrefs
 
 let cmds = [enable; disable; inject; eject; recompile; exec]
-let () = Term.(exit @@ eval_choice default_cmd cmds)
+let () = exit @@ Cmd.(eval@@ group ~default:default_cmd default_info cmds)

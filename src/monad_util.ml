@@ -180,6 +180,44 @@ end = struct
 end
 module StateMonad = StateMonadT(IdentityMonad)
 
+module MaybeMonadT (Wrapped : Monad.Def) : sig
+  include MonadTransformerType
+    with type 'a wrapped = 'a Wrapped.t
+     and type 'a repr_t = 'a option Wrapped.t
+  val empty : 'a t
+
+end = struct
+  type 'a t = 'a option Wrapped.t
+  type 'a wrapped = 'a Wrapped.t
+  type 'a repr_t = 'a t
+
+  let empty = Wrapped.return None
+
+  open WithMonadNotations(Wrapped)
+  let return x = Wrapped.return (Some x)
+  let (>>=) x f =
+    let* x = x in
+    match x with
+    | None -> empty
+    | Some x -> f x
+  let (>>) x y =
+    let* x = x in
+    match x with
+    | None -> empty
+    | Some () -> y
+  let map f x =
+    let+ x = x in
+    match x with
+    | None -> None
+    | Some x -> Some (f x)
+
+  let lift x =
+    let+ x = x in Some x
+  let run m = m [@@inline]
+  let unrun m = m [@@inline]
+end
+module MaybeMonad = MaybeMonadT(IdentityMonad)
+
 (** Combinations of reader, writer and state monads for convenience *)
 module ReaderWriterMonadT
     (Wrapped : Monad.Def)(W : sig type w val id : w val comb : w -> w -> w end)(R : sig type r end) : sig
