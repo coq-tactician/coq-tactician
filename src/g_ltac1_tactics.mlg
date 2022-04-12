@@ -28,3 +28,12 @@ VERNAC COMMAND EXTEND TacticianSuggest CLASSIFIED AS QUERY
                 Tactician_ltac1_record_plugin.Ltacrecord.userPredict
                 p) pstate in Some pstate) }
 END
+
+TACTIC EXTEND type_check
+| [ "type_check" tactic(t) ] -> {
+  Tactician_ltac1_record_plugin.Ltacrecord.type_check (Tacinterp.tactic_of_value ist t)
+    (fun err () ->
+       match err with
+       | `Type_error (env, sigma, err) -> Proofview.tclZERO (Type_errors.TypeError (env, err))
+       | `Pretype_error (env, sigma, err) -> Proofview.tclZERO (Pretype_errors.PretypeError (env, sigma, err))) }
+END
