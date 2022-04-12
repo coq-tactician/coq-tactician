@@ -60,8 +60,18 @@ let subst_outcomes (s, { outcomes; tactic; name; status=_; path }) =
       ; before = subst_pf before
       ; after = List.map subst_pf after }) outcomes in
   let name = Mod_subst.subst_constant s name in
-  let path' = (* TODO: This is a bit of a hack, improve *)
-    Libnames.path_of_string @@ Names.Constant.to_string name in
+  let path' =
+    (* TODO: This is not ideal, but seems to work in practice *)
+    let open Names in
+    let (mp, id) = KerName.repr @@ Constant.user name in
+    let rec modpath_to_dirpath = function
+      | MPfile dp -> DirPath.repr dp
+      | MPbound b ->
+        let (_, id, dp) = MBId.repr b in
+        id :: DirPath.repr dp
+      | MPdot (mp, l) -> Label.to_id l :: modpath_to_dirpath mp in
+    Libnames.make_path (DirPath.make @@ modpath_to_dirpath mp) @@ Label.to_id id in
+
   { outcomes; name; tactic = subst_tac tactic
   ; status = Substituted path; path = path' }
 
@@ -178,11 +188,11 @@ let load_plugins () =
 
 let in_db : data_in -> Libobject.obj =
   Libobject.(declare_object { (default_object "LTACRECORD") with
-                              cache_function = (fun (_,({ outcomes; tactic; name=_; status; path } : data_in)) ->
-                                  learner_learn (path, status) outcomes tactic)
-                            ; load_function = (fun _ (_, { outcomes; tactic; name; status; path }) ->
+                              cache_function = (fun ((path, kn),({ outcomes; tactic; name=_; status; path=_ } : data_in)) ->
+                                  learner_learn (kn, path, status) outcomes tactic)
+                            ; load_function = (fun _ ((path, kn), { outcomes; tactic; name; status; path=_ }) ->
                                   if Names.KerName.equal (Names.Constant.canonical name) (Names.Constant.user name) then
-                                    if !global_record then learner_learn (path, status) outcomes tactic else ())
+                                    if !global_record then learner_learn (kn, path, status) outcomes tactic else ())
                             ; open_function = (fun _ _ (_, _) -> ())
                             ; classify_function = (fun data -> Libobject.Substitute data)
                             ; subst_function = (fun x ->
@@ -196,7 +206,7 @@ let in_db : data_in -> Libobject.obj =
                             })
 
 let add_to_db (x : data_in) =
-  Lib.add_anonymous_leaf (in_db x)
+  ignore(Lib.add_leaf (Names.Label.to_id @@ Names.Constant.label x.name) (in_db x))
 
 (* Types and accessors for state in the proof monad *)
 type localdb = ((Proofview.Goal.t * Proofview.Goal.t list) list * glob_tactic_expr) list
@@ -427,9 +437,10 @@ let predict () =
   get_localdb () >>= fun db -> get_name () >>= fun (const, path) ->
   let learner = learner_get () in
   let learner = List.fold_left (fun learner (outcomes, tactic) ->
-      let { outcomes; tactic; name=_; status; path} = mk_data_in outcomes tactic const path in
-      learner.learn (path, status) outcomes tactic
+      let { outcomes; tactic; name; status; path} = mk_data_in outcomes tactic const path in
+      learner.learn (Names.Constant.canonical name, path, status) outcomes tactic
     ) learner db in
+  let predictor = learner.predict () in
   let cont =
     Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
     let situation = List.map (fun gl ->
@@ -441,7 +452,7 @@ let predict () =
     (* Coq stores goals in reverse order, so we present them in an intuitive order.
        Note that the tclFocus function also internally reverses the list, so focussing
        on goal zero will focus in the first goal of the reversed `situation` *)
-    tclUNIT (learner.predict (List.rev situation)) in
+    tclUNIT (predictor (List.rev situation)) in
   tclUNIT (learner, cont)
 
 let filterTactics p q (tacs : Tactic_learner_internal.TS.prediction IStream.t) =
@@ -548,6 +559,28 @@ let commonSearch max_exec =
              dec_search_recursion_depth () >>= fun () -> setFlags () <*> tclUNIT (wit, !tac_exec_count))
             (fun (e, i) -> setFlags () <*> tclZERO ~info:i e))
 
+let type_check t fail =
+  let open Proofview in
+  let open Notations in
+  Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
+  let gls = List.map Goal.goal gls in
+  t >>= fun res ->
+  tclENV >>= fun env -> tclEVARMAP >>= fun sigma ->
+  try
+    ignore (List.fold_left (fun sigma ev ->
+        let Evd.{ evar_body; evar_concl; _ } as info = Evd.find sigma ev in
+        let env = Environ.reset_with_named_context (Evd.evar_filtered_hyps info) env in
+        match evar_body with
+        | Evd.Evar_empty -> sigma
+        | Evd.Evar_defined term -> Typing.check env sigma term evar_concl
+      ) sigma gls);
+    tclUNIT res
+  with
+  |Type_errors.TypeError (env, err) ->
+    fail (`Type_error (env, sigma, err)) res
+  | Pretype_errors.PretypeError (env, map, err) ->
+    fail (`Pretype_error (env, map, err)) res
+
 let benchmarked_field : bool Evd.Store.field = Evd.Store.field ()
 let get_benchmarked () =
   modify_field benchmarked_field (fun b -> b, b) (fun () -> false)
@@ -579,7 +612,18 @@ let benchmarkSearch name time deterministic : unit Proofview.tactic =
     let start_time = Unix.gettimeofday () in
     print_name ();
     timeout_command (tclENV >>= fun env ->
-                     commonSearch max_exec >>=
+                     let type_check_fail err (wit, _) =
+                       let tcs, m = List.split (List.map (fun {tac;focus;prediction_index} ->
+                           ((tac, focus), prediction_index)) wit) in
+                       let tstring = synthesize_tactic env tcs in
+                       let err = match err with
+                         | `Type_error (env, sigma, err) ->
+                           Himsg.explain_type_error env sigma @@ Type_errors.map_ptype_error EConstr.of_constr err
+                         | `Pretype_error (env, sigma, err) -> Himsg.explain_pretype_error env sigma err in
+                       let msg = Pp.(str "Typing failure of the following tactic:" ++ fnl () ++
+                                     tstring ++ fnl () ++ str "Typing error:" ++ fnl () ++ err) in
+                       CErrors.anomaly msg in
+                     type_check (commonSearch max_exec) type_check_fail >>=
                      fun m -> print_success env m start_time; tclUNIT ())
 
 let nested_search_solutions_field : (glob_tactic_expr * int) list list Evd.Store.field = Evd.Store.field ()
@@ -640,9 +684,29 @@ let pre_vernac_solve id =
   | Some (db, exn, sideff) ->
     let add db_elem = add_to_db (Inline_private_constants.inline env sideff db_elem) in
     (List.iter add @@ List.rev db; Hashtbl.remove int64_to_knn id;
-      match exn with
-      | None -> true
-      | Some exn -> raise exn)
+     match exn with
+     | None -> true
+     | Some exn ->
+       (* TODO: This is truly evil:
+          Because Tactician registers tactics as side-effecting, the tactics are run again at Qed-time.
+          Therefore, we have to actually prevent them from running. However, if tactics throw an exception, we still need to raise those,
+          because the `Fail` command expects them. That works. However, this now causes `Fail` to print failure messages during Qed.
+          In itself, this is not a huge problem, but it causes the IO-tests of some projects to fail (notably Iris). Therefore, we pull out
+          another hugely ugly hack to temporarily block the message of `Fail` from being printed by replacing the formatter.
+          This is extremely dangerous because it cannot be fully guaranteed that the formatter is being reset afterwards. *)
+       let ignore_one_formatter original =
+         let reset () = Topfmt.std_ft := original in
+         Format.(formatter_of_out_functions
+	                 { out_string = (fun _ _ _ -> reset ())
+                   ; out_flush = (fun _ -> reset ())
+                   ; out_newline = (fun _ -> reset ())
+                   ; out_spaces = (fun _ -> reset ())
+                   ; out_indent = (fun _ -> reset ())
+                   }) in
+       if not !Flags.quiet || !Vernacinterp.test_mode then begin
+         Topfmt.std_ft := ignore_one_formatter !Topfmt.std_ft;
+          raise exn
+       end else raise exn)
   | None -> Hashtbl.add int64_to_knn id ([], None, Safe_typing.empty_private_constants); false
 
 let save_exn id exn =
@@ -729,7 +793,9 @@ let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO:
       let s = string_tac tac in
       (* TODO: Move this to annotation time *)
       if (String.equal s "admit" || String.equal s "synth" || String.is_prefix "synth with cache" s
-          || String.is_prefix "tactician ignore" s)
+          || String.is_prefix "tactician ignore" s || String.is_prefix "fix" s || String.is_prefix "cofix" s
+          || String.is_prefix "change_no_check" s || String.is_prefix "exact_no_checK" s || String.is_prefix "native_cast_no_check" s
+          || String.is_prefix "vm_cast_no_check" s)
       then () else add_to_db2 id (execs, tac) sideff const path;
       try (* This is purely for parsing bug detection and could be removed for performance reasons *)
         let _ = Pcoq.parse_string Pltac.tactic_eoi s in ()
@@ -772,3 +838,4 @@ let tactician_ignore t =
   let open Notations in
   get_record () >>= fun b ->
   set_record false <*> t <*> set_record b
+
