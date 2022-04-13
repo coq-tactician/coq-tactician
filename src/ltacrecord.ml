@@ -605,13 +605,10 @@ let benchmarkSearch name time deterministic : unit Proofview.tactic =
                                         ; time = tdiff
                                         ; inferences = count }));
   in
-  let print_name () =
-      Benchmark.(send_bench_result (Started (Libnames.string_of_path name))) in
   get_benchmarked () >>= fun benchmarked ->
   if benchmarked then tclUNIT () else
     set_benchmarked () <*>
     let start_time = Unix.gettimeofday () in
-    print_name ();
     timeout_command (tclENV >>= fun env ->
                      let type_check_fail err (wit, _) =
                        let tcs, m = List.split (List.map (fun {tac;focus;prediction_index} ->
