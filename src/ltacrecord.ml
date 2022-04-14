@@ -853,19 +853,19 @@ let vernac_solve ~pstate n info tcom b id =
   if skip then pstate else
     try
       Benchmark.add_lemma path;
-      let add_bench tac =
-        match Benchmark.should_benchmark path with
-        | None -> tac
-        | Some (time, deterministic) -> Proofview.Notations.(benchmarkSearch path time deterministic <*> tac) in
       let pstate, status = Proof_global.map_fold_proof_endline (fun etac p ->
+          (match Benchmark.should_benchmark path with
+           | None -> ()
+           | Some (time, deterministic) ->
+             ignore (Pfedit.solve n None (benchmarkSearch path time deterministic) p));
+
           let with_end_tac = if b then Some etac else None in
           let global = match n with SelectAll | SelectList _ -> true | _ -> false in
           let info = Option.append info G_ltac.(!print_info_trace) in
           let (pstate1,status1) =
             Pfedit.solve n info
-              (add_bench @@ hide_interp_t global tcom with_end_tac
-                 (fun t -> record_tac_complete (Some t) t) const path) p
-          in
+              (hide_interp_t global tcom with_end_tac
+                 (fun t -> record_tac_complete (Some t) t) const path) p in
           let p, status =
             try
               let (pstate2,status2) =
