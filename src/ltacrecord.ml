@@ -880,8 +880,8 @@ let vernac_solve ~pstate n info tcom b id =
                diverge. And since these numbers may be referenced later, we must keep this consistent. *)
             let seff1 = (Evd.eval_side_effects (Proof.data p).sigma).seff_private in
             let seff2 = (Evd.eval_side_effects (Proof.data pstate1).sigma).seff_private in
-            if seff1 <> seff2 then begin
-              pstate1, status1 end else
+            if seff1 <> seff2 then
+              pstate1, status1 else
               try
                 let (pstate2,status2) =
                   Pfedit.solve n info
