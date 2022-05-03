@@ -875,21 +875,28 @@ let vernac_solve ~pstate n info tcom b id =
               (hide_interp_t global tcom with_end_tac
                  (fun t -> record_tac_complete (Some t) t) const path) p in
           let p, status =
-            try
-              let (pstate2,status2) =
-                Pfedit.solve n info
-                  (hide_interp_t global tcom with_end_tac
-                     (fun t -> decompose_annotate t record_tac_complete) const path) p in
-              if Proof_equality.pstate_equal ~pstate1 ~pstate2 then
-                pstate2, status2
-              else
-                (print_error ~pstate:p ~pstate1 ~pstate2;
-                 pstate1, status1)
-            with
-            | e when CErrors.noncritical e ->
-              let msg = Pp.(str "Tactician's tactical decomposition crashed. Please report.") in
-              Feedback.msg_warning msg;
-              pstate1, status1
+            (* If the 'abstract' tactic was used, we should not run the tactic a second time.
+               The reason for this is that it will cause the numbering of the _subproofx names to
+               diverge. And since these numbers may be referenced later, we must keep this consistent. *)
+            let seff1 = (Evd.eval_side_effects (Proof.data p).sigma).seff_private in
+            let seff2 = (Evd.eval_side_effects (Proof.data pstate1).sigma).seff_private in
+            if seff1 <> seff2 then begin
+              pstate1, status1 end else
+              try
+                let (pstate2,status2) =
+                  Pfedit.solve n info
+                    (hide_interp_t global tcom with_end_tac
+                       (fun t -> decompose_annotate t record_tac_complete) const path) p in
+                if Proof_equality.pstate_equal ~pstate1 ~pstate2 then
+                  pstate2, status2
+                else
+                  (print_error ~pstate:p ~pstate1 ~pstate2;
+                   pstate1, status1)
+              with
+              | e when CErrors.noncritical e ->
+                let msg = Pp.(str "Tactician's tactical decomposition crashed. Please report.") in
+                Feedback.msg_warning msg;
+                pstate1, status1
           in
           let env = Global.env () in
           let Proof.{ sigma; _ } = Proof.data p in
