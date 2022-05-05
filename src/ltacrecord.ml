@@ -880,10 +880,16 @@ let vernac_solve ~pstate n info tcom b id =
     try
       Benchmark.add_lemma path;
       let pstate, status = Proof_global.map_fold_proof_endline (fun etac p ->
-          (match Benchmark.should_benchmark path with
-           | None -> ()
-           | Some (time, deterministic) ->
-             ignore (Pfedit.solve n None (benchmarkSearch path time deterministic) p));
+          ignore (Pfedit.solve n None (
+              let open Proofview in
+              let open Proofview.Notations in
+              get_benchmarked () >>= fun benchmarked ->
+              set_benchmarked () <*>
+              if benchmarked then tclUNIT () else
+                match Benchmark.should_benchmark path with
+                | None -> tclUNIT ()
+                | Some (time, deterministic) -> benchmarkSearch path time deterministic
+            ) p);
 
           let with_end_tac = if b then Some etac else None in
           let global = match n with SelectAll | SelectList _ -> true | _ -> false in
