@@ -112,7 +112,7 @@ let evars_equal evd1 evd2 (equal : (Evar.t * Evar.t) list) =
       | _, _ -> true in
     kinds_equal &&
     eq_constr_univs_test ei1.evar_concl ei2.evar_concl &&
-    eq_named_context_val ei1.evar_hyps ei2.evar_hyps &&
+    eq_named_context_val (Evd.evar_filtered_hyps ei1) (Evd.evar_filtered_hyps ei2) &&
     eq_evar_body ei1.evar_body ei2.evar_body
 
   (* Equality function on goals *)

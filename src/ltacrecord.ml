@@ -820,18 +820,26 @@ let vernac_solve ~pstate n info tcom b id =
       let tac = match tac with
         | None -> None
         | Some tac ->
-          let s = string_tac tac in
           (try (* This is purely for parsing bug detection and could be removed for performance reasons *)
+             let s = string_tac tac in
              let _ = Pcoq.parse_string Pltac.tactic_eoi s in ()
            with _ ->
-             Feedback.msg_warning (Pp.str (
-                 "Tactician detected a printing/parsing problem " ^
-                 "for the following tactic. Please report. " ^ s)));
+             Feedback.msg_warning Pp.(
+                 str "Tactician detected a printing/parsing problem " ++
+                 str "for the following tactic. Please report. "));
           (* TODO: Move this to annotation time *)
-          if (String.equal s "admit" || String.equal s "synth" || String.is_prefix "synth with cache" s
+          let filter =
+            try
+              (* In v8.11 and v8.12, this is know to very occasionally crash (particularly for 'simpl in').
+                 Therefore, we have to wrap it in a try-catch. *)
+              let s = string_tac tac in
+              (* TODO: Move this to annotation time *)
+              String.equal s "admit" || String.equal s "synth" || String.is_prefix "synth with cache" s
               || String.is_prefix "tactician ignore" s || String.is_prefix "fix" s || String.is_prefix "cofix" s
               || String.is_prefix "change_no_check" s || String.is_prefix "exact_no_checK" s || String.is_prefix "native_cast_no_check" s
-              || String.is_prefix "vm_cast_no_check" s)
+              || String.is_prefix "vm_cast_no_check" s
+            with _ -> false in
+          if filter
           then None else Some tac in
       add_to_db2 id (execs, tac) sideff const path in
     List.iter (fun trp -> tryadd trp) @@ List.rev db in
@@ -871,35 +879,42 @@ let vernac_solve ~pstate n info tcom b id =
   if skip then pstate else
     try
       Benchmark.add_lemma path;
-      let add_bench tac =
-        match Benchmark.should_benchmark path with
-        | None -> tac
-        | Some (time, deterministic) -> Proofview.Notations.(benchmarkSearch path time deterministic <*> tac) in
       let pstate, status = Proof_global.map_fold_proof_endline (fun etac p ->
+          (match Benchmark.should_benchmark path with
+           | None -> ()
+           | Some (time, deterministic) ->
+             ignore (Pfedit.solve n None (benchmarkSearch path time deterministic) p));
+
           let with_end_tac = if b then Some etac else None in
           let global = match n with SelectAll | SelectList _ -> true | _ -> false in
           let info = Option.append info G_ltac.(!print_info_trace) in
           let (pstate1,status1) =
             Pfedit.solve n info
-              (add_bench @@ hide_interp_t global tcom with_end_tac
-                 (fun t -> record_tac_complete (Some t) t) const path) p
-          in
+              (hide_interp_t global tcom with_end_tac
+                 (fun t -> record_tac_complete (Some t) t) const path) p in
           let p, status =
-            try
-              let (pstate2,status2) =
-                Pfedit.solve n info
-                  (hide_interp_t global tcom with_end_tac
-                     (fun t -> decompose_annotate t record_tac_complete) const path) p in
-              if Proof_equality.pstate_equal ~pstate1 ~pstate2 then
-                pstate2, status2
-              else
-                (print_error ~pstate:p ~pstate1 ~pstate2;
-                 pstate1, status1)
-            with
-            | e when CErrors.noncritical e ->
-              let msg = Pp.(str "Tactician's tactical decomposition crashed. Please report.") in
-              Feedback.msg_warning msg;
-              pstate1, status1
+            (* If the 'abstract' tactic was used, we should not run the tactic a second time.
+               The reason for this is that it will cause the numbering of the _subproofx names to
+               diverge. And since these numbers may be referenced later, we must keep this consistent. *)
+            let seff1 = (Evd.eval_side_effects (Proof.data p).sigma).seff_private in
+            let seff2 = (Evd.eval_side_effects (Proof.data pstate1).sigma).seff_private in
+            if seff1 <> seff2 then
+              pstate1, status1 else
+              try
+                let (pstate2,status2) =
+                  Pfedit.solve n info
+                    (hide_interp_t global tcom with_end_tac
+                       (fun t -> decompose_annotate t record_tac_complete) const path) p in
+                if Proof_equality.pstate_equal ~pstate1 ~pstate2 then
+                  pstate2, status2
+                else
+                  (print_error ~pstate:p ~pstate1 ~pstate2;
+                   pstate1, status1)
+              with
+              | e when CErrors.noncritical e ->
+                let msg = Pp.(str "Tactician's tactical decomposition crashed. Please report.") in
+                Feedback.msg_warning msg;
+                pstate1, status1
           in
           let env = Global.env () in
           let Proof.{ sigma; _ } = Proof.data p in
