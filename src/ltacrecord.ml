@@ -875,13 +875,12 @@ let vernac_solve ~pstate n info tcom b id =
   let skip = pre_vernac_solve id in
   if skip then pstate else
     try
+      let open Proofview in
+      let open Proofview.Notations in
       Benchmark.add_lemma path;
       let pstate, status = Proof_global.map_fold_proof_endline (fun etac p ->
           ignore (Pfedit.solve n None (
-              let open Proofview in
-              let open Proofview.Notations in
               get_benchmarked () >>= fun benchmarked ->
-              set_benchmarked () <*>
               if benchmarked then tclUNIT () else
                 match Benchmark.should_benchmark path with
                 | None -> tclUNIT ()
@@ -893,7 +892,8 @@ let vernac_solve ~pstate n info tcom b id =
           let info = Option.append info G_ltac.(!print_info_trace) in
           let (pstate1,status1) =
             Pfedit.solve n info
-              (hide_interp_t global tcom with_end_tac
+              (set_benchmarked () <*>
+               hide_interp_t global tcom with_end_tac
                  (fun t -> record_tac_complete (Some t) t) const path) p in
           let p, status =
             (* If the 'abstract' tactic was used, we should not run the tactic a second time.
@@ -906,7 +906,8 @@ let vernac_solve ~pstate n info tcom b id =
               try
                 let (pstate2,status2) =
                   Pfedit.solve n info
-                    (hide_interp_t global tcom with_end_tac
+                    (set_benchmarked () <*>
+                     hide_interp_t global tcom with_end_tac
                        (fun t -> decompose_annotate t record_tac_complete) const path) p in
                 if Proof_equality.pstate_equal ~pstate1 ~pstate2 then
                   pstate2, status2
