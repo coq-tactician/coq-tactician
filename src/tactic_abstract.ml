@@ -16,7 +16,7 @@ module AbstractDef = struct
   let default wit = { raw = (fun _ -> warnProblem (ArgumentType wit); id)
                     ; glb = (fun _ -> warnProblem (ArgumentType wit); id)}
 
-  let with_binders ids x = local (fun ids' -> (ids@ids')) x
+  let with_binders ids a cont = map (fun x -> (fun x -> x), x) @@ M.local (fun ids' -> ids@ids') @@ cont a
 end
 module AbstractMapper = MakeMapper(AbstractDef)
 open AbstractDef
@@ -48,7 +48,6 @@ module ConstantsDef = struct
   let default wit = { raw = (fun _ -> warnProblem (ArgumentType wit); id)
                     ; glb = (fun _ -> warnProblem (ArgumentType wit); id)}
 
-  let with_binders _ids x = x
 end
 module ConstantsMapper = MakeMapper(ConstantsDef)
 open ConstantsDef
