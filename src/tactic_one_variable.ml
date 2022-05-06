@@ -27,7 +27,7 @@ module OneVariableDef = struct
   let default wit = { raw = (fun _ -> warnProblem (ArgumentType wit); id)
                     ; glb = (fun _ -> warnProblem (ArgumentType wit); id)}
 
-  let with_binders ids = M.local (fun ids' -> (ids@ids'))
+  let with_binders ids a cont = map (fun x -> (fun x -> x), x) @@ M.local (fun ids' -> ids@ids') @@ cont a
 end
 module OneVariableMapper = MakeMapper(OneVariableDef)
 open OneVariableDef

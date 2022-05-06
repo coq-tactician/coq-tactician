@@ -5,7 +5,7 @@ open Monad_util
 
 module FreeVarsDef = struct
   module M = WriterMonad
-      (struct type w = Id.t list let id = [] let comb = List.append end)
+      (struct type w = Id.Set.t let id = Id.Set.empty let comb = Id.Set.union end)
   include MapDefTemplate (M)
   let map_sort = "freevars"
   let warnProblem wit =
@@ -15,23 +15,23 @@ module FreeVarsDef = struct
   let default wit = { raw = (fun _ -> warnProblem (ArgumentType wit); id)
                     ; glb = (fun _ -> warnProblem (ArgumentType wit); id)}
 
-  let with_binders ids = M.censor (fun w -> List.filter (fun id -> not @@ List.exists (Id.equal id) ids) w)
+  let with_binders ids a cont = map (fun x -> (fun x -> x), x) @@
+    M.censor (fun w -> Id.Set.filter (fun id -> not @@ List.exists (Id.equal id) ids) w) @@ cont a
 end
 module FreeVarsMapper = MakeMapper(FreeVarsDef)
 open FreeVarsDef
-open WriterMonad(struct type w = Id.t list let id = [] let comb = List.append end)
-
-type 'a w = Id.t list * 'a
 
 let mapper = { FreeVarsDef.default_mapper with
-               variable = (fun id -> M.(tell [id] >> return id))
+               variable = (fun id -> M.(tell (Id.Set.singleton id) >> return id))
              }
 
-let tactic_free_variables t : Id.t list =
+let tactic_free_variables t : Id.Set.t =
   let vars, _ = M.run @@ FreeVarsMapper.glob_tactic_expr_map mapper t in vars
+let glob_constr_free_variables t : Id.Set.t =
+  let vars, _ = M.run @@ FreeVarsMapper.glob_constr_map mapper t in vars
 
 module SubstituteDef = struct
-  module M = ReaderMonad(struct type r = Id.t list end)
+  module M = ReaderMonad(struct type r = Id.Set.t end)
   include MapDefTemplate (M)
   let map_sort = "substitute"
   let warnProblem wit =
@@ -41,17 +41,18 @@ module SubstituteDef = struct
   let default wit = { raw = (fun _ -> warnProblem (ArgumentType wit); id)
                     ; glb = (fun _ -> warnProblem (ArgumentType wit); id)}
 
-  let with_binders ids = M.local (fun ids' -> (ids@ids'))
+  let with_binders ids a cont = M.map (fun x -> (fun x -> x), x) @@
+    M.local (fun ids' -> Id.Set.union (Id.Set.of_list ids) ids') @@ cont a
 end
 module SubstituteMapper = MakeMapper(SubstituteDef)
 open SubstituteDef
-open ReaderMonad(struct type r = Id.t list end)
-
-type 'a k = (Id.t list -> 'a)
 
 let mapper f = { SubstituteDef.default_mapper with
                  variable = (fun id -> M.(ask >>= fun ids ->
-                            if List.exists (Id.equal id) ids then return id else return (f id)))
+                            if Id.Set.mem id ids then return id else return (f id)))
                }
 
-let tactic_substitute f t = M.run (SubstituteMapper.glob_tactic_expr_map (mapper f) t) []
+(* Converts a _free_variables.
+   Assumes that the target variables are fresh. If the expression contains a binder with the same name,
+   the variables might get captured. *)
+let alpha_convert f t = M.run (SubstituteMapper.glob_tactic_expr_map (mapper f) t) Id.Set.empty

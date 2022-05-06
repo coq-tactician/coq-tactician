@@ -17,7 +17,7 @@ module type MapDef = sig
 
   type 'a transformer = 'a -> ('a -> 'a t) -> 'a t
 
-  val with_binders : Id.t list -> 'a t -> 'a t
+  val with_binders : Id.t list -> 'a -> ('a -> 'a t) -> ((Id.t -> Id.t) * 'a) t
 
   type mapper =
     { glob_tactic : glob_tactic_expr transformer
@@ -76,7 +76,7 @@ end
 module MapDefTemplate (M: Monad.Def) : sig
   include MonadNotations
   type 'a transformer = 'a -> ('a -> 'a t) -> 'a t
-  val with_binders : Id.t list -> 'a t -> 'a t
+  val with_binders : Id.t list -> 'a -> ('a -> 'a t) -> ((Id.t -> Id.t) * 'a) t
   type mapper =
     { glob_tactic : glob_tactic_expr transformer
     ; raw_tactic : raw_tactic_expr transformer
