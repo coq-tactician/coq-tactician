@@ -21,11 +21,13 @@ split.
 Qed.
 
 Goal nat.
-Fail Third If Not Equal
+Third If Not Equal
   (assert ((forall x:Prop, Prop) -> nat))
   (assert ((forall y:Prop, Prop) -> nat))
   (gfail "Not equal").
-Fail third if not equal
+intro. exact 4.
+apply X. intro. apply y.
+(* Fail third if not equal
   (assert ((forall x:Prop, Prop) -> nat))
   (assert ((forall y:Prop, Prop) -> nat))
   (gfail "Not equal").
@@ -35,7 +37,7 @@ third if not equal
   (gfail "Not equal").
 
 intro. exact 4.
-apply X. intro. apply x.
+apply X. intro. apply x. *)
 Qed.
 
 Goal nat.
