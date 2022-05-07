@@ -28,7 +28,7 @@ let detype env evd c =
   Flags.with_option Detyping.print_universes
   (Detyping.detype Detyping.Now true Id.Set.empty env) evd c
 let extern_glob_constr c =
-  Flags.with_options Constrextern.[ print_implicits; print_coercions; print_universes ]
+  Flags.with_options Constrextern.[ print_implicits; print_coercions; print_universes; print_no_symbol ]
   (Constrextern.extern_glob_constr Id.Set.empty) c
 
 let unsolvable = "__tactician_unsolvable__"
@@ -81,8 +81,8 @@ let mapper env evd f =
            (match f id with
             | None -> return c
             | Some c ->
-              let c = Detyping.detype Detyping.Now true Id.Set.empty env evd c in
-              let c = Constrextern.extern_glob_constr Id.Set.empty c in
+              let c = detype env evd c in
+              let c = extern_glob_constr c in
               return @@ CAst.(c.v)))
       | _ ->
         cont c
@@ -110,6 +110,23 @@ let mapper env evd f =
             in
             (cflg, trm), x, y) cls in
         return @@ TacInductionDestruct (rflg, eflg, (cls, using))
+      | _ -> return t
+    )
+  ; glob_tactic_arg = (fun t cont ->
+      ask >>= fun bound ->
+      cont t >>= fun t ->
+      match t with
+      (* Special case for references that have become bound *)
+      | Reference Locus.ArgVar CAst.{v=id; _} ->
+        (match recognize_unsolvable id with
+         | Some id when not @@ Id.Set.mem id bound ->
+           (match f id with
+            | None -> return t
+            | Some c ->
+              let c = detype env evd c in
+              let c = c, None in
+              return @@ ConstrMayEval (Genredexpr.ConstrTerm c))
+         | _ -> return t)
       | _ -> return t
     )
   }
