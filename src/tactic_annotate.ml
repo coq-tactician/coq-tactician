@@ -502,12 +502,21 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr option -> 
       (* let t : glob_tactic_expr = *)
       (*   TacML (CAst.make ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = "internal_tac"}; mltac_index = 0}, *)
       (*                     [])) in *)
-      let all_tacs = List.map (fun (id, arg) ->
-          (match arg with
-           | Tacexp _ -> true
-           | _ -> false)) args in
-      let all_tacs = List.fold_left (&&) true all_tacs in
-      if all_tacs then
+      let rec arg_is_definitely_tactic = function
+        | Tacexp tac -> tactic_is_definitely_tactic tac
+        | _ -> false
+      and tactic_is_definitely_tactic = function
+        | TacFun _ -> false
+        | TacLetIn(_, _, tac) -> tactic_is_definitely_tactic tac
+        | TacArg arg -> arg_is_definitely_tactic arg.v
+        | TacMatch (_, _, br) | TacMatchGoal (_, _, br) ->
+          List.for_all (function
+              | Pat (_, _, tac) -> tactic_is_definitely_tactic tac
+              | All tac -> tactic_is_definitely_tactic tac) br
+        | t -> true
+      in
+      if List.for_all (fun (id, arg) ->
+          arg_is_definitely_tactic arg) args then
         let args = List.map (fun (a, b) -> (a, fst (annotate_arg b))) args in
         TacLetIn (false, args, annotate t)
       else
