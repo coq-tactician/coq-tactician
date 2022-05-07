@@ -887,6 +887,20 @@ let vernac_solve ~pstate n info tcom b id =
               pstate1, status1 else
               try
                 let (pstate2,status2) =
+                  (* TODO: Another dirty trick: We need to suppress any output generated during the
+                     second run of the decomposed tactic. This is because some projects have IO-tests
+                     that fail when things are printed twice. *)
+                  let ignore_formatter () =
+                    Format.(formatter_of_out_functions
+	                            { out_string = (fun _ _ _ -> ())
+                              ; out_flush = (fun _ -> ())
+                              ; out_newline = (fun _ -> ())
+                              ; out_spaces = (fun _ -> ())
+                              ; out_indent = (fun _ -> ())
+                              }) in
+                  let original = !Topfmt.std_ft in
+                  Topfmt.std_ft := ignore_formatter ();
+                  Fun.protect ~finally:(fun () -> Topfmt.std_ft := original) @@ fun () ->
                   Pfedit.solve n info
                     (set_benchmarked () <*>
                      hide_interp_t global tcom with_end_tac
