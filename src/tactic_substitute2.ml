@@ -24,6 +24,13 @@ end
 module SubstituteMapper = MakeMapper(SubstituteDef)
 open SubstituteDef
 
+let detype env evd c =
+  Flags.with_option Detyping.print_universes
+  (Detyping.detype Detyping.Now true Id.Set.empty env) evd c
+let extern_glob_constr c =
+  Flags.with_options Constrextern.[ print_implicits; print_coercions; print_universes ]
+  (Constrextern.extern_glob_constr Id.Set.empty) c
+
 let mapper env evd f =
   let open M in
   { SubstituteDef.default_mapper with
@@ -48,7 +55,7 @@ let mapper env evd f =
           (match f id with
            | None -> return c
            | Some c ->
-             let c = Detyping.detype Detyping.Now true Id.Set.empty env evd c in
+             let c = detype env evd c in
              return @@ DAst.get c
           )
         | _ -> cont c
@@ -72,8 +79,8 @@ let mapper env evd f =
     )
   ; glob_atomic_tactic = (fun t cont ->
       ask >>= fun bound ->
-      let t = match t with
-        (* Special case for destruct H, where H is a variable *)
+      match t with
+      (* Special case for destruct H, where H is a variable *)
       | TacInductionDestruct (rflg, eflg, (cls, using)) ->
         let cls = List.map (fun ((cflg, trm), x, y) ->
             let trm = match trm with
@@ -81,15 +88,14 @@ let mapper env evd f =
                 (match f id.v with
                  | None -> trm
                  | Some c ->
-                   let c = Detyping.detype Detyping.Now true Id.Set.empty env evd c in
+                   let c = detype env evd c in
                    let c = (c, None), Tactypes.NoBindings in
                    Tactics.ElimOnConstr c)
               | _ -> trm
             in
             (cflg, trm), x, y) cls in
-        TacInductionDestruct (rflg, eflg, (cls, using))
-      | _ -> t in
-      cont t
+        return @@ TacInductionDestruct (rflg, eflg, (cls, using))
+      | _ -> cont t
     )
   }
 
@@ -157,6 +163,6 @@ let mapper future_conv =
 let tactic_substitute env evd subst t =
   let future_conv id =
     Option.map (fun c -> Tactic_substitute.glob_constr_free_variables @@
-                Detyping.detype Detyping.Now true Id.Set.empty env evd c) @@ subst id in
+                detype env evd c) @@ subst id in
   let t = snd @@ M.run (CaptureAvoidMapper.glob_tactic_expr_map (mapper future_conv) t) (Conv Id.Set.empty) in
   non_avoiding_substitute env evd subst t
