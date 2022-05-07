@@ -1,15 +1,18 @@
 (** This file is heavily inspired by Proofview.tclPROGRESS *)
 
-(** A copy of [Constr.compare_head_gen_leq_with], with the difference that it does not
-    operate modulo alpha equivalence. For the purpose of proof equality, the names of
-    terms are very important, as they can be referenced by tactics. Additionally, they
+(** A copy of [Constr.compare_head_gen_leq_with], with the difference that it does operates with
+    less alpha equivalence.
+    For the purpose of proof equality, the names of binders in the spine of a goal are very important,
+    as they can be referenced by tactics such as 'intros until x'. Additionally, they
     will be used to determine the name of a hypothesis in the local context when it is
-    introduced. *)
-let compare_head_gen_leq_with kind1 kind2 eq_evar leq_universes leq_sorts eq leq nargs t1 t2 =
+    introduced. As such, this function takes into account the names of binders that occur in the spine
+    of a goal. *)
+let compare_head_gen_leq_with ~goal_spine kind1 kind2 eq_evar leq_universes leq_sorts eq leq nargs t1 t2 =
   let open Constr in
   let open Names in
   let open Context in
-  let binder_equal id1 id2 = Name.equal id1.binder_name id2.binder_name in
+  let binder_equal id1 id2 =
+    (not goal_spine) || Name.equal id1.binder_name id2.binder_name in
   match kind_nocast_gen kind1 t1, kind_nocast_gen kind2 t2 with
   | Cast _, _ | _, Cast _ -> assert false (* kind_nocast *)
   | Rel n1, Rel n2 -> Int.equal n1 n2
@@ -18,14 +21,15 @@ let compare_head_gen_leq_with kind1 kind2 eq_evar leq_universes leq_sorts eq leq
   | Int i1, Int i2 -> Uint63.equal i1 i2
   | Float f1, Float f2 -> Float64.equal f1 f2
   | Sort s1, Sort s2 -> leq_sorts s1 s2
-  | Prod (id1,t1,c1), Prod (id2,t2,c2) -> binder_equal id1 id2 && eq 0 t1 t2 && leq 0 c1 c2
-  | Lambda (id1,t1,c1), Lambda (id2,t2,c2) -> binder_equal id1 id2 && eq 0 t1 t2 && eq 0 c1 c2
-  | LetIn (id1,b1,t1,c1), LetIn (id2,b2,t2,c2) -> binder_equal id1 id2 && eq 0 b1 b2 && eq 0 t1 t2 && leq nargs c1 c2
+  | Prod (id1,t1,c1), Prod (id2,t2,c2) -> binder_equal id1 id2 && eq 0 t1 t2 && leq goal_spine 0 c1 c2
+  | Lambda (id1,t1,c1), Lambda (id2,t2,c2) -> binder_equal id1 id2 && eq 0 t1 t2 && leq goal_spine 0 c1 c2
+  | LetIn (id1,b1,t1,c1), LetIn (id2,b2,t2,c2) ->
+    binder_equal id1 id2 && eq 0 b1 b2 && eq 0 t1 t2 && leq goal_spine nargs c1 c2
   (* Why do we suddenly make a special case for Cast here? *)
   | App (c1, l1), App (c2, l2) ->
     let len = Array.length l1 in
     Int.equal len (Array.length l2) &&
-    leq (nargs+len) c1 c2 && CArray.equal_norefl (eq 0) l1 l2
+    eq (nargs+len) c1 c2 && CArray.equal_norefl (eq 0) l1 l2
   | Proj (p1,c1), Proj (p2,c2) -> Projection.equal p1 p2 && eq 0 c1 c2
   | Evar (e1,l1), Evar (e2,l2) ->
     eq_evar e1 e2 && CArray.equal (eq 0) l1 l2
@@ -38,19 +42,17 @@ let compare_head_gen_leq_with kind1 kind2 eq_evar leq_universes leq_sorts eq leq
     eq_constructor c1 c2 && leq_universes (GlobRef.ConstructRef c1) nargs u1 u2
   | Case (_,p1,c1,bl1), Case (_,p2,c2,bl2) ->
     eq 0 p1 p2 && eq 0 c1 c2 && CArray.equal (eq 0) bl1 bl2
-  | Fix ((ln1, i1),(ids1,tl1,bl1)), Fix ((ln2, i2),(ids2,tl2,bl2)) ->
-    CArray.equal binder_equal ids1 ids2 &&
+  | Fix ((ln1, i1),(_,tl1,bl1)), Fix ((ln2, i2),(ids2,tl2,bl2)) ->
     Int.equal i1 i2 && CArray.equal Int.equal ln1 ln2
     && CArray.equal_norefl (eq 0) tl1 tl2 && CArray.equal_norefl (eq 0) bl1 bl2
-  | CoFix(ln1,(ids1,tl1,bl1)), CoFix(ln2,(ids2,tl2,bl2)) ->
-    CArray.equal binder_equal ids1 ids2 &&
+  | CoFix(ln1,(_,tl1,bl1)), CoFix(ln2,(_,tl2,bl2)) ->
     Int.equal ln1 ln2 && CArray.equal_norefl (eq 0) tl1 tl2 && CArray.equal_norefl (eq 0) bl1 bl2
   | (Rel _ | Meta _ | Var _ | Sort _ | Prod _ | Lambda _ | LetIn _ | App _
     | Proj _ | Evar _ | Const _ | Ind _ | Construct _ | Case _ | Fix _
     | CoFix _ | Int _ | Float _), _ -> false
 
-let compare_head_gen_with kind1 kind2 eq_evar eq_universes eq_sorts eq nargs t1 t2 =
-    compare_head_gen_leq_with kind1 kind2 eq_evar eq_universes eq_sorts eq eq nargs t1 t2
+let compare_head_gen_with ~goal_spine kind1 kind2 eq_evar eq_universes eq_sorts eq nargs t1 t2 =
+    compare_head_gen_leq_with ~goal_spine kind1 kind2 eq_evar eq_universes eq_sorts (eq false) eq nargs t1 t2
 
 let evars_equal evd1 evd2 (equal : (Evar.t * Evar.t) list) =
   let open Evd in
@@ -58,7 +60,7 @@ let evars_equal evd1 evd2 (equal : (Evar.t * Evar.t) list) =
   let evd_common = ref (merge_universe_context evd_common (evar_universe_context evd1)) in
   let left_evar_map = ref Evar.Map.empty in
   let right_evar_map = ref Evar.Map.empty in
-  let rec eq_constr_univs_test t1 t2 =
+  let rec eq_constr_univs_test ~goal_spine t1 t2 =
     let t1 = EConstr.Unsafe.to_constr t1
     and t2 = EConstr.Unsafe.to_constr t2 in
     let eq_universes _ _ u1 u2 =
@@ -77,10 +79,10 @@ let evars_equal evd1 evd2 (equal : (Evar.t * Evar.t) list) =
     in
     let kind1 = Evarutil.kind_of_term_upto evd1 in
     let kind2 = Evarutil.kind_of_term_upto evd2 in
-    let rec eq_constr' nargs m n =
-      compare_head_gen_with kind1 kind2 evar_equal eq_universes eq_sorts eq_constr' nargs m n
+    let rec eq_constr' goal_spine nargs m n =
+      compare_head_gen_with ~goal_spine kind1 kind2 evar_equal eq_universes eq_sorts eq_constr' nargs m n
     in
-    compare_head_gen_with kind1 kind2 evar_equal eq_universes eq_sorts eq_constr' 0 t1 t2
+    compare_head_gen_with ~goal_spine kind1 kind2 evar_equal eq_universes eq_sorts eq_constr' 0 t1 t2
 
   (* equality function on hypothesis contexts *)
   and eq_named_context_val ctx1 ctx2 =
@@ -89,10 +91,10 @@ let evars_equal evd1 evd2 (equal : (Evar.t * Evar.t) list) =
     let eq_named_declaration d1 d2 =
       match d1, d2 with
       | LocalAssum (i1,t1), LocalAssum (i2,t2) ->
-        Context.eq_annot Names.Id.equal i1 i2 && eq_constr_univs_test t1 t2
+        Context.eq_annot Names.Id.equal i1 i2 && eq_constr_univs_test ~goal_spine:false t1 t2
       | LocalDef (i1,c1,t1), LocalDef (i2,c2,t2) ->
-        Context.eq_annot Names.Id.equal i1 i2 && eq_constr_univs_test c1 c2
-        && eq_constr_univs_test t1 t2
+        Context.eq_annot Names.Id.equal i1 i2 && eq_constr_univs_test ~goal_spine:false c1 c2
+        && eq_constr_univs_test ~goal_spine:false t1 t2
       | _ ->
         false
     in CList.equal eq_named_declaration c1 c2
@@ -100,8 +102,7 @@ let evars_equal evd1 evd2 (equal : (Evar.t * Evar.t) list) =
   and eq_evar_body b1 b2 =
     match b1, b2 with
     | Evar_empty, Evar_empty -> true
-    | Evar_defined t1, Evar_defined t2 ->
-      eq_constr_univs_test t1 t2
+    | Evar_defined t1, Evar_defined t2 -> assert false
     | _ -> false
 
   and eq_evar_info ei1 ei2 =
@@ -111,7 +112,9 @@ let evars_equal evd1 evd2 (equal : (Evar.t * Evar.t) list) =
       | (_, Evar_kinds.NamedHole _), _ | _, (_, Evar_kinds.NamedHole _) -> false
       | _, _ -> true in
     kinds_equal &&
-    eq_constr_univs_test ei1.evar_concl ei2.evar_concl &&
+    eq_constr_univs_test ~goal_spine:true
+      (Namegen.rename_bound_vars_as_displayed evd1 Names.Id.Set.empty [] ei1.evar_concl)
+      (Namegen.rename_bound_vars_as_displayed evd2 Names.Id.Set.empty [] ei2.evar_concl) &&
     eq_named_context_val (Evd.evar_filtered_hyps ei1) (Evd.evar_filtered_hyps ei2) &&
     eq_evar_body ei1.evar_body ei2.evar_body
 

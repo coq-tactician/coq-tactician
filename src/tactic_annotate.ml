@@ -90,13 +90,15 @@ let substitute_runtime_terms =
     Tactician_util.register_interp0 wit (fun ist v -> Ftactic.return v);
     wit in
   let implementation annotate tac is =
-    let open Proofview.Notations in
-    Proofview.tclENV >>= fun env ->
-    Proofview.tclEVARMAP >>= fun evd ->
+    let open Proofview in
+    Proofview.Goal.enter @@ fun gl ->
+    let env = Goal.env gl in
+    let evd = Goal.sigma gl in
+    let avoid = Names.Id.Set.of_list @@ List.map Context.Named.Declaration.get_id @@ Goal.hyps gl in
     let map = Tacinterp.extract_ltac_constr_values is env in
     (* TODO: At some point deal with the binders *)
     let map_f id = Option.map snd @@ Names.Id.Map.find_opt id map in
-    let tac = Tactic_substitute2.tactic_substitute env evd map_f tac in
+    let tac = Tactic_substitute2.tactic_substitute env evd avoid map_f tac in
     let tac = annotate tac in
     let lfun = Names.Id.Map.filter (fun id _ -> not @@ Names.Id.Map.mem id map) is.lfun in
     Tacinterp.eval_tactic_ist { is with lfun } tac
@@ -502,12 +504,21 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr option -> 
       (* let t : glob_tactic_expr = *)
       (*   TacML (CAst.make ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = "internal_tac"}; mltac_index = 0}, *)
       (*                     [])) in *)
-      let all_tacs = List.map (fun (id, arg) ->
-          (match arg with
-           | Tacexp _ -> true
-           | _ -> false)) args in
-      let all_tacs = List.fold_left (&&) true all_tacs in
-      if all_tacs then
+      let rec arg_is_definitely_tactic = function
+        | Tacexp tac -> tactic_is_definitely_tactic tac
+        | _ -> false
+      and tactic_is_definitely_tactic = function
+        | TacFun _ -> false
+        | TacLetIn(_, _, tac) -> tactic_is_definitely_tactic tac
+        | TacArg arg -> arg_is_definitely_tactic arg.v
+        | TacMatch (_, _, br) | TacMatchGoal (_, _, br) ->
+          List.for_all (function
+              | Pat (_, _, tac) -> tactic_is_definitely_tactic tac
+              | All tac -> tactic_is_definitely_tactic tac) br
+        | t -> true
+      in
+      if List.for_all (fun (id, arg) ->
+          arg_is_definitely_tactic arg) args then
         let args = List.map (fun (a, b) -> (a, fst (annotate_arg b))) args in
         TacLetIn (false, args, annotate t)
       else
