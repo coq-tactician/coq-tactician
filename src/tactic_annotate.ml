@@ -90,13 +90,15 @@ let substitute_runtime_terms =
     Tactician_util.register_interp0 wit (fun ist v -> Ftactic.return v);
     wit in
   let implementation annotate tac is =
-    let open Proofview.Notations in
-    Proofview.tclENV >>= fun env ->
-    Proofview.tclEVARMAP >>= fun evd ->
+    let open Proofview in
+    Proofview.Goal.enter @@ fun gl ->
+    let env = Goal.env gl in
+    let evd = Goal.sigma gl in
+    let avoid = Names.Id.Set.of_list @@ List.map Context.Named.Declaration.get_id @@ Goal.hyps gl in
     let map = Tacinterp.extract_ltac_constr_values is env in
     (* TODO: At some point deal with the binders *)
     let map_f id = Option.map snd @@ Names.Id.Map.find_opt id map in
-    let tac = Tactic_substitute2.tactic_substitute env evd map_f tac in
+    let tac = Tactic_substitute2.tactic_substitute env evd avoid map_f tac in
     let tac = annotate tac in
     let lfun = Names.Id.Map.filter (fun id _ -> not @@ Names.Id.Map.mem id map) is.lfun in
     Tacinterp.eval_tactic_ist { is with lfun } tac

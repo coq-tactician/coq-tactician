@@ -24,12 +24,12 @@ end
 module SubstituteMapper = MakeMapper(SubstituteDef)
 open SubstituteDef
 
-let detype env evd c =
+let detype env evd avoid c =
   Flags.with_option Detyping.print_universes
-  (Detyping.detype Detyping.Now true Id.Set.empty env) evd c
-let extern_glob_constr c =
+  (Detyping.detype Detyping.Now true avoid env) evd c
+let extern_glob_constr avoid c =
   Flags.with_options Constrextern.[ print_implicits; print_coercions; print_universes; print_no_symbol ]
-  (Constrextern.extern_glob_constr Id.Set.empty) c
+  (Constrextern.extern_glob_constr avoid) c
 
 let unsolvable = "__tactician_unsolvable__"
 let mk_unsolvable id =
@@ -41,7 +41,7 @@ let recognize_unsolvable id =
     Some (Id.of_string @@ CString.sub id unsolvable_l (CString.length id - unsolvable_l))
   else None
 
-let mapper env evd f =
+let mapper env evd avoid f =
   let open M in
   { SubstituteDef.default_mapper with
     variable = (fun id ->
@@ -65,7 +65,7 @@ let mapper env evd f =
           (match f id with
            | None -> return c
            | Some c ->
-             let c = detype env evd c in
+             let c = detype env evd avoid c in
              return @@ DAst.get c
           )
         | _ -> cont c
@@ -81,8 +81,8 @@ let mapper env evd f =
            (match f id with
             | None -> return c
             | Some c ->
-              let c = detype env evd c in
-              let c = extern_glob_constr c in
+              let c = detype env evd avoid c in
+              let c = extern_glob_constr avoid c in
               return @@ CAst.(c.v)))
       | _ ->
         cont c
@@ -101,7 +101,7 @@ let mapper env evd f =
                    (match f id with
                     | None -> trm
                     | Some c ->
-                      let c = detype env evd c in
+                      let c = detype env evd avoid c in
                       let c = (c, None), Tactypes.NoBindings in
                       Tactics.ElimOnConstr c)
                  | _ -> trm
@@ -123,7 +123,7 @@ let mapper env evd f =
            (match f id with
             | None -> return t
             | Some c ->
-              let c = detype env evd c in
+              let c = detype env evd avoid c in
               let c = c, None in
               return @@ ConstrMayEval (Genredexpr.ConstrTerm c))
          | _ -> return t)
@@ -131,8 +131,8 @@ let mapper env evd f =
     )
   }
 
-let non_avoiding_substitute env evd f t =
-  M.run (SubstituteMapper.glob_tactic_expr_map (mapper env evd f) t) Id.Set.empty
+let non_avoiding_substitute env evd avoid f t =
+  M.run (SubstituteMapper.glob_tactic_expr_map (mapper env evd avoid f) t) Id.Set.empty
 
 module CaptureAvoidDef = struct
   type r =
@@ -192,9 +192,9 @@ let mapper future_conv =
       ))
   }
 
-let tactic_substitute env evd subst t =
+let tactic_substitute env evd avoid subst t =
   let future_conv id =
     Option.map (fun c -> Tactic_substitute.glob_constr_free_variables @@
-                detype env evd c) @@ subst id in
+                detype env evd avoid c) @@ subst id in
   let t = snd @@ M.run (CaptureAvoidMapper.glob_tactic_expr_map (mapper future_conv) t) (Conv Id.Set.empty) in
-  non_avoiding_substitute env evd subst t
+  non_avoiding_substitute env evd avoid subst t
