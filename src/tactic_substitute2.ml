@@ -31,6 +31,16 @@ let extern_glob_constr c =
   Flags.with_options Constrextern.[ print_implicits; print_coercions; print_universes ]
   (Constrextern.extern_glob_constr Id.Set.empty) c
 
+let unsolvable = "__tactician_unsolvable__"
+let mk_unsolvable id =
+  Id.of_string (unsolvable ^ Id.to_string id)
+let recognize_unsolvable id =
+  let id = Id.to_string id in
+  if CString.is_prefix unsolvable id then
+    let unsolvable_l = CString.length unsolvable in
+    Some (Id.of_string @@ CString.sub id unsolvable_l (CString.length id - unsolvable_l))
+  else None
+
 let mapper env evd f =
   let open M in
   { SubstituteDef.default_mapper with
@@ -46,7 +56,7 @@ let mapper env evd f =
             | true -> EConstr.destVar evd c
             | false ->
               (* Unsolvable case *)
-              Id.of_string "__tactician_unsolvable__"
+              mk_unsolvable id
       )
   ; glob_constr = (fun c cont ->
         ask >>= fun bound ->
@@ -79,23 +89,28 @@ let mapper env evd f =
     )
   ; glob_atomic_tactic = (fun t cont ->
       ask >>= fun bound ->
+      cont t >>= fun t ->
       match t with
       (* Special case for destruct H, where H is a variable *)
       | TacInductionDestruct (rflg, eflg, (cls, using)) ->
         let cls = List.map (fun ((cflg, trm), x, y) ->
             let trm = match trm with
-              | Tactics.ElimOnIdent id when not @@ Id.Set.mem id.v bound ->
-                (match f id.v with
-                 | None -> trm
-                 | Some c ->
-                   let c = detype env evd c in
-                   let c = (c, None), Tactypes.NoBindings in
-                   Tactics.ElimOnConstr c)
+              | Tactics.ElimOnIdent id ->
+                (match recognize_unsolvable id.v with
+                 | Some id when not @@ Id.Set.mem id bound ->
+                   (match f id with
+                    | None -> trm
+                    | Some c ->
+                      let c = detype env evd c in
+                      let c = (c, None), Tactypes.NoBindings in
+                      Tactics.ElimOnConstr c)
+                 | _ -> trm
+                )
               | _ -> trm
             in
             (cflg, trm), x, y) cls in
         return @@ TacInductionDestruct (rflg, eflg, (cls, using))
-      | _ -> cont t
+      | _ -> return t
     )
   }
 
