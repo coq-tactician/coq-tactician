@@ -605,27 +605,21 @@ let benchmarkSearch name time deterministic : unit Proofview.tactic =
                                         ; time = tdiff
                                         ; inferences = count }));
   in
-  let print_name () =
-      Benchmark.(send_bench_result (Started (Libnames.string_of_path name))) in
-  get_benchmarked () >>= fun benchmarked ->
-  if benchmarked then tclUNIT () else
-    set_benchmarked () <*>
-    let start_time = Unix.gettimeofday () in
-    print_name ();
-    timeout_command (tclENV >>= fun env ->
-                     let type_check_fail err (wit, _) =
-                       let tcs, m = List.split (List.map (fun {tac;focus;prediction_index} ->
-                           ((tac, focus), prediction_index)) wit) in
-                       let tstring = synthesize_tactic env tcs in
-                       let err = match err with
-                         | `Type_error (env, sigma, err) ->
-                           Himsg.explain_type_error env sigma @@ Type_errors.map_ptype_error EConstr.of_constr err
-                         | `Pretype_error (env, sigma, err) -> Himsg.explain_pretype_error env sigma err in
-                       let msg = Pp.(str "Typing failure of the following tactic:" ++ fnl () ++
-                                     tstring ++ fnl () ++ str "Typing error:" ++ fnl () ++ err) in
-                       CErrors.anomaly msg in
-                     type_check (commonSearch max_exec) type_check_fail >>=
-                     fun m -> print_success env m start_time; tclUNIT ())
+  let start_time = Unix.gettimeofday () in
+  timeout_command (tclENV >>= fun env ->
+                   let type_check_fail err (wit, _) =
+                     let tcs, m = List.split (List.map (fun {tac;focus;prediction_index} ->
+                         ((tac, focus), prediction_index)) wit) in
+                     let tstring = synthesize_tactic env tcs in
+                     let err = match err with
+                       | `Type_error (env, sigma, err) ->
+                         Himsg.explain_type_error env sigma @@ Type_errors.map_ptype_error EConstr.of_constr err
+                       | `Pretype_error (env, sigma, err) -> Himsg.explain_pretype_error env sigma err in
+                     let msg = Pp.(str "Typing failure of the following tactic:" ++ fnl () ++
+                                   tstring ++ fnl () ++ str "Typing error:" ++ fnl () ++ err) in
+                     CErrors.anomaly msg in
+                   type_check (commonSearch max_exec) type_check_fail >>=
+                   fun m -> print_success env m start_time; tclUNIT ())
 
 let nested_search_solutions_field : (glob_tactic_expr * int) list list Evd.Store.field = Evd.Store.field ()
 let push_nested_search_solutions tcs =
@@ -817,9 +811,12 @@ let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO:
     tclEVARMAP >>= fun sigma ->
     let sideff = Evd.eval_side_effects sigma in
     empty_localdb () >>= save_db env sideff.seff_private in
-  match Benchmark.should_benchmark path with
-  | None -> ptac
-  | Some (time, deterministic) -> benchmarkSearch path time deterministic <*> ptac
+  get_benchmarked () >>= fun benchmarked ->
+  set_benchmarked () <*>
+  if benchmarked then ptac else
+    match Benchmark.should_benchmark path with
+    | None -> ptac
+    | Some (time, deterministic) -> benchmarkSearch path time deterministic <*> ptac
 
 let hide_interp_t global t ot id name =
   let open Proofview in
