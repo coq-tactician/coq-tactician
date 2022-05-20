@@ -576,6 +576,28 @@ let commonSearch max_exec =
              dec_search_recursion_depth () >>= fun () -> setFlags () <*> tclUNIT (wit, !tac_exec_count))
             (fun (e, i) -> setFlags () <*> tclZERO ~info:i e))
 
+let type_check t fail =
+  let open Proofview in
+  let open Notations in
+  Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
+  let gls = List.map Goal.goal gls in
+  t >>= fun res ->
+  tclENV >>= fun env -> tclEVARMAP >>= fun sigma ->
+  try
+    ignore (List.fold_left (fun sigma ev ->
+        let Evd.{ evar_body; evar_concl; _ } as info = Evd.find sigma ev in
+        let env = Environ.reset_with_named_context (Evd.evar_filtered_hyps info) env in
+        match evar_body with
+        | Evd.Evar_empty -> sigma
+        | Evd.Evar_defined term -> Typing.check env sigma term evar_concl
+      ) sigma gls);
+    tclUNIT res
+  with
+  |Type_errors.TypeError (env, err) ->
+    fail (`Type_error (env, sigma, err)) res
+  | Pretype_errors.PretypeError (env, map, err) ->
+    fail (`Pretype_error (env, map, err)) res
+
 let benchmarked_field : bool Evd.Store.field = Evd.Store.field ()
 let get_benchmarked () =
   modify_field benchmarked_field (fun b -> b, b) (fun () -> false)
@@ -599,16 +621,21 @@ let benchmarkSearch name time deterministic : unit Proofview.tactic =
                                         ; time = tdiff
                                         ; inferences = count }));
   in
-  let print_name () =
-      Benchmark.(send_bench_result (Started (Libnames.string_of_path name))) in
-  get_benchmarked () >>= fun benchmarked ->
-  if benchmarked then tclUNIT () else
-    set_benchmarked () <*>
-    let start_time = Unix.gettimeofday () in
-    print_name ();
-    timeout_command (tclENV >>= fun env ->
-                     commonSearch max_exec >>=
-                     fun m -> print_success env m start_time; tclUNIT ())
+  let start_time = Unix.gettimeofday () in
+  timeout_command (tclENV >>= fun env ->
+                   let type_check_fail err (wit, _) =
+                     let tcs, m = List.split (List.map (fun {tac;focus;prediction_index} ->
+                         ((tac, focus), prediction_index)) wit) in
+                     let tstring = synthesize_tactic env tcs in
+                     let err = match err with
+                       | `Type_error (env, sigma, err) ->
+                         Himsg.explain_type_error env sigma @@ Type_errors.map_ptype_error EConstr.of_constr err
+                       | `Pretype_error (env, sigma, err) -> Himsg.explain_pretype_error env sigma err in
+                     let msg = Pp.(str "Typing failure of the following tactic:" ++ fnl () ++
+                                   tstring ++ fnl () ++ str "Typing error:" ++ fnl () ++ err) in
+                     CErrors.anomaly msg in
+                   type_check (commonSearch max_exec) type_check_fail >>=
+                   fun m -> print_success env m start_time; tclUNIT ())
 
 let nested_search_solutions_field : (glob_tactic_expr * int) list list Evd.Store.field = Evd.Store.field ()
 let push_nested_search_solutions tcs =
@@ -668,9 +695,29 @@ let pre_vernac_solve id =
   | Some (db, exn, sideff) ->
     let add db_elem = add_to_db (Inline_private_constants.inline env sideff db_elem) in
     (List.iter add @@ List.rev db; Hashtbl.remove int64_to_knn id;
-      match exn with
-      | None -> true
-      | Some exn -> raise exn)
+     match exn with
+     | None -> true
+     | Some exn ->
+       (* TODO: This is truly evil:
+          Because Tactician registers tactics as side-effecting, the tactics are run again at Qed-time.
+          Therefore, we have to actually prevent them from running. However, if tactics throw an exception, we still need to raise those,
+          because the `Fail` command expects them. That works. However, this now causes `Fail` to print failure messages during Qed.
+          In itself, this is not a huge problem, but it causes the IO-tests of some projects to fail (notably Iris). Therefore, we pull out
+          another hugely ugly hack to temporarily block the message of `Fail` from being printed by replacing the formatter.
+          This is extremely dangerous because it cannot be fully guaranteed that the formatter is being reset afterwards. *)
+       let ignore_one_formatter original =
+         let reset () = Topfmt.std_ft := original in
+         Format.(formatter_of_out_functions
+	                 { out_string = (fun _ _ _ -> reset ())
+                   ; out_flush = (fun _ -> reset ())
+                   ; out_newline = (fun _ -> reset ())
+                   ; out_spaces = (fun _ -> reset ())
+                   ; out_indent = (fun _ -> reset ())
+                   }) in
+       if not !Flags.quiet || !Vernacinterp.test_mode then begin
+         Topfmt.std_ft := ignore_one_formatter !Topfmt.std_ft;
+          raise exn
+       end else raise exn)
   | None -> Hashtbl.add int64_to_knn id ([], None, Safe_typing.empty_private_constants); false
 
 let save_exn id exn =
@@ -756,17 +803,25 @@ let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO:
     let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic env t) in
     let string_tac t = Pp.string_of_ppcmds (tac_pp t) in
     let tryadd (execs, tac) =
-      let s = string_tac tac in
-      (* TODO: Move this to annotation time *)
-      if (String.equal s "admit" || String.equal s "synth" || String.is_prefix "synth with cache" s
-          || String.is_prefix "tactician ignore" s)
-      then () else add_to_db2 id (execs, tac) sideff const path;
+      let filter =
+        try
+          (* In v8.11 and v8.12, this is know to very occasionally crash (particularly for 'simpl in').
+             Therefore, we have to wrap it in a try-catch. *)
+          let s = string_tac tac in
+          (* TODO: Move this to annotation time *)
+          String.equal s "admit" || String.equal s "synth" || String.is_prefix "synth with cache" s
+          || String.is_prefix "tactician ignore" s || String.is_prefix "fix" s || String.is_prefix "cofix" s
+          || String.is_prefix "change_no_check" s || String.is_prefix "exact_no_checK" s || String.is_prefix "native_cast_no_check" s
+          || String.is_prefix "vm_cast_no_check" s
+        with _ -> false in
+      if filter then () else add_to_db2 id (execs, tac) sideff const path;
       try (* This is purely for parsing bug detection and could be removed for performance reasons *)
+        let s = string_tac tac in
         let _ = Pcoq.parse_string Pltac.tactic_eoi s in ()
       with _ ->
-        Feedback.msg_warning (Pp.str (
-            "Tactician detected a printing/parsing problem " ^
-            "for the following tactic. Please report. " ^ s)) in
+        Feedback.msg_warning Pp.(
+            str "Tactician detected a printing/parsing problem " ++
+            str "for the following tactic. Please report.") in
     List.iter (fun trp -> tryadd trp) @@ List.rev db; tclUNIT () in
   let rtac = decompose_annotate tac record_tac_complete in
   let ptac = Tacinterp.eval_tactic rtac in
@@ -774,9 +829,12 @@ let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO:
     tclEVARMAP >>= fun sigma ->
     let sideff = Evd.eval_side_effects sigma in
     empty_localdb () >>= save_db env sideff.seff_private in
-  match Benchmark.should_benchmark path with
-  | None -> ptac
-  | Some (time, deterministic) -> benchmarkSearch path time deterministic <*> ptac
+  get_benchmarked () >>= fun benchmarked ->
+  set_benchmarked () <*>
+  if benchmarked then ptac else
+    match Benchmark.should_benchmark path with
+    | None -> ptac
+    | Some (time, deterministic) -> benchmarkSearch path time deterministic <*> ptac
 
 let hide_interp_t global t ot id name =
   let open Proofview in
@@ -802,3 +860,4 @@ let tactician_ignore t =
   let open Notations in
   get_record () >>= fun b ->
   set_record false <*> t <*> set_record b
+
