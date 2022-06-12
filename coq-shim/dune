@@ -12,7 +12,7 @@
  (package coq-tactician)
 )
 (install
- (files coqc.real coqtop.real) ; mount point for the real coq
+ (files coqc.real coqtop.real coqide.real) ; mount point for the real coq
  (section lib)
  (package coq-tactician)
 )
