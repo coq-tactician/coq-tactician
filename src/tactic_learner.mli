@@ -20,6 +20,8 @@ module type TacticianStructures = sig
   val proof_state_hypotheses  : proof_state -> named_context
   val proof_state_goal        : proof_state -> term
   val proof_state_evar        : proof_state -> Evar.t
+  val proof_state_sigma       : proof_state -> Evd.evar_map
+  val proof_state_dependent   : proof_state -> Evar.t -> proof_state
   val proof_state_equal       : proof_state -> proof_state -> bool
   val proof_state_independent : proof_state -> bool
 

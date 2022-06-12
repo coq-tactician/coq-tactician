@@ -27,6 +27,8 @@ module type TacticianStructures = sig
   val proof_state_hypotheses  : proof_state -> named_context
   val proof_state_goal        : proof_state -> term
   val proof_state_evar        : proof_state -> Evar.t
+  val proof_state_sigma       : proof_state -> Evd.evar_map
+  val proof_state_dependent   : proof_state -> Evar.t -> proof_state
   val proof_state_equal       : proof_state -> proof_state -> bool
   val proof_state_independent : proof_state -> bool
 
@@ -71,11 +73,16 @@ module TS = struct
   let term_sexpr t = constr2s t
   let term_repr t = t
 
-  type proof_state = named_context * term * Evar.t
+  type single_proof_state = named_context * term * Evar.t
+  type proof_state = single_proof_state Evar.Map.t * single_proof_state
 
-  let proof_state_hypotheses (hyps, _, _) = hyps
-  let proof_state_goal (_, goal, _) = goal
-  let proof_state_evar (_, _, evar) = evar
+  let proof_state_hypotheses (_, (hyps, _, _)) = hyps
+  let proof_state_goal (_, (_, goal, _)) = goal
+  let proof_state_evar (_, (_, _, evar)) = evar
+  let proof_state_dependent (map, _) var = map, Evar.Map.find var map
+  let proof_state_sigma ((map, _) : proof_state) =
+    Evar.Map.fold (fun e (ctx, concl, _) evd ->
+        Evd.add evd e @@ Evd.make_evar (Environ.val_of_named_context ctx) (EConstr.of_constr concl)) map Evd.empty
 
   let proof_state_equal _ps1 _ps2 = false
   let proof_state_independent _ps = false
@@ -115,12 +122,26 @@ module TS = struct
     ; tactic     : tactic }
 end
 
+let evar_to_proof_state sigma e =
+  let info = Evd.find_undefined sigma e in
+  let to_term t = EConstr.to_constr ~abort_on_undefined_evars:false sigma t in
+  let hyps = List.map (Tactician_util.map_named to_term) @@ Evd.evar_filtered_context info in
+  let goal = to_term @@ Evd.evar_concl info in
+  hyps, goal, e
+
+let calculate_deps sigma e =
+  let rec aux acc e =
+    if Evar.Set.mem e acc then acc else
+      Evar.Set.fold (fun e acc -> aux acc e)
+        (Evd.evars_of_filtered_evar_info sigma @@ Evd.find_undefined sigma e) acc
+  in aux (Evar.Set.singleton e) e
+
 let goal_to_proof_state ps =
-  let map = Goal.sigma ps in
-  let to_term t = EConstr.to_constr ~abort_on_undefined_evars:false map t in
-  let goal = to_term (Goal.concl ps) in
-  let hyps = EConstr.Unsafe.to_named_context (Proofview.Goal.hyps ps) in
-  hyps, goal, Goal.goal ps
+  let e = Goal.goal ps in
+  let sigma = Goal.sigma ps in
+  let ctx = calculate_deps sigma e in
+  let ctx = Evar.Map.bind (evar_to_proof_state sigma) ctx in
+  ctx, Evar.Map.find e ctx
 
 type data_status =
   | Original
