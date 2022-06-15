@@ -483,8 +483,7 @@ let print_rank debug env rank =
                                      (Pp.string_of_ppcmds (tac_pp env t))) rank in
   Pp.str (String.concat "\n" strs)
 
-let userPredict =
-  let debug = false in
+let userPredict debug =
   let open Proofview in
   let open Notations in
   tclENV >>= fun env -> predict () >>= fun (_learner, cont) -> cont >>=
@@ -509,7 +508,7 @@ let term_from_goal sigma gl =
   | Evd.Evar_defined term -> EConstr.to_constr sigma term
 
 let tac_exec_count = ref 0
-let tacpredict max_reached =
+let tacpredict debug max_reached =
   let open Proofview in
   let open Notations in
   predict () >>= fun (learner, cont) ->
@@ -522,7 +521,7 @@ let tacpredict max_reached =
                let env = Goal.env gl in
                push_witness { tac = t; focus; prediction_index = i } <*>
                (tac_exec_count := 1 + !tac_exec_count;
-                tclDebugTac t env false) >>= fun () ->
+                tclDebugTac t env debug) >>= fun () ->
                Goal.goals >>= fun gls ->
                tclEVARMAP >>= fun sigma ->
                let term = term_from_goal sigma gl in
@@ -551,7 +550,7 @@ let dec_search_recursion_depth () =
 let get_search_recursion_depth () =
   modify_field search_recursion_depth_field (fun n -> n, n) (fun () -> 0)
 
-let commonSearch max_exec =
+let commonSearch debug max_exec =
     let open Proofview in
     let open Notations in
     (* TODO: Remove this hack *)
@@ -562,7 +561,7 @@ let commonSearch max_exec =
        expressions. But allowing infinite nesting will just lead to divergence. *)
     inc_search_recursion_depth () >>= fun n ->
     if n >= max_recursion_depth then Tacticals.New.tclZEROMSG (Pp.str "too much search nesting") else
-      tacpredict max_reached >>= fun predict ->
+      tacpredict debug max_reached >>= fun predict ->
       tclLIFT (NonLogical.make (fun () -> CWarnings.get_flags ())) >>= (fun oldFlags ->
           (* TODO: Find a way to reset dumbglob to original value. This is a temporary hack. *)
           let doFlags = n = 0 in
@@ -635,7 +634,7 @@ let benchmarkSearch name time deterministic : unit Proofview.tactic =
                      let msg = Pp.(str "Typing failure of the following tactic:" ++ fnl () ++
                                    tstring ++ fnl () ++ str "Typing error:" ++ fnl () ++ err) in
                      CErrors.anomaly msg in
-                   type_check (commonSearch max_exec) type_check_fail >>=
+                   type_check (commonSearch false max_exec) type_check_fail >>=
                    fun m -> print_success env m start_time; tclUNIT ())
 
 let nested_search_solutions_field : (glob_tactic_expr * int) list list Evd.Store.field = Evd.Store.field ()
@@ -643,10 +642,10 @@ let push_nested_search_solutions tcs =
   modify_field nested_search_solutions_field (fun acc -> tcs :: acc, ()) (fun () -> [])
 let empty_nested_search_solutions () =
   modify_field nested_search_solutions_field (fun acc -> [], acc) (fun () -> [])
-let userSearch =
+let userSearch debug =
     let open Proofview in
     let open Notations in
-    tclUNIT () >>= fun () -> commonSearch None >>= fun (wit, _count) -> get_search_recursion_depth () >>= fun n ->
+    tclUNIT () >>= fun () -> commonSearch debug None >>= fun (wit, _count) -> get_search_recursion_depth () >>= fun n ->
     let tcs, _ = List.split (List.map (fun {tac;focus;prediction_index} ->
         ((tac, focus), prediction_index)) wit) in
     if n >= 1 then push_nested_search_solutions tcs else
