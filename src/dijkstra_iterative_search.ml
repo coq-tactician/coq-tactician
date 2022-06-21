@@ -59,4 +59,4 @@ let rec tclSearchDijkstraIterative d max_reached predict : unit tactic =
         tclSearchDijkstraIterative d max_reached predict
       | (e, info) -> tclZERO ~info e )
 
-(* let () = register_search_strategy "dijkstra iterative search" (tclSearchDijkstraIterative 0.) *)
+let () = register_search_strategy "dijkstra iterative search" (tclSearchDijkstraIterative 0.)

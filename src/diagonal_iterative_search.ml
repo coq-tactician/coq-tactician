@@ -51,4 +51,4 @@ let rec tclSearchDiagonalIterative d max_reached predict : unit tactic =
         (* Feedback.msg_notice Pp.(str "----------- new iteration : " ++ int ( d * 2)); *)
         tclSearchDiagonalIterative (d * 2) max_reached predict)
 
-let () = register_search_strategy "diagonal iterative search" (tclSearchDiagonalIterative 8)
+(* let () = register_search_strategy "diagonal iterative search" (tclSearchDiagonalIterative 8) *)
