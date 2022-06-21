@@ -46,7 +46,7 @@ let tclSearchDijkstraDFS max_reached predict max_dfs =
   aux max_dfs >>= fun _ -> tclUNIT ()
 
 let rec tclSearchDijkstraIterative d max_reached predict : unit tactic =
-  (tclLIFT (NonLogical.print_info (Pp.str ("Iterative depth: " ^ string_of_float d)))) <*>
+  (* (tclLIFT (NonLogical.print_info (Pp.str ("Iterative depth: " ^ string_of_float d)))) <*> *)
   if max_reached () then Tacticals.New.tclZEROMSG (Pp.str "No more executions") else
   tclOR
     (tclSearchDijkstraDFS max_reached predict d)
@@ -55,7 +55,7 @@ let rec tclSearchDijkstraIterative d max_reached predict : unit tactic =
         Tacticals.New.tclZEROMSG (Pp.str "Tactician failed: there are no more tactics left")
       | (DepthEnd delta, _) ->
         let d = d -. delta +. 1. in
-        Feedback.msg_notice Pp.(str "----------- new iteration : " ++ real d ++ str " previous reached " ++ real delta);
+        (* Feedback.msg_notice Pp.(str "----------- new iteration : " ++ real d ++ str " previous reached " ++ real delta); *)
         tclSearchDijkstraIterative d max_reached predict
       | (e, info) -> tclZERO ~info e )
 
