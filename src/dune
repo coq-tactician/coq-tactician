@@ -8,6 +8,7 @@
    ltacrecord
    inline_private_constants
    diagonal_iterative_search
+   dijkstra_iterative_search
    offline_evaluation_simulator_learner
    decomposition_learner
    naiveknn_learner
