@@ -15,14 +15,19 @@ TACTIC EXTEND tacticianignore
 END
 
 TACTIC EXTEND synth
-| [ "ml_synth" ] ->   { Tactician_ltac1_record_plugin.Ltacrecord.userSearch }
+| [ "ml_synth" ] ->   { Tactician_ltac1_record_plugin.Ltacrecord.userSearch false }
+| [ "ml_debug_synth" ] ->   { Tactician_ltac1_record_plugin.Ltacrecord.userSearch true }
 END
 
 VERNAC COMMAND EXTEND TacticianSuggest CLASSIFIED AS QUERY STATE proof_query
 | [ "Suggest" ]
   -> { fun ~pstate -> Declare.Proof.fold ~f:(fun p ->
             ignore (Proof.solve (Goal_select.get_default_goal_selector ()) None
-         Tactician_ltac1_record_plugin.Ltacrecord.userPredict p)) pstate }
+         (Tactician_ltac1_record_plugin.Ltacrecord.userPredict false) p)) pstate }
+| [ "Debug" "Suggest" ]
+  -> { fun ~pstate -> Declare.Proof.fold ~f:(fun p ->
+            ignore (Proof.solve (Goal_select.get_default_goal_selector ()) None
+         (Tactician_ltac1_record_plugin.Ltacrecord.userPredict true) p)) pstate }
 END
 
 TACTIC EXTEND type_check

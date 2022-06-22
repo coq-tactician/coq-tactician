@@ -18,4 +18,6 @@ Tactic Notation (at level 5) "synth" "with" "cache" tactic3(t) := solve [t] || (
 
 Tactic Notation (at level 5) "synth" := ml_synth.
 
+Tactic Notation (at level 5) "debug" "synth" := ml_debug_synth.
+
 Tactic Notation (at level 5) "tactician" "ignore" tactic3(t) := ml_tactician_ignore t.
