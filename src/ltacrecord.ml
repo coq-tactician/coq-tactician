@@ -898,7 +898,16 @@ let vernac_solve ~pstate n info tcom b id =
                diverge. And since these numbers may be referenced later, we must keep this consistent. *)
             let seff1 = (Evd.eval_side_effects (Proof.data p).sigma).seff_private in
             let seff2 = (Evd.eval_side_effects (Proof.data pstate1).sigma).seff_private in
-            if seff1 <> seff2 then
+            (* TODO: Temporary hack to prevent synth from being executed twice and producing output twice *)
+            let is_synth =
+              try
+                let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic (Global.env ()) t) in
+                let ist = Genintern.empty_glob_sign (Global.env ()) in
+                let tcom = Tacintern.intern_pure_tactic ist tcom in
+                let s = Pp.string_of_ppcmds (tac_pp tcom) in
+              String.equal s "debug synth" || String.equal s "synth" || String.is_prefix "synth with cache" s
+            with _ -> false in
+            if seff1 <> seff2 || is_synth then
               pstate1, status1 else
               try
                 let (pstate2,status2) =
