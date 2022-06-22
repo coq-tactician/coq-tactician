@@ -14,7 +14,7 @@ jobs:
         with:
           opam_file: 'coq-tactician.opam'
           coq_version: 'dev'
-          ocaml_version: '4.12-flambda'
+          ocaml_version: '4.13-flambda'
           install: |
             startGroup "Install dependencies"
               opam repo add coq-extra-dev https://coq.inria.fr/opam/extra-dev
