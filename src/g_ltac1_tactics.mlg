@@ -15,7 +15,8 @@ TACTIC EXTEND tacticianignore
 END
 
 TACTIC EXTEND synth
-| [ "ml_synth" ] ->   { Tactician_ltac1_record_plugin.Ltacrecord.userSearch }
+| [ "ml_synth" ] ->   { Tactician_ltac1_record_plugin.Ltacrecord.userSearch false }
+| [ "ml_debug_synth" ] ->   { Tactician_ltac1_record_plugin.Ltacrecord.userSearch true }
 END
 
 VERNAC COMMAND EXTEND TacticianSuggest CLASSIFIED AS QUERY
@@ -25,7 +26,15 @@ VERNAC COMMAND EXTEND TacticianSuggest CLASSIFIED AS QUERY
         let _ =
           Proof_global.with_current_proof (fun _ p ->
               Pfedit.solve (Goal_select.get_default_goal_selector ()) None
-                Tactician_ltac1_record_plugin.Ltacrecord.userPredict
+                (Tactician_ltac1_record_plugin.Ltacrecord.userPredict false)
+                p) pstate in Some pstate) }
+| ![ proof ] [ "Debug" "Suggest" ]
+  -> { fun ~pstate ->
+    Vernacentries.vernac_require_open_proof ~pstate (fun ~pstate ->
+        let _ =
+          Proof_global.with_current_proof (fun _ p ->
+              Pfedit.solve (Goal_select.get_default_goal_selector ()) None
+                (Tactician_ltac1_record_plugin.Ltacrecord.userPredict true)
                 p) pstate in Some pstate) }
 END
 
