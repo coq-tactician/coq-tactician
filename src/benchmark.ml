@@ -82,7 +82,13 @@ let benchoptions =
                        let ic = Unix.in_channel_of_descr Unix.stdin in
                        let oc = Unix.out_channel_of_descr Unix.stdin in
                        benchmarking := Some (ic, oc);
-                       Tactic_learner_internal.disable_queue ())
+                       Tactic_learner_internal.disable_queue ();
+                       (* Crazy corner case: We need to force the creation of an empty model.
+                          This is needed because if a benchmark is started with an empty model, that model
+                          will be initialized twice. Once inside of the forked benchmarking process and once
+                          inside of the main process. This is problematic when the model itself creates
+                          sub-processes... *)
+                       ignore (Tactic_learner_internal.learner_get ()))
                   | false -> ())}
 
 let deterministicoptions =
