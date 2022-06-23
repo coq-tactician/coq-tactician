@@ -1,0 +1,24 @@
+From ae141a646d14af1921d667736abe052b8a7ca6e4 Mon Sep 17 00:00:00 2001
+From: Lasse Blaauwbroek <lasse@blaauwbroek.eu>
+Date: Thu, 23 Jun 2022 04:39:07 +0200
+Subject: [PATCH] Patch to enable Tactician support
+
+---
+ coq/theories/Init/Notations.v | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/coq/theories/Init/Notations.v b/coq/theories/Init/Notations.v
+index a641b0c0..a5477d0c 100644
+--- a/coq/theories/Init/Notations.v
++++ b/coq/theories/Init/Notations.v
+@@ -94,5 +94,5 @@ Open Scope type_scope.
+ (** ML Tactic Notations *)
+ 
+ Declare ML Module "ltac_plugin".
+-
+-Global Set Default Proof Mode "Classic".
++From Tactician Require Export Ltac1.Record.
++Global Set Default Proof Mode "Tactician Ltac1".
+-- 
+2.36.1
+
