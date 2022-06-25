@@ -57,7 +57,7 @@ let inline env extra_ctx extra_substs { outcomes; tactic; name; status; path } =
     | Evar (ev, substs) -> Constr.mkEvar (ev, Array.append extra_substs substs)
     | _ -> Constr.map shift_evars c in
   let inline_single_proof_state (ctx, goal, evar) =
-    let ctx = ctx @ List.map (Context.Named.Declaration.map_constr inline_constr) ctx in
+    let ctx = extra_ctx @ List.map (Context.Named.Declaration.map_constr inline_constr) ctx in
     let goal = inline_constr goal in
     ctx, goal, evar in
   let inline_proof_state (map, ps) =
