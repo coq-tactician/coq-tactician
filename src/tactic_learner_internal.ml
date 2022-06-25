@@ -131,9 +131,10 @@ let evar_to_proof_state sigma e =
 
 let calculate_deps sigma e =
   let rec aux acc e =
-    if Evar.Set.mem e acc then acc else
-      Evar.Set.fold (fun e acc -> aux acc e)
-        (Evd.evars_of_filtered_evar_info sigma @@ Evd.find_undefined sigma e) acc
+    Evar.Set.fold (fun e acc ->
+        if Evar.Set.mem e acc then acc else
+          aux (Evar.Set.add e acc) e)
+      (Evd.evars_of_filtered_evar_info sigma @@ Evd.find_undefined sigma e) acc
   in aux (Evar.Set.singleton e) e
 
 let goal_to_proof_state ps =
