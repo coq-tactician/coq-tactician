@@ -886,7 +886,7 @@ let vernac_solve ~pstate n info tcom b id =
                 let ist = Genintern.empty_glob_sign (Global.env ()) in
                 let tcom = Tacintern.intern_pure_tactic ist tcom in
                 let s = Pp.string_of_ppcmds (tac_pp tcom) in
-              String.equal s "debug synth" || String.equal s "synth" || String.is_prefix "synth with cache" s
+              String.equal s "debug synth" || String.equal s "synth"
             with _ -> false in
             if seff1 <> seff2 || is_synth then
               pstate1, status1 else
