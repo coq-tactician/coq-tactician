@@ -24,7 +24,12 @@
 (install
  (files
    coq-hott.patch
+   coq-hott.8.10.patch
    coq-hott.8.11.patch
+   coq-hott.8.12.patch
+   coq-hott.8.13.patch
+   coq-hott.8.14.patch
+   coq-hott.8.15.patch
  )
  (section share)
  (package coq-tactician)
