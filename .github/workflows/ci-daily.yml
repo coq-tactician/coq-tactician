@@ -22,16 +22,19 @@ jobs:
             ocaml_version: 4.11-flambda
           - branch: coq8.13
             coq_version: 8.13
-            ocaml_version: 4.12-flambda
+            ocaml_version: 4.13-flambda
           - branch: coq8.14
             coq_version: 8.14
-            ocaml_version: 4.12-flambda
+            ocaml_version: 4.13-flambda
           - branch: coq8.15
             coq_version: 8.15
-            ocaml_version: 4.12-flambda
+            ocaml_version: 4.13-flambda
+          - branch: coq8.16
+            coq_version: 8.16
+            ocaml_version: 4.13-flambda
           - branch: coqdev
             coq_version: dev
-            ocaml_version: 4.12-flambda
+            ocaml_version: 4.13-flambda
     steps:
       - uses: actions/checkout@v2
         with:
