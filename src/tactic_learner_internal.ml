@@ -41,6 +41,12 @@ module type TacticianStructures = sig
   val tactic_substitute      : tactic -> id_map -> tactic
   val tactic_globally_equal  : tactic -> tactic -> bool
 
+  type tactic_result
+  val tactic_result_term      : tactic_result -> term
+  val tactic_result_sigma     : tactic_result -> Evd.evar_map
+  val tactic_result_dependent : tactic_result -> Evar.t -> proof_state
+  val tactic_result_states    : tactic_result -> proof_state list
+
   (* Proof tree with sharing. Behaves as a Directed Acyclic Tree. *)
   type proof_dag =
     | End
@@ -57,8 +63,7 @@ module type TacticianStructures = sig
     { parents  : (proof_state * proof_step) list
     ; siblings : proof_dag
     ; before   : proof_state
-    ; term     : term
-    ; after    : proof_state list }
+    ; result   : tactic_result }
 
   type prediction =
     { confidence : float
@@ -75,6 +80,7 @@ module TS = struct
 
   type single_proof_state = named_context * term * Evar.t
   type proof_state = single_proof_state Evar.Map.t * single_proof_state
+  type tactic_result = term * single_proof_state Evar.Map.t * single_proof_state list
 
   let proof_state_hypotheses (_, (hyps, _, _)) = hyps
   let proof_state_goal (_, (_, goal, _)) = goal
@@ -97,6 +103,13 @@ module TS = struct
   let tactic_substitute tac _ls = tac
   let tactic_globally_equal _tac1 _tac2 = false
 
+  let tactic_result_term (t, _, _) = t
+  let tactic_result_sigma (_, map, _) =
+    Evar.Map.fold (fun e (ctx, concl, _) evd ->
+        Evd.add evd e @@ Evd.make_evar (Environ.val_of_named_context ctx) (EConstr.of_constr concl)) map Evd.empty
+  let tactic_result_dependent (_, map, _) var = map, Evar.Map.find var map
+  let tactic_result_states (_, map, ls) = List.map (fun ps -> map, ps) ls
+
   (* Proof tree with sharing. Behaves as a Directed Acyclic Tree. *)
   type proof_dag =
     | End
@@ -113,8 +126,7 @@ module TS = struct
     { parents  : (proof_state * proof_step) list
     ; siblings : proof_dag
     ; before   : proof_state
-    ; term     : term
-    ; after    : proof_state list }
+    ; result   : tactic_result }
 
   type prediction =
     { confidence : float
@@ -143,6 +155,13 @@ let goal_to_proof_state ps =
   let ctx = calculate_deps sigma e in
   let ctx = Evar.Map.bind (evar_to_proof_state sigma) ctx in
   ctx, Evar.Map.find e ctx
+
+let make_result term sigma pss =
+  let ctx = Evd.evars_of_term sigma term in
+  let ctx = Evar.Set.fold (fun e ctx -> Evar.Set.union ctx (calculate_deps sigma e)) ctx ctx in
+  let ctx = Evar.Map.bind (evar_to_proof_state sigma) ctx in
+  let term = EConstr.to_constr ~abort_on_undefined_evars:false sigma term in
+  term, ctx, List.map (fun ps -> Evar.Map.find (Goal.goal ps) ctx) pss
 
 type data_status =
   | Original

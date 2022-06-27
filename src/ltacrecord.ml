@@ -56,12 +56,15 @@ let subst_outcomes (s, { outcomes; tactic; name; status=_; path }) =
   and subst_ps {executions; tactic} =
     { executions = List.map (fun (ps, pd) -> subst_pf ps, subst_pd pd) executions
     ; tactic = subst_tac tactic } in
-  let outcomes = List.map (fun {parents; siblings; before; term; after} ->
+  let subst_result (term, sigma, pss) =
+    Mod_subst.subst_mps s term,
+    Evar.Map.map subst_single_pf sigma,
+    List.map subst_single_pf pss in
+  let outcomes = List.map (fun { parents; siblings; before; result } ->
       { parents = List.map (fun (psa, pse) -> (subst_pf psa, subst_ps pse)) parents
       ; siblings = subst_pd siblings
       ; before = subst_pf before
-      ; term = Mod_subst.subst_mps s term
-      ; after = List.map subst_pf after }) outcomes in
+      ; result = subst_result result }) outcomes in
   let name = Mod_subst.subst_constant s name in
   let path' =
     (* TODO: This is not ideal, but seems to work in practice *)
@@ -111,10 +114,10 @@ let rebuild_outcomes { outcomes; tactic; name; status=_; path } =
   and rebuild_ps {executions; tactic} =
     { executions = List.map (fun (ps, pd) -> ps, rebuild_pd pd) executions
     ; tactic = rebuild_tac tactic } in
-  let outcomes = List.map (fun {parents; siblings; before; term; after} ->
+  let outcomes = List.map (fun { parents; siblings; before; result } ->
       { parents = List.map (fun (psa, pse) -> (psa, rebuild_ps pse)) parents
       ; siblings = rebuild_pd siblings
-      ; before; term; after }) outcomes in
+      ; before; result }) outcomes in
   { outcomes; tactic = rebuild_tac tactic
   ; name; status = Discharged path; path = Lib.make_path @@ Libnames.basename path }
 
@@ -129,10 +132,10 @@ let discharge_outcomes env { outcomes; tactic; name; status; path } =
     and genarg_print_ps {executions; tactic} =
       { executions = List.map (fun (ps, pd) -> ps, genarg_print_pd pd) executions
       ; tactic = genarg_print_tac tactic } in
-    let outcomes = List.map (fun {parents; siblings; before; term; after} ->
+    let outcomes = List.map (fun { parents; siblings; before; result } ->
         { parents = List.map (fun (psa, pse) -> (psa, genarg_print_ps pse)) parents
         ; siblings = genarg_print_pd siblings
-        ; before; term; after }) outcomes in
+        ; before; result }) outcomes in
     { outcomes; tactic = genarg_print_tac tactic; name; status; path }
 
 let section_ltac_helper bodies =
@@ -212,7 +215,7 @@ let add_to_db (x : data_in) =
   ignore(Lib.add_leaf (Names.Label.to_id @@ Names.Constant.label x.name) (in_db x))
 
 (* Types and accessors for state in the proof monad *)
-type localdb = ((Proofview.Goal.t * Constr.t * Proofview.Goal.t list) list * glob_tactic_expr) list
+type localdb = ((Proofview.Goal.t * EConstr.t * Evd.evar_map * Proofview.Goal.t list) list * glob_tactic_expr) list
 type goal_stack = Proofview.Goal.t list list
 type tactic_trace = glob_tactic_expr list
 type state_id_stack = int list
@@ -340,21 +343,20 @@ let push_tactic_trace tac =
 let get_tactic_trace gl =
   get_field_goal2 tactic_trace_field gl (fun _ -> [])
 
-let mk_outcome (st, term, _sts) =
+let mk_outcome (st, term, sigma, sts) =
   (* let mem = (List.map TS.tactic_make (get_tactic_trace st)) in *)
   let st : proof_state = goal_to_proof_state st in
   { parents = [] (* List.map (fun tac -> (st (\* TODO: Fix *\), { executions = []; tactic = tac })) mem *)
   ; siblings = End
   ; before = st
-  ; term
-  ; after = [] (* List.map goal_to_proof_state sts *) }
+  ; result = make_result term sigma sts }
 
 let mk_data_in outcomes tactic name path =
   let tactic = TS.tactic_make tactic in
   let outcomes = List.map mk_outcome outcomes in
   { outcomes; tactic; name; status = Original; path }
 
-let add_to_db2 id ((outcomes, tactic) : (Proofview.Goal.t * Constr.t * Proofview.Goal.t list) list *
+let add_to_db2 id ((outcomes, tactic) : (Proofview.Goal.t * EConstr.t * Evd.evar_map * Proofview.Goal.t list) list *
                                         glob_tactic_expr)
     sideff name path =
   let data = mk_data_in outcomes tactic name path in
@@ -502,10 +504,10 @@ let term_from_goal sigma gl =
   match evar_body with
   | Evd.Evar_empty ->
     let ctx = Array.of_list @@
-      List.map (fun pt -> Constr.mkVar @@ Context.Named.Declaration.get_id pt) @@
+      List.map (fun pt -> EConstr.mkVar @@ Context.Named.Declaration.get_id pt) @@
       Goal.hyps gl in
-    Constr.mkEvar (Goal.goal gl, ctx)
-  | Evd.Evar_defined term -> EConstr.to_constr sigma term
+    EConstr.mkEvar (Goal.goal gl, ctx)
+  | Evd.Evar_defined term -> term
 
 let tac_exec_count = ref 0
 let tacpredict debug max_reached =
@@ -522,10 +524,10 @@ let tacpredict debug max_reached =
                push_witness { tac = t; focus; prediction_index = i } <*>
                (tac_exec_count := 1 + !tac_exec_count;
                 tclDebugTac t env debug) >>= fun () ->
-               Goal.goals >>= fun gls ->
+               Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
                tclEVARMAP >>= fun sigma ->
                let term = term_from_goal sigma gl in
-               let outcome = mk_outcome (gl, term, gls) in
+               let outcome = mk_outcome (gl, term, sigma, gls) in
                tclUNIT (snd @@ learner.evaluate outcome (t, h)))) in
     let transform i (r : Tactic_learner_internal.TS.prediction) =
       { confidence = r.confidence; focus = r.focus; tactic = taceval i r.focus r.tactic } in
@@ -759,7 +761,7 @@ let record_tac (tac2 : glob_tactic_expr) : unit Proofview.tactic =
     List.map (fun gl_before ->
         let term = term_from_goal sigma gl_before in
         let i = get_state_id_goal_top gl_before in
-        (gl_before, term, List.filter_map (fun (j, gl_after) ->
+        (gl_before, term, sigma, List.filter_map (fun (j, gl_after) ->
              if i = j then Some gl_after else None) after_gls)) before_gls in
   get_record () >>= fun b -> if not (should_record b) then tclUNIT () else
     pop_goal_stack () >>= fun before_gls ->
