@@ -68,12 +68,15 @@ let inline env extra_ctx extra_substs { outcomes; tactic; name; status; path } =
   and inline_proof_step { executions; tactic } =
     { executions = List.map (fun (pse, psp) -> inline_proof_state pse, inline_proof_dag psp) executions
     ; tactic = tactic } in
-  let inline_outcome { parents; siblings; before; term; after } =
+  let inline_result (term, map, pss) =
+    shift_evars @@ inline_constr term,
+    Evar.Map.map inline_single_proof_state map,
+    List.map inline_single_proof_state pss in
+  let inline_outcome { parents; siblings; before; result } =
     { parents = List.map (fun (pse, psp) -> inline_proof_state pse, inline_proof_step psp) parents
     ; siblings = inline_proof_dag siblings
     ; before = inline_proof_state before
-    ; term = shift_evars @@ inline_constr term
-    ; after = List.map inline_proof_state after } in
+    ; result = inline_result result } in
   { outcomes = List.map inline_outcome outcomes
   ; tactic = Option.map (fun tac -> tactic_make @@ inline_tactic env @@ tactic_repr tac) tactic
   ; name; status; path }
