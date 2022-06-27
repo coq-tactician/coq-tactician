@@ -141,24 +141,29 @@ let evar_to_proof_state sigma e =
   let goal = to_term @@ Evd.evar_concl info in
   hyps, goal, e
 
-let calculate_deps sigma e =
+let calculate_deps sigma acc e =
   let rec aux acc e =
-    Evar.Set.fold (fun e acc ->
-        if Evar.Set.mem e acc then acc else
+    if Evar.Set.mem e acc then acc else
+      Evar.Set.fold (fun e acc ->
           aux (Evar.Set.add e acc) e)
-      (Evd.evars_of_filtered_evar_info sigma @@ Evd.find_undefined sigma e) acc
-  in aux (Evar.Set.singleton e) e
+        (Evd.evars_of_filtered_evar_info sigma @@ Evd.find_undefined sigma e)
+        (Evar.Set.add e acc)
+  in aux acc e
 
 let goal_to_proof_state ps =
   let e = Goal.goal ps in
   let sigma = Goal.sigma ps in
-  let ctx = calculate_deps sigma e in
+  let ctx = calculate_deps sigma Evar.Set.empty e in
   let ctx = Evar.Map.bind (evar_to_proof_state sigma) ctx in
   ctx, Evar.Map.find e ctx
 
 let make_result term sigma pss =
   let ctx = Evd.evars_of_term sigma term in
-  let ctx = Evar.Set.fold (fun e ctx -> Evar.Set.union ctx (calculate_deps sigma e)) ctx ctx in
+  let ctx = Evar.Set.fold (fun e ctx -> calculate_deps sigma ctx e) ctx ctx in
+  (* NOTE: This should not be necessary, because all proof states should be reachable from the proof term.
+     However, Coq8.11 contains some tactics that wrongly associate some proof states to the wrong tactic.
+     In addition the `unshelve` tactic is screwed up. *)
+  let ctx = List.fold_left (fun ctx ps -> calculate_deps sigma ctx @@ Goal.goal ps) ctx pss in
   let ctx = Evar.Map.bind (evar_to_proof_state sigma) ctx in
   let term = EConstr.to_constr ~abort_on_undefined_evars:false sigma term in
   term, ctx, List.map (fun ps -> Evar.Map.find (Goal.goal ps) ctx) pss
