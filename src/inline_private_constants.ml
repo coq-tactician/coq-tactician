@@ -54,7 +54,7 @@ let inline env extra_ctx consts { outcomes; tactic; name; status; path } =
         Constr.mkVar (Names.Label.to_id @@ Names.Constant.label const)
     | _ -> Constr.map inline_constr c in
   let inline_proof_state (ctx, goal) =
-    let ctx = List.map (Context.Named.Declaration.map_constr inline_constr) (ctx @ List.rev extra_ctx) in
+    let ctx = List.map (Context.Named.Declaration.map_constr inline_constr) (List.rev extra_ctx @ ctx) in
     let goal = inline_constr goal in
     (ctx, goal) in
   let rec inline_proof_dag = function
