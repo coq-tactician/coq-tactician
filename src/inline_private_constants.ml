@@ -47,7 +47,7 @@ let inline_tactic env t =
                } in
   TacticFinderMapper.glob_tactic_expr_map mapper t
 
-let inline env extra_ctx extra_substs { outcomes; tactic; name; status; path } =
+let inline env extra_ctx extra_deps extra_substs { outcomes; tactic; name; status; path } =
   let rec inline_constr c = match Constr.kind c with
     | Const (const, _u) ->
       if Environ.mem_constant const env then c else
@@ -57,6 +57,14 @@ let inline env extra_ctx extra_substs { outcomes; tactic; name; status; path } =
     | Evar (ev, substs) -> Constr.mkEvar (ev, Array.append extra_substs substs)
     | _ -> Constr.map shift_evars c in
   let inline_single_proof_state (ctx, goal, evar) =
+    let open Context.Named.Declaration in
+    let open Names in
+    (* We filter any inlined constants that refer to a hypothesis that does not exist.
+       Note that this can only happen when that hypothesis is a section variable/definition. *)
+    let all_vars = Id.Set.of_list @@ List.map get_id (extra_ctx @ ctx) in
+    let filtered_vars = List.fold_left (fun all (id, deps) ->
+        if Id.Set.subset deps all then all else Id.Set.remove id all) all_vars extra_deps in
+    let extra_ctx = List.filter (fun pt -> Id.Set.mem (get_id pt) filtered_vars) extra_ctx in
     let ctx = List.map (Context.Named.Declaration.map_constr inline_constr) (List.rev extra_ctx @ ctx) in
     let goal = inline_constr goal in
     ctx, goal, evar in
@@ -108,4 +116,9 @@ let inline env sideff t =
         ) consts in
       let extra_substs = Array.of_list @@
         List.map (fun c -> Constr.mkVar @@ Label.to_id @@ Constant.label c) consts in
-      inline env extra_ctx extra_substs t
+      let rec collect_vars vars c = match Constr.kind c with
+        | Var id -> Id.Set.add id vars
+        | _ -> Constr.fold collect_vars vars c in
+      let extra_deps = List.map (fun pt -> get_id pt, fold_constr (fun c ids -> collect_vars ids c) pt Id.Set.empty)
+          extra_ctx in
+      inline env extra_ctx extra_deps extra_substs t
