@@ -145,7 +145,7 @@ let calculate_deps sigma acc e =
   let rec aux acc e =
     if Evar.Set.mem e acc then acc else
       Evar.Set.fold (fun e acc ->
-          aux (Evar.Set.add e acc) e)
+          aux acc e)
         (Evd.evars_of_filtered_evar_info sigma @@ Evd.find_undefined sigma e)
         (Evar.Set.add e acc)
   in aux acc e
@@ -159,7 +159,7 @@ let goal_to_proof_state ps =
 
 let make_result term sigma pss =
   let ctx = Evd.evars_of_term sigma term in
-  let ctx = Evar.Set.fold (fun e ctx -> calculate_deps sigma ctx e) ctx ctx in
+  let ctx = Evar.Set.fold (fun e ctx -> calculate_deps sigma ctx e) ctx Evar.Set.empty in
   (* NOTE: This should not be necessary, because all proof states should be reachable from the proof term.
      However, Coq8.11 contains some tactics that wrongly associate some proof states to the wrong tactic.
      In addition the `unshelve` tactic is screwed up. *)
