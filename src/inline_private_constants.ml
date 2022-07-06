@@ -53,7 +53,6 @@ let inline env extra_ctx extra_substs { outcomes; tactic; name; status; path } =
       if Environ.mem_constant const env then c else
         Constr.mkVar (Names.Label.to_id @@ Names.Constant.label const)
     | _ -> Constr.map inline_constr c in
-<<<<<<< HEAD
   let rec shift_evars c = match Constr.kind c with
     | Evar (ev, substs) -> Constr.mkEvar (ev, Array.append extra_substs substs)
     | _ -> Constr.map shift_evars c in
