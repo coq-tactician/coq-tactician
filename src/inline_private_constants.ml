@@ -53,11 +53,12 @@ let inline env extra_ctx extra_substs { outcomes; tactic; name; status; path } =
       if Environ.mem_constant const env then c else
         Constr.mkVar (Names.Label.to_id @@ Names.Constant.label const)
     | _ -> Constr.map inline_constr c in
+<<<<<<< HEAD
   let rec shift_evars c = match Constr.kind c with
     | Evar (ev, substs) -> Constr.mkEvar (ev, Array.append extra_substs substs)
     | _ -> Constr.map shift_evars c in
   let inline_single_proof_state (ctx, goal, evar) =
-    let ctx = List.map (Context.Named.Declaration.map_constr inline_constr) (ctx @ List.rev extra_ctx) in
+    let ctx = List.map (Context.Named.Declaration.map_constr inline_constr) (List.rev extra_ctx @ ctx) in
     let goal = inline_constr goal in
     ctx, goal, evar in
   let inline_proof_state (map, ps) =
