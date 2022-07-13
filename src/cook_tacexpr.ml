@@ -25,13 +25,13 @@ let correct_kername id =
   try
     let _ = Tacenv.interp_ltac id in return (ArgArg (None, id))
   with Not_found ->
-    let kername_tolname id = CAst.make (Names.(Label.to_id (KerName.label id))) in
+    let kername_tolname id = CAst.make (Label.to_id (KerName.label id)) in
     let+ () = M.tell (KNset.singleton id) in
     ArgVar (kername_tolname id)
 
 let mapper = { CookTacticDef.default_mapper with
                  glob_tactic_arg = (fun a c ->
-                   let* t =  c a in
+                   let* a =  c a in
                    match a with
                    | Reference (ArgArg (_, id)) ->
                      let* id = correct_kername id in
