@@ -114,6 +114,26 @@ let rebuild_outcomes { outcomes; tactic; name; status=_; path } =
   { outcomes; tactic = rebuild_tac tactic
   ; name; status = Discharged path; path = Lib.make_path @@ Libnames.basename path }
 
+let discharge_outcomes senv { outcomes; tactic; name; status; path } =
+  let sections = Safe_typing.sections_of_safe_env senv in
+  let env = Safe_typing.env_of_safe_env senv in
+  let modlist = Section.replacement_context env sections in
+  let discharge_constr t = Cooking.expmod_constr modlist t in
+  let discharge_proof_state (ctx, concl) =
+     List.map (Tactician_util.map_named discharge_constr) ctx, discharge_constr concl in
+  let rec discharge_pd = function
+    | End -> End
+    | Step ps -> Step (discharge_ps ps)
+  and discharge_ps {executions; tactic} =
+    { executions = List.map (fun (ps, pd) -> discharge_proof_state ps, discharge_pd pd) executions
+    ; tactic } in
+  let outcomes = List.map (fun {parents; siblings; before; after} ->
+      { parents = List.map (fun (psa, pse) -> (psa, discharge_ps pse)) parents
+      ; siblings = discharge_pd siblings
+      ; before = discharge_proof_state before
+      ; after = List.map discharge_proof_state after }) outcomes in
+  { outcomes; tactic; name; status; path }
+
 let section_ltac_helper bodies =
   tmp_ltac_defs := []; (* Safe to discard tmp state from old section discharge *)
   let ist = Tacintern.make_empty_glob_sign () in
@@ -180,7 +200,9 @@ let in_db : data_in -> Libobject.obj =
                             ; subst_function = (fun x ->
                                 load_plugins (); subst_outcomes x)
                             ; discharge_function = (fun (_, data) ->
-                                load_plugins (); Some data)
+                                load_plugins ();
+                                let senv = Global.safe_env () in
+                                Some (discharge_outcomes senv data))
                             ; rebuild_function = (fun data ->
                                 rebuild_outcomes data)
                             })
