@@ -27,9 +27,7 @@
    extreme_tactic_normalize
    tactic_one_variable
    tactic_annotate
-   known_witnesses
    cook_tacexpr
-   gendischarge
    mapping_helpers
    map_all_the_witnesses
    map_all_the_things
@@ -54,8 +52,7 @@
  (public_name coq-tactician.ssreflect-plugin)
  (flags :standard -rectypes -w -27 -warn-error -A)
  (modules (
-   "known_ssr_witnesses"
-   map_ssr_witnesses
+   "map_ssr_witnesses"
  ))
  (libraries
    coq.plugins.ltac
