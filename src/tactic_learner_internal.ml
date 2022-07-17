@@ -79,16 +79,17 @@ module TS = struct
   let term_repr t = t
 
   type single_proof_state = named_context * term * Evar.t
-  type proof_state = single_proof_state Evar.Map.t * single_proof_state
-  type tactic_result = term * single_proof_state Evar.Map.t * single_proof_state list
+  type proof_state = single_proof_state Evar.Map.t * UState.t * single_proof_state
+  type tactic_result = term * single_proof_state Evar.Map.t * UState.t * single_proof_state list
 
-  let proof_state_hypotheses (_, (hyps, _, _)) = hyps
-  let proof_state_goal (_, (_, goal, _)) = goal
-  let proof_state_evar (_, (_, _, evar)) = evar
-  let proof_state_dependent (map, _) var = map, Evar.Map.find var map
-  let proof_state_sigma ((map, _) : proof_state) =
+  let proof_state_hypotheses (_, _, (hyps, _, _)) = hyps
+  let proof_state_goal (_, _, (_, goal, _)) = goal
+  let proof_state_evar (_, _, (_, _, evar)) = evar
+  let proof_state_dependent (map, ustate, _) var = map, ustate, Evar.Map.find var map
+  let proof_state_sigma ((map, ustate, _) : proof_state) =
     Evar.Map.fold (fun e (ctx, concl, _) evd ->
-        Evd.add evd e @@ Evd.make_evar (Environ.val_of_named_context ctx) (EConstr.of_constr concl)) map Evd.empty
+        Evd.add evd e @@ Evd.make_evar (Environ.val_of_named_context ctx) (EConstr.of_constr concl)) map @@
+    Evd.set_universe_context Evd.empty ustate
 
   let proof_state_equal _ps1 _ps2 = false
   let proof_state_independent _ps = false
@@ -103,12 +104,13 @@ module TS = struct
   let tactic_substitute tac _ls = tac
   let tactic_globally_equal _tac1 _tac2 = false
 
-  let tactic_result_term (t, _, _) = t
-  let tactic_result_sigma (_, map, _) =
+  let tactic_result_term (t, _, _, _) = t
+  let tactic_result_sigma (_, map, ustate, _) =
     Evar.Map.fold (fun e (ctx, concl, _) evd ->
-        Evd.add evd e @@ Evd.make_evar (Environ.val_of_named_context ctx) (EConstr.of_constr concl)) map Evd.empty
-  let tactic_result_dependent (_, map, _) var = map, Evar.Map.find var map
-  let tactic_result_states (_, map, ls) = List.map (fun ps -> map, ps) ls
+        Evd.add evd e @@ Evd.make_evar (Environ.val_of_named_context ctx) (EConstr.of_constr concl)) map @@
+    Evd.set_universe_context Evd.empty ustate
+  let tactic_result_dependent (_, map, ustate, _) var = map, ustate, Evar.Map.find var map
+  let tactic_result_states (_, map, ustate, ls) = List.map (fun ps -> map, ustate, ps) ls
 
   (* Proof tree with sharing. Behaves as a Directed Acyclic Tree. *)
   type proof_dag =
@@ -155,7 +157,7 @@ let goal_to_proof_state ps =
   let sigma = Goal.sigma ps in
   let ctx = calculate_deps sigma Evar.Set.empty e in
   let ctx = Evar.Map.bind (evar_to_proof_state sigma) ctx in
-  ctx, Evar.Map.find e ctx
+  ctx, Evd.evar_universe_context sigma, Evar.Map.find e ctx
 
 let make_result term sigma pss =
   let ctx = Evd.evars_of_term sigma term in
@@ -166,7 +168,7 @@ let make_result term sigma pss =
   let ctx = List.fold_left (fun ctx ps -> calculate_deps sigma ctx @@ Goal.goal ps) ctx pss in
   let ctx = Evar.Map.bind (evar_to_proof_state sigma) ctx in
   let term = EConstr.to_constr ~abort_on_undefined_evars:false sigma term in
-  term, ctx, List.map (fun ps -> Evar.Map.find (Goal.goal ps) ctx) pss
+  term, ctx, Evd.evar_universe_context sigma, List.map (fun ps -> Evar.Map.find (Goal.goal ps) ctx) pss
 
 type data_status =
   | Original

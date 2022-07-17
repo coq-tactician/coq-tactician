@@ -76,18 +76,18 @@ let inline env extra_ctx extra_deps { outcomes; tactic; name; status; path } =
     let changes = Evar.Map.map (fun ps -> ps, single_proof_state_calc_changes ps) map in
     let substs = Evar.Map.map (fun (_, (x, _)) -> x) changes in
     substs, Evar.Map.map (fun (ps, (_, extra_ctx)) -> inline_single_proof_state substs extra_ctx ps) changes in
-  let inline_proof_state (map, (_, _, ps_evar)) =
+  let inline_proof_state (map, ustate, (_, _, ps_evar)) =
     let _, map = inline_map map in
-    map, Evar.Map.find ps_evar map in
+    map, ustate, Evar.Map.find ps_evar map in
   let rec inline_proof_dag = function
     | End -> End
     | Step step -> Step (inline_proof_step step)
   and inline_proof_step { executions; tactic } =
     { executions = List.map (fun (pse, psp) -> inline_proof_state pse, inline_proof_dag psp) executions
     ; tactic = tactic } in
-  let inline_result (term, map, pss) =
+  let inline_result (term, map, ustate, pss) =
     let substs, map = inline_map map in
-    inline_constr substs term, map, List.map (fun (_, _, pse) -> Evar.Map.find pse map) pss in
+    inline_constr substs term, map, ustate, List.map (fun (_, _, pse) -> Evar.Map.find pse map) pss in
   let inline_outcome { parents; siblings; before; result } =
     { parents = List.map (fun (pse, psp) -> inline_proof_state pse, inline_proof_step psp) parents
     ; siblings = inline_proof_dag siblings
