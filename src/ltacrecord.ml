@@ -87,9 +87,7 @@ let in_section_ltac_defs : (Names.KerName.t * glob_tactic_expr) list -> Libobjec
                                ~discharge:(fun (_obj, p) -> Some p)))
 
 let rec with_let_prefix ltac_defs tac =
-  let names = List.fold_right Names.KNset.add
-      (List.concat (List.map (List.map fst) ltac_defs)) Names.KNset.empty in
-  let tac, all, ids = rebuild names tac in
+  let ids, tac = rebuild tac in
   let kername_tolname id = CAst.make (Names.(Name.mk_name (Label.to_id (KerName.label id)))) in
   let ltac_to_let rem_defs ltacset int =
     TacLetIn (true,
@@ -98,7 +96,7 @@ let rec with_let_prefix ltac_defs tac =
   let rec prefix acc = function
     | [] -> acc
     | ltacset::rem ->
-      let set_occurs = all || List.fold_right (fun (id, _) b ->
+      let set_occurs = List.fold_right (fun (id, _) b ->
           b || Names.KNset.mem id ids) ltacset false in
       if set_occurs then
         prefix (ltac_to_let rem ltacset acc) rem else
@@ -120,22 +118,31 @@ let rebuild_outcomes { outcomes; tactic; name; status=_; path } =
   { outcomes; tactic = Option.map rebuild_tac tactic
   ; name; status = Discharged path; path = Lib.make_path @@ Libnames.basename path }
 
-let discharge_outcomes env { outcomes; tactic; name; status; path } =
-  if !tmp_ltac_defs = [] then {outcomes; tactic; name; status; path } else
-    let genarg_print_tac tac =
-    let tac = tactic_repr tac in
-    TS.tactic_make (discharge env tac) in
-    let rec genarg_print_pd = function
-      | End -> End
-      | Step ps -> Step (genarg_print_ps ps)
-    and genarg_print_ps {executions; tactic} =
-      { executions = List.map (fun (ps, pd) -> ps, genarg_print_pd pd) executions
-      ; tactic = Option.map genarg_print_tac tactic } in
-    let outcomes = List.map (fun { parents; siblings; before; result } ->
-        { parents = List.map (fun (psa, pse) -> (psa, genarg_print_ps pse)) parents
-        ; siblings = genarg_print_pd siblings
-        ; before; result }) outcomes in
-    { outcomes; tactic = Option.map genarg_print_tac tactic; name; status; path }
+let discharge_outcomes senv { outcomes; tactic; name; status; path } =
+  let sections = Safe_typing.sections_of_safe_env senv in
+  let env = Safe_typing.env_of_safe_env senv in
+  let modlist = Section.replacement_context env sections in
+  let discharge_constr t = Cooking.expmod_constr modlist t in
+  let discharge_single_proof_state (ctx, concl, ev) =
+     List.map (Tactician_util.map_named discharge_constr) ctx, discharge_constr concl, ev in
+  let discharge_proof_state (map, (_, _, pse)) =
+    let map = Evar.Map.map discharge_single_proof_state map in
+    map, Evar.Map.find pse map in
+  let rec discharge_pd = function
+    | End -> End
+    | Step ps -> Step (discharge_ps ps)
+  and discharge_ps {executions; tactic} =
+    { executions = List.map (fun (ps, pd) -> discharge_proof_state ps, discharge_pd pd) executions
+    ; tactic } in
+  let discharge_result (term, map, pss) =
+    let map = Evar.Map.map discharge_single_proof_state map in
+    discharge_constr term, map, List.map (fun (_, _, e) -> Evar.Map.find e map) pss in
+  let outcomes = List.map (fun {parents; siblings; before; result} ->
+      { parents = List.map (fun (psa, pse) -> (psa, discharge_ps pse)) parents
+      ; siblings = discharge_pd siblings
+      ; before = discharge_proof_state before
+      ; result = discharge_result result }) outcomes in
+  { outcomes; tactic; name; status; path }
 
 let section_ltac_helper bodies =
   tmp_ltac_defs := []; (* Safe to discard tmp state from old section discharge *)
@@ -204,8 +211,8 @@ let in_db : data_in -> Libobject.obj =
                                 load_plugins (); subst_outcomes x)
                             ; discharge_function = (fun (_, data) ->
                                 load_plugins ();
-                                let env = Global.env () in
-                                Some (discharge_outcomes env data))
+                                let senv = Global.safe_env () in
+                                Some (discharge_outcomes senv data))
                             ; rebuild_function = (fun data ->
                                 rebuild_outcomes data)
                             })
