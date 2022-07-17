@@ -48,16 +48,17 @@ let subst_outcomes (s, { outcomes; tactic; name; status=_; path }) =
           Named.Declaration.LocalDef (id, subst_mps s term, subst_mps s typ)
       ) in
   let subst_single_pf (hyps, g, evar) = Mod_subst.(subst_named_context hyps, subst_mps s g, evar) in
-  let subst_pf (sigma, ps) = Evar.Map.map subst_single_pf sigma, subst_single_pf ps in
+  let subst_pf (sigma, ustate, ps) = Evar.Map.map subst_single_pf sigma, ustate, subst_single_pf ps in
   let rec subst_pd = function
     | End -> End
     | Step ps -> Step (subst_ps ps)
   and subst_ps {executions; tactic} =
     { executions = List.map (fun (ps, pd) -> subst_pf ps, subst_pd pd) executions
     ; tactic = Option.map subst_tac tactic } in
-  let subst_result (term, sigma, pss) =
+  let subst_result (term, sigma, ustate, pss) =
     Mod_subst.subst_mps s term,
     Evar.Map.map subst_single_pf sigma,
+    ustate,
     List.map subst_single_pf pss in
   let outcomes = List.map (fun { parents; siblings; before; result } ->
       { parents = List.map (fun (psa, pse) -> (subst_pf psa, subst_ps pse)) parents
@@ -123,20 +124,31 @@ let discharge_outcomes senv { outcomes; tactic; name; status; path } =
   let env = Safe_typing.env_of_safe_env senv in
   let modlist = Section.replacement_context env sections in
   let discharge_constr t = Cooking.expmod_constr modlist t in
+  let discharge_tactic t ctx evd =
+    let t = tactic_repr t in
+    let env = Environ.push_named_context ctx @@ Environ.reset_context env in
+    tactic_make @@ Discharge_tacexpr.discharge t env evd modlist in
   let discharge_single_proof_state (ctx, concl, ev) =
      List.map (Tactician_util.map_named discharge_constr) ctx, discharge_constr concl, ev in
-  let discharge_proof_state (map, (_, _, pse)) =
+  let discharge_proof_state (map, ustate, (_, _, pse)) =
     let map = Evar.Map.map discharge_single_proof_state map in
-    map, Evar.Map.find pse map in
+    map, ustate, Evar.Map.find pse map in
   let rec discharge_pd = function
     | End -> End
     | Step ps -> Step (discharge_ps ps)
   and discharge_ps {executions; tactic} =
     { executions = List.map (fun (ps, pd) -> discharge_proof_state ps, discharge_pd pd) executions
-    ; tactic } in
-  let discharge_result (term, map, pss) =
+    ; tactic = if executions = [] then tactic else
+          Option.map (fun t -> discharge_tactic t
+            (Tactic_learner_internal.TS.proof_state_hypotheses (fst @@ List.hd executions))
+            (Tactic_learner_internal.TS.proof_state_sigma (fst @@ List.hd executions))) tactic } in
+  let discharge_result (term, map, ustate, pss) =
     let map = Evar.Map.map discharge_single_proof_state map in
-    discharge_constr term, map, List.map (fun (_, _, e) -> Evar.Map.find e map) pss in
+    discharge_constr term, map, ustate, List.map (fun (_, _, e) -> Evar.Map.find e map) pss in
+  let tactic = if outcomes = [] then tactic else
+      Option.map (fun t -> discharge_tactic t
+        (Tactic_learner_internal.TS.proof_state_hypotheses (List.hd outcomes).before)
+        (Tactic_learner_internal.TS.proof_state_sigma (List.hd outcomes).before)) tactic in
   let outcomes = List.map (fun {parents; siblings; before; result} ->
       { parents = List.map (fun (psa, pse) -> (psa, discharge_ps pse)) parents
       ; siblings = discharge_pd siblings
