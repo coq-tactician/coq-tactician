@@ -57,6 +57,10 @@ let detype env evd avoid c =
     | _ -> Glob_ops.map_glob_constr evar_to_hole c in
   evar_to_hole c
 
+let warn env t =
+  Feedback.msg_warning Pp.(str "Tactic could not be properly discharged: " ++
+                           Pptactic.pr_glob_tactic env t)
+
 let mapper orig env evd worklist cook_cs cook_is =
   { CookTacticDef.default_mapper with
     variable = (fun id -> tell_id id >> return id)
@@ -68,18 +72,21 @@ let mapper orig env evd worklist cook_cs cook_is =
       if (not @@ Cset.is_empty @@ Cset.inter cook_cs cs ||
           not @@ Mindset.is_empty @@ Mindset.inter cook_is is) then
         if not @@ Id.Set.disjoint bound ids then
-          (Feedback.msg_warning Pp.(str "Tactic could not be properly discharged: " ++
-                                    Pptactic.pr_glob_tactic env orig);
+          (warn env orig;
            return a) else
-          let (evd, typed) = Pretyping.understand_ltac (Pretyping.default_inference_flags false) env evd
-              empty_ltac_context
-              Pretyping.WithoutTypeConstraint (fst a) in
-          let typed = EConstr.to_constr ~abort_on_undefined_evars:false evd typed in
-          (* TODO: Consider writing a glob_term, constrexpr and pattern version of Cooking.expmod_constr.
-             That way we no longer have to interpret terms and we will get better accuracy. *)
-          let typed = Cooking.expmod_constr worklist typed in
-          let detyped = detype env evd bound (EConstr.of_constr typed) in
-          return (detyped, None)
+          try
+            let (evd, typed) = Pretyping.understand_ltac (Pretyping.default_inference_flags false) env evd
+                empty_ltac_context
+                Pretyping.WithoutTypeConstraint (fst a) in
+            let typed = EConstr.to_constr ~abort_on_undefined_evars:false evd typed in
+            (* TODO: Consider writing a glob_term, constrexpr and pattern version of Cooking.expmod_constr.
+               That way we no longer have to interpret terms and we will get better accuracy. *)
+            let typed = Cooking.expmod_constr worklist typed in
+            let detyped = detype env evd bound (EConstr.of_constr typed) in
+            return (detyped, None)
+          with e when CErrors.noncritical e ->
+            warn env orig;
+            return a
       else return a
     )
   ; glob_constr_pattern_and_expr = (fun t c ->
@@ -89,16 +96,19 @@ let mapper orig env evd worklist cook_cs cook_is =
       if (not @@ Cset.is_empty @@ Cset.inter cook_cs cs ||
           not @@ Mindset.is_empty @@ Mindset.inter cook_is is) then
         if not @@ Id.Set.disjoint bound ids then
-          (Feedback.msg_warning Pp.(str "Tactic could not be properly discharged: " ++
-                                    Pptactic.pr_glob_tactic env orig);
+          (warn env orig;
            return a) else
-          let (evd', typed) = Pretyping.understand_ltac (Pretyping.default_inference_flags false) env evd
-              empty_ltac_context
-              Pretyping.WithoutTypeConstraint r in
-          let typed' = EConstr.to_constr ~abort_on_undefined_evars:false evd' typed in
-          let r = detype env evd' bound typed in
-          let t = (pids, (r, None), Patternops.pattern_of_constr env evd' typed') in
-          return t
+          try
+            let (evd', typed) = Pretyping.understand_ltac (Pretyping.default_inference_flags false) env evd
+                empty_ltac_context
+                Pretyping.WithoutTypeConstraint r in
+            let typed' = EConstr.to_constr ~abort_on_undefined_evars:false evd' typed in
+            let r = detype env evd' bound typed in
+            let t = (pids, (r, None), Patternops.pattern_of_constr env evd' typed') in
+            return t
+          with e when CErrors.noncritical e ->
+            warn env orig;
+            return t
       else return t)
   }
 
