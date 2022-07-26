@@ -77,7 +77,7 @@ let mapper orig env evd worklist cook_cs cook_is =
           (warn env orig;
            return a) else
           try
-            let (evd, typed) = Pretyping.understand_ltac (Pretyping.default_inference_flags false) env evd
+            let (evd, typed) = Pretyping.understand_ltac (Pretyping.no_classes_no_fail_inference_flags) env evd
                 empty_ltac_context
                 Pretyping.WithoutTypeConstraint (fst a) in
             let typed = EConstr.to_constr ~abort_on_undefined_evars:false evd typed in
@@ -86,7 +86,10 @@ let mapper orig env evd worklist cook_cs cook_is =
             let typed = Cooking.expmod_constr worklist typed in
             let detyped = detype env evd bound (EConstr.of_constr typed) in
             return (detyped, None)
-          with e when CErrors.noncritical e ->
+          with
+          | CErrors.Timeout as e ->
+            raise e
+          | _ ->
             warn env orig;
             return a
       else return a
@@ -101,14 +104,17 @@ let mapper orig env evd worklist cook_cs cook_is =
           (warn env orig;
            return a) else
           try
-            let (evd', typed) = Pretyping.understand_ltac (Pretyping.default_inference_flags false) env evd
+            let (evd', typed) = Pretyping.understand_ltac (Pretyping.no_classes_no_fail_inference_flags) env evd
                 empty_ltac_context
                 Pretyping.WithoutTypeConstraint r in
             let typed' = EConstr.to_constr ~abort_on_undefined_evars:false evd' typed in
             let r = detype env evd' bound typed in
             let t = (pids, (r, None), Patternops.pattern_of_constr env evd' typed') in
             return t
-          with e when CErrors.noncritical e ->
+          with
+          | CErrors.Timeout as e ->
+            raise e
+          | _ ->
             warn env orig;
             return t
       else return t)
