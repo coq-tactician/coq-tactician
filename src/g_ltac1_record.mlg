@@ -90,15 +90,16 @@ VERNAC ARGUMENT EXTEND ltac_use_default_hack PRINTED BY { pr_ltac_use_default }
 | [ "..." ] -> { (Random.int64 (Int64.max_int), true) }
 END
 
-VERNAC { tactician_mode } EXTEND VernacSolveTactician STATE proof
+VERNAC { tactician_mode } EXTEND VernacSolveTactician STATE CUSTOM
 | [ ltac_selector_opt(g) ltac_info_opt(info) tactic(t) ltac_use_default_hack(def) ] =>
     { (* TODO: Enormously ugly hack *)
     VtSideff ([], VtNow)
-    } -> { fun ~pstate ->
-    let with_end_tac = snd def in
+    } -> {
     let id = fst def in
     let skip = pre_vernac_solve id in
-    if skip then pstate else try
+    if skip then vtdefault (fun () -> ()) else vtmodifyproof @@ fun ~pstate ->
+    let with_end_tac = snd def in
+    try
       let g = Option.default (Goal_select.get_default_goal_selector ()) g in
       let global = match g with Goal_select.SelectAll | Goal_select.SelectList _ -> true | _ -> false in
       let name = Declare.Proof.get_name pstate in
@@ -107,7 +108,7 @@ VERNAC { tactician_mode } EXTEND VernacSolveTactician STATE proof
     with
     | e when CErrors.noncritical e || e = CErrors.Timeout ->
       save_exn id e; raise e
-  }
+    }
 END
 
 VERNAC COMMAND EXTEND VernacDeclareTacticDefinition
