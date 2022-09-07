@@ -82,9 +82,7 @@ let in_section_ltac_defs : (Names.KerName.t * glob_tactic_expr) list -> Libobjec
                                ~discharge:(fun (_obj, p) -> Some p)))
 
 let rec with_let_prefix ltac_defs tac =
-  let names = List.fold_right Names.KNset.add
-      (List.concat (List.map (List.map fst) ltac_defs)) Names.KNset.empty in
-  let tac, all, ids = rebuild names tac in
+  let ids, tac = rebuild tac in
   let kername_tolname id = CAst.make (Names.(Name.mk_name (Label.to_id (KerName.label id)))) in
   let ltac_to_let rem_defs ltacset int =
     TacLetIn (true,
@@ -93,7 +91,7 @@ let rec with_let_prefix ltac_defs tac =
   let rec prefix acc = function
     | [] -> acc
     | ltacset::rem ->
-      let set_occurs = all || List.fold_right (fun (id, _) b ->
+      let set_occurs = List.fold_right (fun (id, _) b ->
           b || Names.KNset.mem id ids) ltacset false in
       if set_occurs then
         prefix (ltac_to_let rem ltacset acc) rem else
@@ -115,22 +113,25 @@ let rebuild_outcomes { outcomes; tactic; name; status=_; path } =
   { outcomes; tactic = rebuild_tac tactic
   ; name; status = Discharged path; path = Lib.make_path @@ Libnames.basename path }
 
-let discharge_outcomes env { outcomes; tactic; name; status; path } =
-  if !tmp_ltac_defs = [] then {outcomes; tactic; name; status; path } else
-    let genarg_print_tac tac =
-    let tac = tactic_repr tac in
-    TS.tactic_make (discharge env tac) in
-    let rec genarg_print_pd = function
-      | End -> End
-      | Step ps -> Step (genarg_print_ps ps)
-    and genarg_print_ps {executions; tactic} =
-      { executions = List.map (fun (ps, pd) -> ps, genarg_print_pd pd) executions
-      ; tactic = genarg_print_tac tactic } in
-    let outcomes = List.map (fun {parents; siblings; before; after} ->
-        { parents = List.map (fun (psa, pse) -> (psa, genarg_print_ps pse)) parents
-        ; siblings = genarg_print_pd siblings
-        ; before; after }) outcomes in
-    { outcomes; tactic = genarg_print_tac tactic; name; status; path }
+let discharge_outcomes senv { outcomes; tactic; name; status; path } =
+  let sections = Safe_typing.sections_of_safe_env senv in
+  let env = Safe_typing.env_of_safe_env senv in
+  let modlist = Section.replacement_context env @@ Option.get sections in
+  let discharge_constr t = Cooking.expmod_constr modlist t in
+  let discharge_proof_state (ctx, concl) =
+     List.map (Tactician_util.map_named discharge_constr) ctx, discharge_constr concl in
+  let rec discharge_pd = function
+    | End -> End
+    | Step ps -> Step (discharge_ps ps)
+  and discharge_ps {executions; tactic} =
+    { executions = List.map (fun (ps, pd) -> discharge_proof_state ps, discharge_pd pd) executions
+    ; tactic } in
+  let outcomes = List.map (fun {parents; siblings; before; after} ->
+      { parents = List.map (fun (psa, pse) -> (psa, discharge_ps pse)) parents
+      ; siblings = discharge_pd siblings
+      ; before = discharge_proof_state before
+      ; after = List.map discharge_proof_state after }) outcomes in
+  { outcomes; tactic; name; status; path }
 
 let section_ltac_helper bodies =
   tmp_ltac_defs := []; (* Safe to discard tmp state from old section discharge *)
@@ -199,8 +200,8 @@ let in_db : data_in -> Libobject.obj =
                                 load_plugins (); subst_outcomes x)
                             ; discharge_function = (fun (_, data) ->
                                 load_plugins ();
-                                let env = Global.env () in
-                                Some (discharge_outcomes env data))
+                                let senv = Global.safe_env () in
+                                Some (discharge_outcomes senv data))
                             ; rebuild_function = (fun data ->
                                 rebuild_outcomes data)
                             })
@@ -557,6 +558,30 @@ let commonSearch debug max_exec =
              dec_search_recursion_depth () >>= fun () -> setFlags () <*> tclUNIT (wit, !tac_exec_count))
             (fun (e, i) -> setFlags () <*> tclZERO ~info:i e))
 
+let solved_check t fail =
+  let calc_defined_deps sigma es =
+    let open Evd in
+    Evar.Set.fold
+      (fun e evs -> match (find sigma e).evar_body with
+         | Evar_empty -> Evar.Set.add e evs
+         | Evar_defined term -> Evar.Set.union evs @@ Evd.evars_of_term sigma term)
+      es Evar.Set.empty in
+  let open Proofview in
+  let open Notations in
+  Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
+  tclEVARMAP >>= fun sigma_before ->
+  let gls = Evar.Set.of_list @@ List.map Goal.goal gls in
+  let gls_deps = Evar.Set.fold
+      (fun e evs -> Tactic_learner_internal.calculate_deps sigma_before evs e)
+      gls Evar.Set.empty in
+  let gls_deps = Evar.Set.diff gls_deps gls in
+  t >>= fun res ->
+  tclENV >>= fun env -> tclEVARMAP >>= fun sigma ->
+  let gls_deps_evars = calc_defined_deps sigma gls_deps in
+  let gls_evars = calc_defined_deps sigma gls in
+  let non_solved = Evar.Set.diff gls_evars gls_deps_evars in
+  if Evar.Set.is_empty non_solved then tclUNIT res else fail non_solved res
+
 let type_check t fail =
   let open Proofview in
   let open Notations in
@@ -565,16 +590,16 @@ let type_check t fail =
   t >>= fun res ->
   tclENV >>= fun env -> tclEVARMAP >>= fun sigma ->
   try
-    ignore (List.fold_left (fun sigma ev ->
+    List.iter (fun ev ->
         let Evd.{ evar_body; evar_concl; _ } as info = Evd.find sigma ev in
         let env = Environ.reset_with_named_context (Evd.evar_filtered_hyps info) env in
         match evar_body with
-        | Evd.Evar_empty -> sigma
-        | Evd.Evar_defined term -> Typing.check env sigma term evar_concl
-      ) sigma gls);
+        | Evd.Evar_empty -> ()
+        | Evd.Evar_defined term -> ignore (Typing.check env sigma term evar_concl)
+      ) gls;
     tclUNIT res
   with
-  |Type_errors.TypeError (env, err) ->
+  | Type_errors.TypeError (env, err) ->
     fail (`Type_error (env, sigma, err)) res
   | Pretype_errors.PretypeError (env, map, err) ->
     fail (`Pretype_error (env, map, err)) res
@@ -604,10 +629,18 @@ let benchmarkSearch name time deterministic : unit Proofview.tactic =
   in
   let start_time = Unix.gettimeofday () in
   timeout_command (tclENV >>= fun env ->
-                   let type_check_fail err (wit, _) =
-                     let tcs, m = List.split (List.map (fun {tac;focus;prediction_index} ->
+                   let witness_string (wit, _) =
+                     let tcs, _ = List.split (List.map (fun {tac;focus;prediction_index} ->
                          ((tac, focus), prediction_index)) wit) in
-                     let tstring = synthesize_tactic env tcs in
+                     synthesize_tactic env tcs in
+                   let solved_check_fail err wit =
+                     let tstring = witness_string wit in
+                     let msg = Pp.(str "Incomplete witness for the following tactic:" ++ fnl () ++
+                                   tstring ++ fnl () ++ str "Unsolved evars:" ++ fnl () ++
+                                   prlist Evar.print (Evar.Set.elements err)) in
+                     CErrors.anomaly msg in
+                   let type_check_fail err wit =
+                     let tstring = witness_string wit in
                      let err = match err with
                        | `Type_error (env, sigma, err) ->
                          Himsg.explain_type_error env sigma @@ Type_errors.map_ptype_error EConstr.of_constr err
@@ -615,7 +648,7 @@ let benchmarkSearch name time deterministic : unit Proofview.tactic =
                      let msg = Pp.(str "Typing failure of the following tactic:" ++ fnl () ++
                                    tstring ++ fnl () ++ str "Typing error:" ++ fnl () ++ err) in
                      CErrors.anomaly msg in
-                   type_check (commonSearch false max_exec) type_check_fail >>=
+                   type_check (solved_check (commonSearch false max_exec) solved_check_fail) type_check_fail >>=
                    fun m -> print_success env m start_time; tclUNIT ())
 
 let nested_search_solutions_field : (glob_tactic_expr * int) list list Evd.Store.field = Evd.Store.field ()
@@ -790,8 +823,9 @@ let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO:
           (* TODO: Move this to annotation time *)
           String.equal s "admit" || String.equal s "synth" || String.is_prefix "synth with cache" s
           || String.is_prefix "tactician ignore" s || String.is_prefix "fix" s || String.is_prefix "cofix" s
-          || String.is_prefix "change_no_check" s || String.is_prefix "exact_no_checK" s || String.is_prefix "native_cast_no_check" s
-          || String.is_prefix "vm_cast_no_check" s
+          || String.is_prefix "change_no_check" s || String.is_prefix "exact_no_checK" s
+          || String.is_prefix "native_cast_no_check" s || String.is_prefix "vm_cast_no_check" s
+          || String.is_prefix "shelve" s
         with _ -> false in
       if filter then () else add_to_db2 id (execs, tac) sideff const path;
       try (* This is purely for parsing bug detection and could be removed for performance reasons *)
