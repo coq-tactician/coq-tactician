@@ -37,4 +37,8 @@ TACTIC EXTEND type_check
        match err with
        | `Type_error (env, sigma, err) -> Proofview.tclZERO (Type_errors.TypeError (env, err))
        | `Pretype_error (env, sigma, err) -> Proofview.tclZERO (Pretype_errors.PretypeError (env, sigma, err))) }
+| [ "solved_check" tactic(t) ] -> {
+  Tactician_ltac1_record_plugin.Ltacrecord.solved_check (Tacinterp.tactic_of_value ist t)
+    (fun evs () -> Tacticals.tclZEROMSG @@ Pp.(str "The following goal-generated evars where not solved: " ++
+    prlist Evar.print (Evar.Set.elements evs))) }
 END
