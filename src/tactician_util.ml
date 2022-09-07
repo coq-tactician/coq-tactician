@@ -144,3 +144,10 @@ let with_flag flg f =
   let added = original ^ "," ^ flg in
   Fun.protect ~finally:(fun () -> CWarnings.set_flags original)
     (fun () -> CWarnings.set_flags added; f ())
+
+let map_named f = function
+  | Context.Named.Declaration.LocalAssum (id, ty) ->
+    let ty' = f ty in Context.Named.Declaration.LocalAssum (id, ty')
+  | Context.Named.Declaration.LocalDef (id, v, ty) ->
+    let v' = f v in
+    let ty' = f ty in Context.Named.Declaration.LocalDef (id, v', ty')
