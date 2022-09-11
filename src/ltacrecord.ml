@@ -115,9 +115,9 @@ let rebuild_outcomes { outcomes; tactic; name; status=_; path } =
 
 let discharge_outcomes senv { outcomes; tactic; name; status; path } =
   let sections = Safe_typing.sections_of_safe_env senv in
-  let env = Safe_typing.env_of_safe_env senv in
-  let modlist = Section.replacement_context env @@ Option.get sections in
-  let discharge_constr t = Cooking.expmod_constr modlist t in
+  let info = Section.segment_of_constant name @@ Option.get sections in
+  let cache = Cooking.create_cache info in
+  let discharge_constr t = Cooking.abstract_as_body cache t in
   let discharge_proof_state (ctx, concl) =
      List.map (Tactician_util.map_named discharge_constr) ctx, discharge_constr concl in
   let rec discharge_pd = function
