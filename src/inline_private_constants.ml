@@ -96,4 +96,4 @@ let inline env sideff t =
           | Def body -> LocalDef (id, Mod_subst.force_constr body, const_type)
           | OpaqueDef _ -> LocalAssum (id, const_type)
         ) consts in
-      inline env extra_ctx consts t
+      List.map (inline env extra_ctx consts) t
