@@ -709,8 +709,8 @@ let pre_vernac_solve id =
   let env = Global.env () in
   match Hashtbl.find_opt int64_to_knn id with
   | Some (db, exn, sideff) ->
-    let add db_elem = add_to_db (Inline_private_constants.inline env sideff db_elem) in
-    (List.iter add @@ List.rev db; Hashtbl.remove int64_to_knn id;
+    let db = Inline_private_constants.inline env sideff db in
+    (List.iter add_to_db @@ List.rev db; Hashtbl.remove int64_to_knn id;
      match exn with
      | None -> true
      | Some exn ->
