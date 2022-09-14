@@ -708,9 +708,19 @@ let pre_vernac_solve id =
   let env = Global.env () in
   match Hashtbl.find_opt int64_to_knn id with
   | Some (db, exn, sideff) ->
-    let db = Inline_private_constants.inline env sideff db in
-    (List.iter add_to_db @@ List.rev db; Hashtbl.remove int64_to_knn id;
-     match exn with
+    let aborted =
+      let open Vernacexpr in
+      let doc = Stm.get_doc 0 in
+      Option.cata (fun CAst.{ v = { expr; _ }; _ } ->
+          match expr with
+          | VernacAbort _ | VernacEndProof Admitted -> true
+          | _ -> false) true
+        Stm.(get_ast ~doc (get_current_state ~doc)) in
+    (if not aborted then
+       let db = Inline_private_constants.inline env sideff db in
+       List.iter add_to_db @@ List.rev db);
+    Hashtbl.remove int64_to_knn id;
+    (match exn with
      | None -> true
      | Some exn ->
        (* TODO: This is truly evil:
@@ -731,7 +741,7 @@ let pre_vernac_solve id =
                    }) in
        if not !Flags.quiet || !Vernacinterp.test_mode then begin
          Topfmt.std_ft := ignore_one_formatter !Topfmt.std_ft;
-          raise exn
+         raise exn
        end else raise exn)
   | None -> Hashtbl.add int64_to_knn id ([], None, Safe_typing.empty_private_constants); false
 
