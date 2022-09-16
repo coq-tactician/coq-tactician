@@ -839,13 +839,16 @@ let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO:
           || String.is_prefix "shelve" s
         with _ -> false in
       if filter then () else add_to_db2 id (execs, tac) sideff const path;
+      let msg typ t = 
+        Feedback.msg_warning Pp.(
+            str "Tactician detected a " ++ str typ ++ str " problem " ++
+            str "for the following tactic. " ++ str t ++ str " Please report.") in
       try (* This is purely for parsing bug detection and could be removed for performance reasons *)
         let s = string_tac tac in
-        let _ = Pcoq.parse_string Pltac.tactic_eoi s in ()
-      with _ ->
-        Feedback.msg_warning Pp.(
-            str "Tactician detected a printing/parsing problem " ++
-            str "for the following tactic. Please report.") in
+        try
+          let _ = Pcoq.parse_string Pltac.tactic_eoi s in ()
+        with _ -> msg "printing/parsing" s
+      with _ -> msg "printing" "" in
     List.iter (fun trp -> tryadd trp) @@ List.rev db; tclUNIT () in
   let rtac = decompose_annotate tac record_tac_complete in
   let ptac = Tacinterp.eval_tactic rtac in
