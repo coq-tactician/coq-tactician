@@ -1,17 +1,9 @@
 open Map_all_the_things
 open Monad_util
-open Genarg
 
 open Mapping_helpers
 module NormalizeDef = struct
   include MapDefTemplate (IdentityMonad)
-  let map_sort = "normalize"
-  let warnProblem wit =
-    Feedback.msg_warning (Pp.(str "Tactician is having problems with " ++
-                              str "the following tactic. Please report. " ++
-                              pr_argument_type wit))
-  let default wit = { raw = (fun _ -> warnProblem (ArgumentType wit); id)
-                    ; glb = (fun _ -> warnProblem (ArgumentType wit); id)}
 end
 module NormalizeMapper = MakeMapper(NormalizeDef)
 open NormalizeDef

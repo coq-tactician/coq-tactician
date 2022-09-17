@@ -2,7 +2,6 @@ open Ltac_plugin
 open Tacexpr
 open Monad_util
 open Locus
-open Genarg
 open Names
 open Map_all_the_things
 
@@ -10,13 +9,6 @@ module CookTacticDef = struct
   module M = WriterMonad
       (struct type w = KNset.t let id = KNset.empty let comb = KNset.union end)
   include MapDefTemplate (M)
-  let map_sort = "cook-tactic"
-  let warnProblem wit =
-    Feedback.msg_warning (Pp.(str "Tactician is having problems with " ++
-                              str "the following tactic. Please report. " ++
-                              pr_argument_type wit))
-  let default wit = { raw = (fun _ -> warnProblem (ArgumentType wit); id)
-                    ; glb = (fun _ -> warnProblem (ArgumentType wit); id)}
 end
 module CookTacticMapper = MakeMapper(CookTacticDef)
 open CookTacticDef
