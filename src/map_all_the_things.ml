@@ -72,7 +72,6 @@ module type MapDef = sig
     { raw : recursor -> 'raw map
     ; glb : recursor -> 'glb map }
 
-  val map_sort : string
   val default : ('raw, 'glb, 'top) genarg_type -> ('raw, 'glb) gen_map
 
 end
@@ -150,6 +149,12 @@ module MapDefTemplate (M: Monad.Def) = struct
   type ('raw, 'glb) gen_map =
     { raw : recursor -> 'raw map
     ; glb : recursor -> 'glb map }
+  let warnProblem wit =
+    Feedback.msg_warning (Pp.(str "Tactician is having problems with " ++
+                              str "the following tactic. Please report. " ++
+                              pr_argument_type wit))
+  let default wit = { raw = (fun _ -> warnProblem (ArgumentType wit); id)
+                    ; glb = (fun _ -> warnProblem (ArgumentType wit); id)}
 end
 
 module type GenMap = sig
