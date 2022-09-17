@@ -712,7 +712,7 @@ let pre_vernac_solve id =
       let doc = Stm.get_doc 0 in
       Option.cata (fun CAst.{ v = { expr; _ }; _ } ->
           match expr with
-          | VernacAbort _ | VernacEndProof Admitted -> true
+          | VernacAbort | VernacEndProof Admitted -> true
           | _ -> false) true
         Stm.(get_ast ~doc (get_current_state ~doc)) in
     (if not aborted then
