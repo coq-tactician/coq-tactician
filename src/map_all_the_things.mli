@@ -68,7 +68,6 @@ module type MapDef = sig
     { raw : recursor -> 'raw map
     ; glb : recursor -> 'glb map }
 
-  val map_sort : string
   val default : ('raw, 'glb, 'top) genarg_type -> ('raw, 'glb) gen_map
 
 end
@@ -124,6 +123,7 @@ module MapDefTemplate (M: Monad.Def) : sig
   type ('raw, 'glb) gen_map =
     { raw : recursor -> 'raw map
     ; glb : recursor -> 'glb map }
+  val default : ('raw, 'glb, 'top) genarg_type -> ('raw, 'glb) gen_map
 end with type 'a t = 'a M.t
 
 module type GenMap = sig
