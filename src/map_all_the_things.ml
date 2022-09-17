@@ -72,12 +72,12 @@ module type MapDef = sig
     { raw : recursor -> 'raw map
     ; glb : recursor -> 'glb map }
 
-  val map_sort : string
   val default : ('raw, 'glb, 'top) genarg_type -> ('raw, 'glb) gen_map
 
 end
 
 module MapDefTemplate (M: Monad.Def) = struct
+  module OList = List
   include WithMonadNotations(M)
 
   type 'a transformer = 'a -> ('a -> 'a t) -> 'a t
@@ -150,6 +150,17 @@ module MapDefTemplate (M: Monad.Def) = struct
   type ('raw, 'glb) gen_map =
     { raw : recursor -> 'raw map
     ; glb : recursor -> 'glb map }
+  (* These are witnesses that are known to be unmappable at the moment *)
+  let exclude = ["ssrrwarg"; "ssrintros_ne"; "ssrhint3arg"]
+  let warnProblem wit =
+    let pp = pr_argument_type wit in
+    let pps = Pp.string_of_ppcmds pp in
+    if OList.exists (fun w -> String.equal w pps) exclude then () else
+      Feedback.msg_warning (Pp.(str "Tactician is having problems with " ++
+                                str "the following tactic. Please report. " ++
+                                pr_argument_type wit))
+  let default wit = { raw = (fun _ -> warnProblem (ArgumentType wit); id)
+                    ; glb = (fun _ -> warnProblem (ArgumentType wit); id)}
 end
 
 module type GenMap = sig
