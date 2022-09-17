@@ -152,7 +152,7 @@ module MapDefTemplate (M: Monad.Def) = struct
     { raw : recursor -> 'raw map
     ; glb : recursor -> 'glb map }
   (* These are witnesses that are known to be unmappable at the moment *)
-  let exclude = ["ssrrwarg"; "ssrintros_ne"; "ssrhint3arg"]
+  let exclude = []
   let warnProblem wit =
     let pp = pr_argument_type wit in
     let pps = Pp.string_of_ppcmds pp in

@@ -223,6 +223,16 @@ let _ = register_generic_map wit_ssrarg (module struct
     end
   end)
 
+let _ = register_generic_map wit_ssrrwarg (module struct
+    type raw = ssrrwarg
+    type glob = ssrrwarg
+    module M = functor (M : MapDef) -> struct
+      open SSRMap(M)
+      let raw_map = ssrrwarg_map
+      let glob_map = ssrrwarg_map
+    end
+  end)
+
 let _ = register_generic_map wit_ssrrwargs (module struct
     type raw = ssrrwarg list
     type glob = ssrrwarg list
@@ -498,6 +508,17 @@ let _ = register_generic_map wit_ssrseqarg (module struct
     end
   end)
 
+let _ = register_generic_map wit_ssrintros_ne (module struct
+    type raw = ssripats
+    type glob = ssripats
+    module M = functor (M : MapDef) -> struct
+      open M
+      open SSRMap(M)
+      let raw_map = ssripats_map
+      let glob_map = ssripats_map
+    end
+  end)
+
 let _ = register_generic_map wit_ssrintrosarg (module struct
     type raw = raw_tactic_expr * ssripats
     type glob = glob_tactic_expr * ssripats
@@ -558,6 +579,17 @@ let _ = register_generic_map wit_ssrhint (module struct
   end)
 
 let _ = register_generic_map wit_ssrhintarg (module struct
+    type raw = raw_tactic_expr ssrhint
+    type glob = glob_tactic_expr ssrhint
+    module M = functor (M : MapDef) -> struct
+      open M
+      open SSRMap(M)
+      let raw_map m = ssrhint_map m m.raw_tactic_expr_map
+      let glob_map m = ssrhint_map m m.glob_tactic_expr_map
+    end
+  end)
+
+let _ = register_generic_map wit_ssrhint3arg (module struct
     type raw = raw_tactic_expr ssrhint
     type glob = glob_tactic_expr ssrhint
     module M = functor (M : MapDef) -> struct
