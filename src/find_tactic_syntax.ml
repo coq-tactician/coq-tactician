@@ -1,7 +1,6 @@
 open Ltac_plugin
 open Monad_util
 open Map_all_the_things
-open Genarg
 open Tacexpr
 open Names
 
@@ -9,13 +8,6 @@ module TacticFinderDef = struct
   module M = WriterMonad
       (struct type w = bool let id = false let comb = Bool.(||) end)
   include MapDefTemplate (M)
-  let map_sort = "tactic-finder"
-  let warnProblem wit =
-    Feedback.msg_warning (Pp.(str "Tactician is having problems with " ++
-                              str "the following tactic. Please report. " ++
-                              pr_argument_type wit))
-  let default wit = { raw = (fun _ -> warnProblem (ArgumentType wit); id)
-                    ; glb = (fun _ -> warnProblem (ArgumentType wit); id)}
 end
 module TacticFinderMapper = MakeMapper(TacticFinderDef)
 open TacticFinderDef

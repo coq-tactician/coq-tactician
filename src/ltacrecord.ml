@@ -707,9 +707,19 @@ let pre_vernac_solve id =
   let env = Global.env () in
   match Hashtbl.find_opt int64_to_knn id with
   | Some (db, exn, sideff) ->
-    let add db_elem = add_to_db (Inline_private_constants.inline env sideff db_elem) in
-    (List.iter add @@ List.rev db; Hashtbl.remove int64_to_knn id;
-     match exn with
+    let aborted =
+      let open Vernacexpr in
+      let doc = Stm.get_doc 0 in
+      Option.cata (fun CAst.{ v = { expr; _ }; _ } ->
+          match expr with
+          | VernacAbort _ | VernacEndProof Admitted -> true
+          | _ -> false) true
+        Stm.(get_ast ~doc (get_current_state ~doc)) in
+    (if not aborted then
+       let db = Inline_private_constants.inline env sideff db in
+       List.iter add_to_db @@ List.rev db);
+    Hashtbl.remove int64_to_knn id;
+    (match exn with
      | None -> true
      | Some exn ->
        (* TODO: This is truly evil:
@@ -730,7 +740,7 @@ let pre_vernac_solve id =
                    }) in
        if not !Flags.quiet || !Vernacinterp.test_mode then begin
          Topfmt.std_ft := ignore_one_formatter !Topfmt.std_ft;
-          raise exn
+         raise exn
        end else raise exn)
   | None -> Hashtbl.add int64_to_knn id ([], None, Safe_typing.empty_private_constants); false
 
@@ -828,13 +838,16 @@ let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO:
           || String.is_prefix "shelve" s
         with _ -> false in
       if filter then () else add_to_db2 id (execs, tac) sideff const path;
+      let msg typ t = 
+        Feedback.msg_warning Pp.(
+            str "Tactician detected a " ++ str typ ++ str " problem " ++
+            str "for the following tactic. " ++ str t ++ str " Please report.") in
       try (* This is purely for parsing bug detection and could be removed for performance reasons *)
         let s = string_tac tac in
-        let _ = Pcoq.parse_string Pltac.tactic_eoi s in ()
-      with _ ->
-        Feedback.msg_warning Pp.(
-            str "Tactician detected a printing/parsing problem " ++
-            str "for the following tactic. Please report.") in
+        try
+          let _ = Pcoq.parse_string Pltac.tactic_eoi s in ()
+        with _ -> msg "printing/parsing" s
+      with _ -> msg "printing" "" in
     List.iter (fun trp -> tryadd trp) @@ List.rev db; tclUNIT () in
   let rtac = decompose_annotate tac record_tac_complete in
   let ptac = Tacinterp.eval_tactic rtac in
