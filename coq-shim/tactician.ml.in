@@ -141,7 +141,7 @@ let recompile_packages no_pkgs_msg pkgs_msg confirm_msg =
       And (
         Atom Installed,
         Atom (Depends_on ({ default_dependency_toggles with recursive = true },
-                          [OpamPackage.Name.of_string "coq", None]))))) in
+                          [OpamPackage.Name.of_string "coq-core", None]))))) in
   let tactician_packages = OpamListCommand.(filter ~base:st.packages st OpamFormula.(
       And (
         Atom Installed,
@@ -210,10 +210,8 @@ let stdlib () =
    * )
    * else ( *)
   print_endline "This utility helps you recompile all your Coq packages. \
-                 You only need to do this when:\n\n\
-                 (1) You have injected/ejected Tactician and want to recompile \
-                 all packages with/without Tactician support.\n\
-                 (2) You have installed/removed the package `coq-tactician-stdlib`.\n";
+                 You only need to do this when you have injected/ejected Tactician and want to recompile \
+                 all packages with/without Tactician support.\n";
   recompile_packages "It appears that you do not have any packages installed. No actions are needed."
     "The following relevant Coq packages are installed:"
     "Would you like to reinstall them?";
@@ -440,12 +438,9 @@ let eject =
   Cmd.(v @@ info "eject" ~doc ~man) @@ Term.(ret (const eject $ const ()))
 
 let recompile =
-  let doc = "Find and recompile all installed Coq packages. This is mainly needed when you install or remove\
-             the package 'coq-tactician-stdlib', which recompiles Coq's standard library." in
-  let man = [ `P "The package 'coq-tactician-stdlib' will recompile Coq's standard library with \
-                  Tactician support. After that, all other packages also need to be reinstalled in order \
-                  to be consistent with the new standard library. This utility will take care of that."
-            ] in
+  let doc = "Find and recompile all installed Coq packages. This is mainly needed when you have injected/ejected \
+             Tactician and want to recompile your packages with/without Tactician support." in
+  let man = [] in
   Cmd.(v @@ info "recompile" ~doc ~man) @@ Term.(ret (const stdlib $ const ()))
 
 let command =
