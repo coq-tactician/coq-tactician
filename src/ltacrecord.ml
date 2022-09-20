@@ -113,25 +113,51 @@ let rebuild_outcomes { outcomes; tactic; name; status=_; path } =
   { outcomes; tactic = rebuild_tac tactic
   ; name; status = Discharged path; path = Lib.make_path @@ Libnames.basename path }
 
+let expmod_constr info c =
+  let c = Cooking.abstract_as_body info c in
+  let n_assums = List.length (Cooking.rel_context_of_cooking_cache info) in
+  let ctx, c = Term.decompose_lam_n_decls n_assums c in
+  let rec fold ctx args subst = match ctx, args with
+    | [], [] -> subst
+    | Context.Rel.Declaration.LocalAssum _ :: ctx, arg :: args ->
+      fold ctx args (Esubst.subs_cons arg subst)
+    | Context.Rel.Declaration.LocalDef (_, b, _) :: ctx, args ->
+      let b = Vars.esubst Constr.lift subst b in
+      fold ctx args (Esubst.subs_cons b subst)
+    | _ :: _, [] | [], _ :: _ -> assert false
+  in
+  let args = Array.to_list @@ Cooking.instance_of_cooking_cache info in
+  let subst = fold (List.rev ctx) args (Esubst.subs_id 0) in
+  Vars.esubst Constr.lift subst c
+
 let discharge_outcomes senv { outcomes; tactic; name; status; path } =
-  let sections = Safe_typing.sections_of_safe_env senv in
-  let info = Section.segment_of_constant name @@ Option.get sections in
-  let cache = Cooking.create_cache info in
-  let discharge_constr t = Cooking.abstract_as_body cache t in
-  let discharge_proof_state (ctx, concl) =
-     List.map (Tactician_util.map_named discharge_constr) ctx, discharge_constr concl in
-  let rec discharge_pd = function
-    | End -> End
-    | Step ps -> Step (discharge_ps ps)
-  and discharge_ps {executions; tactic} =
-    { executions = List.map (fun (ps, pd) -> discharge_proof_state ps, discharge_pd pd) executions
-    ; tactic } in
-  let outcomes = List.map (fun {parents; siblings; before; after} ->
-      { parents = List.map (fun (psa, pse) -> (psa, discharge_ps pse)) parents
-      ; siblings = discharge_pd siblings
-      ; before = discharge_proof_state before
-      ; after = List.map discharge_proof_state after }) outcomes in
-  { outcomes; tactic; name; status; path }
+  try
+    let sections = Safe_typing.sections_of_safe_env senv in
+    let info = Section.segment_of_constant name @@ Option.get sections in
+    let cache = Cooking.create_cache info in
+    let secctx = Environ.named_context @@ Safe_typing.env_of_safe_env senv in
+    let constantctx = Names.Id.Set.of_list @@ List.map Constr.destVar @@
+      Array.to_list @@ Cooking.instance_of_cooking_cache cache in
+    let irrelevantctx = Names.Id.Set.of_list @@ List.filter
+        (fun x -> not @@ Names.Id.Set.mem x constantctx) @@ List.map Context.Named.Declaration.get_id secctx in
+    let discharge_constr t = expmod_constr cache t in
+    let discharge_proof_state (ctx, concl) =
+      List.map (Tactician_util.map_named discharge_constr) @@
+      List.filter (fun x -> not @@ Names.Id.Set.mem (Context.Named.Declaration.get_id x) irrelevantctx) ctx,
+      discharge_constr concl in
+    let rec discharge_pd = function
+      | End -> End
+      | Step ps -> Step (discharge_ps ps)
+    and discharge_ps {executions; tactic} =
+      { executions = List.map (fun (ps, pd) -> discharge_proof_state ps, discharge_pd pd) executions
+      ; tactic } in
+    let outcomes = List.map (fun {parents; siblings; before; after} ->
+        { parents = List.map (fun (psa, pse) -> (psa, discharge_ps pse)) parents
+        ; siblings = discharge_pd siblings
+        ; before = discharge_proof_state before
+        ; after = List.map discharge_proof_state after }) outcomes in
+    Some { outcomes; tactic; name; status; path }
+  with Not_found -> None
 
 let section_ltac_helper bodies =
   tmp_ltac_defs := []; (* Safe to discard tmp state from old section discharge *)
@@ -201,7 +227,7 @@ let in_db : id -> data_in -> Libobject.obj =
                             ; discharge_function = (fun data ->
                                 load_plugins ();
                                 let senv = Global.safe_env () in
-                                Some (discharge_outcomes senv data))
+                                discharge_outcomes senv data)
                             ; rebuild_function = (fun data ->
                                 rebuild_outcomes data)
                             })
