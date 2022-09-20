@@ -27,7 +27,7 @@ jobs:
           script: |
             startGroup "Build"
               no | tactician inject
-              opam recompile coq-stdlib
+              opam reinstall coq-stdlib
             endGroup
           uninstall: |
             startGroup "Uninstallation test"
