@@ -201,7 +201,7 @@ let in_db : id -> data_in -> Libobject.obj =
                             ; discharge_function = (fun data ->
                                 load_plugins ();
                                 let senv = Global.safe_env () in
-                                Some (discharge_outcomes senv data))
+                                discharge_outcomes senv data)
                             ; rebuild_function = (fun data ->
                                 rebuild_outcomes data)
                             })
