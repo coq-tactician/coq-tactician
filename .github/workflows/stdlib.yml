@@ -31,5 +31,5 @@ jobs:
             endGroup
           uninstall: |
             startGroup "Uninstallation test"
-              opam remove coq-stdlib
+              opam remove coq-stdlib --yes
             endGroup
