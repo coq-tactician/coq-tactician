@@ -12,11 +12,6 @@ jobs:
       - uses: actions/checkout@v2
         with:
           path: 'coq-tactician'
-      - uses: actions/checkout@v2
-        with:
-          repository: 'coq-tactician/coq-tactician-stdlib'
-          ref: 'coqdev'
-          path: 'coq-tactician-stdlib'
       - uses: coq-community/docker-coq-action@v1.2.3
         with:
           opam_file: 'coq-tactician.opam'
@@ -31,10 +26,10 @@ jobs:
             endGroup
           script: |
             startGroup "Build"
-              sudo chmod -R 777 .
-              opam exec -- make -C coq-tactician-stdlib -j2
+              no | tactician inject
+              opam recompile coq-stdlib
             endGroup
           uninstall: |
             startGroup "Uninstallation test"
-              opam remove coq-tactician
+              opam remove coq-stdlib
             endGroup
