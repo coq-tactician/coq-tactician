@@ -39,5 +39,5 @@ jobs:
             endGroup
           uninstall: |
             startGroup "Uninstallation test"
-              opam remove coq-tactician
+              opam remove coq-stdlib --yes
             endGroup
