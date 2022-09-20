@@ -23,6 +23,7 @@
 )
 (install
  (files
+   coq-stdlib.patch
    coq-hott.patch
    coq-hott.8.10.patch
    coq-hott.8.11.patch
