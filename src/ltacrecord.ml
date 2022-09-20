@@ -115,24 +115,32 @@ let rebuild_outcomes { outcomes; tactic; name; status=_; path } =
   ; name; status = Discharged path; path = Lib.make_path @@ Libnames.basename path }
 
 let discharge_outcomes senv { outcomes; tactic; name; status; path } =
-  let sections = Safe_typing.sections_of_safe_env senv in
-  let env = Safe_typing.env_of_safe_env senv in
-  let modlist = Section.replacement_context env sections in
-  let discharge_constr t = Cooking.expmod_constr modlist t in
-  let discharge_proof_state (ctx, concl) =
-     List.map (Tactician_util.map_named discharge_constr) ctx, discharge_constr concl in
-  let rec discharge_pd = function
-    | End -> End
-    | Step ps -> Step (discharge_ps ps)
-  and discharge_ps {executions; tactic} =
-    { executions = List.map (fun (ps, pd) -> discharge_proof_state ps, discharge_pd pd) executions
-    ; tactic } in
-  let outcomes = List.map (fun {parents; siblings; before; after} ->
-      { parents = List.map (fun (psa, pse) -> (psa, discharge_ps pse)) parents
-      ; siblings = discharge_pd siblings
-      ; before = discharge_proof_state before
-      ; after = List.map discharge_proof_state after }) outcomes in
-  { outcomes; tactic; name; status; path }
+  try
+    let sections = Safe_typing.sections_of_safe_env senv in
+    let env = Safe_typing.env_of_safe_env senv in
+    let modlist = Section.replacement_context env sections in
+    let secctx = Environ.named_context @@ Safe_typing.env_of_safe_env senv in
+    let constantctx = Names.Id.Set.of_list @@ Array.to_list @@ snd @@ Names.Cmap.find name @@ fst modlist in
+    let irrelevantctx = Names.Id.Set.of_list @@ List.filter
+        (fun x -> not @@ Names.Id.Set.mem x constantctx) @@ List.map Context.Named.Declaration.get_id secctx in
+    let discharge_constr t = Cooking.expmod_constr modlist t in
+    let discharge_proof_state (ctx, concl) =
+      List.map (Tactician_util.map_named discharge_constr) @@
+      List.filter (fun x -> not @@ Names.Id.Set.mem (Context.Named.Declaration.get_id x) irrelevantctx) ctx,
+      discharge_constr concl in
+    let rec discharge_pd = function
+      | End -> End
+      | Step ps -> Step (discharge_ps ps)
+    and discharge_ps {executions; tactic} =
+      { executions = List.map (fun (ps, pd) -> discharge_proof_state ps, discharge_pd pd) executions
+      ; tactic } in
+    let outcomes = List.map (fun {parents; siblings; before; after} ->
+        { parents = List.map (fun (psa, pse) -> (psa, discharge_ps pse)) parents
+        ; siblings = discharge_pd siblings
+        ; before = discharge_proof_state before
+        ; after = List.map discharge_proof_state after }) outcomes in
+    Some { outcomes; tactic; name; status; path }
+  with Not_found -> None
 
 let section_ltac_helper bodies =
   tmp_ltac_defs := []; (* Safe to discard tmp state from old section discharge *)
@@ -202,7 +210,7 @@ let in_db : data_in -> Libobject.obj =
                             ; discharge_function = (fun (_, data) ->
                                 load_plugins ();
                                 let senv = Global.safe_env () in
-                                Some (discharge_outcomes senv data))
+                                discharge_outcomes senv data)
                             ; rebuild_function = (fun data ->
                                 rebuild_outcomes data)
                             })
