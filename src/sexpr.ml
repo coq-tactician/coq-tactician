@@ -79,7 +79,7 @@ let constr2s t =
     | Var id -> Node [s2s "Var"; id2s id]
     | Meta n -> Node [s2s "Meta"; s2s (string_of_int n)]
     | Evar (evar, constrs) ->
-      let sentences = List.map (aux ls) constrs in
+      let sentences = List.map (aux ls) @@ List.filter_map (fun x -> x) @@ SList.to_list constrs in
       Node (s2s "Evar" :: s2s (string_of_int (Evar.repr evar)) :: sentences)
     | Sort s -> Node (s2s "Sort" :: sorts2s s)
     | Cast (t', kind, typ) -> Node [s2s "Cast"; aux ls t'; cast_kind2s kind; aux ls typ]
