@@ -114,21 +114,11 @@ let rebuild_outcomes { outcomes; tactic; name; status=_; path } =
   ; name; status = Discharged path; path = Lib.make_path @@ Libnames.basename path }
 
 let expmod_constr info c =
-  let c = Cooking.abstract_as_body info c in
-  let n_assums = List.length (Cooking.rel_context_of_cooking_cache info) in
-  let ctx, c = Term.decompose_lam_n_decls n_assums c in
-  let rec fold ctx args subst = match ctx, args with
-    | [], [] -> subst
-    | Context.Rel.Declaration.LocalAssum _ :: ctx, arg :: args ->
-      fold ctx args (Esubst.subs_cons arg subst)
-    | Context.Rel.Declaration.LocalDef (_, b, _) :: ctx, args ->
-      let b = Vars.esubst Constr.lift subst b in
-      fold ctx args (Esubst.subs_cons b subst)
-    | _ :: _, [] | [], _ :: _ -> assert false
-  in
-  let args = Array.to_list @@ Cooking.instance_of_cooking_cache info in
-  let subst = fold (List.rev ctx) args (Esubst.subs_id 0) in
-  Vars.esubst Constr.lift subst c
+  let c = Cooking.abstract_as_type info c in
+  let n_assums = Context.Rel.nhyps (Cooking.rel_context_of_cooking_cache info) in
+  let _, c = Term.decompose_prod_n n_assums c in
+  let args = List.rev @@ Array.to_list @@ Cooking.instance_of_cooking_cache info in
+  Vars.substl args c
 
 let discharge_outcomes senv { outcomes; tactic; name; status; path } =
   try
