@@ -1,7 +1,7 @@
 (coq.theory
  (name Tactician)
  (package coq-tactician)
- (flags -q -noinit)
+ (stdlib no)
  (libraries
    coq-tactician.record-plugin
    coq-tactician.tactics-plugin

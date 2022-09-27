@@ -17,7 +17,7 @@ homepage: "https://coq-tactician.github.io"
 bug-reports: "https://github.com/coq-tactician/coq-tactician/issues"
 depends: [
   "ocaml" {>= "4.08"}
-  "dune" {>= "2.8"}
+  "dune" {>= "3.5"}
   "dune-site" {>= "2.9.1"}
   "opam-client" {>= "2.1.0"}
   "cmdliner" {>= "1.1.0"}
@@ -36,10 +36,12 @@ build: [
     name
     "-j"
     jobs
+    "--promote-install-files=false"
     "@install"
     "@runtest" {with-test}
     "@doc" {with-doc}
   ]
+  ["dune" "install" "-p" name "--create-install-files" name]
 ]
 dev-repo: "git+https://github.com/coq-tactician/coq-tactician.git"
 post-messages: ["

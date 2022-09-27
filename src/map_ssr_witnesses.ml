@@ -512,7 +512,6 @@ let _ = register_generic_map wit_ssrintros_ne (module struct
     type raw = ssripats
     type glob = ssripats
     module M = functor (M : MapDef) -> struct
-      open M
       open SSRMap(M)
       let raw_map = ssripats_map
       let glob_map = ssripats_map

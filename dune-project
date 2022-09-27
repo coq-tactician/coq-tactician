@@ -1,6 +1,6 @@
-(lang dune 2.8)
+(lang dune 3.4)
 (name coq-tactician)
-(using coq 0.2)
+(using coq 0.4)
 (using dune_site 0.1)
 
 (generate_opam_files true)

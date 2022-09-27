@@ -36,6 +36,7 @@
  (package coq-tactician)
 )
 (install
+ (package coq-tactician)
  (section share)
  (files (injection-flags as plugins/coq-tactician/injection-flags)))
 

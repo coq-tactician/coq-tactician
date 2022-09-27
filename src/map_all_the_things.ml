@@ -586,7 +586,6 @@ module MakeMapper (M: MapDef) = struct
     tactic_map   : 'tacexpr map;
     generic_map  : 'lev generic_argument map;
     trm_map      : 'trm map;
-    dtrm_map     : 'dtrm map;
     pat_map      : 'pat map;
     ref_map      : 'ref map;
     cst_map      : 'cst map;
@@ -1299,7 +1298,6 @@ module MakeMapper (M: MapDef) = struct
   and raw_tactic_mapper m = {
     tactic_map   = raw_tactic_expr_map m;
     trm_map      = constr_expr_map m recursor;
-    dtrm_map     = constr_expr_map m recursor;
     pat_map      = constr_expr_map m recursor;
     ref_map      = qualid_map m;
     nam_map      = mcast m m.variable;
@@ -1315,7 +1313,6 @@ module MakeMapper (M: MapDef) = struct
   and glob_tactic_mapper m = {
     tactic_map   = glob_tactic_expr_map m;
     trm_map      = glob_constr_and_expr_map m recursor;
-    dtrm_map     = glob_constr_and_expr_map m recursor;
     pat_map      = g_pat_map m recursor;
     ref_map      = or_var_map m (fun x -> m.located @@ return x);
     nam_map      = mcast m m.variable;
