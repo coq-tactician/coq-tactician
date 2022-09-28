@@ -539,3 +539,13 @@ let _ = register_generic_map wit_ssrhintarg (module struct
       let glob_map m = ssrhint_map m m.glob_tactic_expr_map
     end
   end)
+
+let _ = register_generic_map Internal.wit_rpatternty (module struct
+    type raw = rpattern
+    type glob = rpattern
+    module M = functor (M : MapDef) -> struct
+      open SSRMap(M)
+      let raw_map = rpattern_map
+      let glob_map = rpattern_map
+    end
+  end)

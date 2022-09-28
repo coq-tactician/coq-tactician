@@ -66,6 +66,7 @@ module type MapDef = sig
     ; qualid_map : Libnames.qualid map
     ; globref_map : GlobRef.t map
     ; quantified_hypothesis_map : quantified_hypothesis map
+    ; red_expr_gen_map : 'a 'b 'c. 'a map -> 'b map -> 'c map -> ('a, 'b, 'c) red_expr_gen map
     }
 
   type ('raw, 'glb) gen_map =
@@ -146,6 +147,7 @@ module MapDefTemplate (M: Monad.Def) = struct
     ; qualid_map : Libnames.qualid map
     ; globref_map : GlobRef.t map
     ; quantified_hypothesis_map : quantified_hypothesis map
+    ; red_expr_gen_map : 'a 'b 'c. 'a map -> 'b map -> 'c map -> ('a, 'b, 'c) red_expr_gen map
     }
   type ('raw, 'glb) gen_map =
     { raw : recursor -> 'raw map
@@ -1278,6 +1280,7 @@ module MakeMapper (M: MapDef) = struct
     ; qualid_map = qualid_map m
     ; globref_map = globref_map m
     ; quantified_hypothesis_map = quantified_hypothesis_map m
+    ; red_expr_gen_map = (fun f g h -> red_expr_gen_map m f g h)
     }
   and raw_tactic_mapper m = {
     tactic_map   = raw_tactic_expr_map m;
