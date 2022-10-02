@@ -14,9 +14,6 @@ let at wit = register_generic_map_identity wit
 let _ = [
   (* Ssrparser *)
   at wit_ssrseqdir; at wit_ssrfwdfmt; at wit_ssrdir;
-
-  (* Ssrmatching *)
-  at Internal.wit_rpatternty
 ]
 
 let _ = [at wit_ssrtacarg; at wit_ssrtclarg]
