@@ -421,7 +421,7 @@ let tclDebugTac t env debug =
     let open Proofview in
     let open Notations in
     let tac2 = parse_tac t in
-    let tac2 = tclTIMEOUT 1 tac2 in
+    let tac2 = Timeouttac.tclTIMEOUTF 0.1 tac2 in
     (* let tac2 = tclUNIT () >>= fun () ->
      *     try
      *         tac2 >>= (fun () -> CErrors.user_err (Pp.str "blaat"))
@@ -524,9 +524,6 @@ let tacpredict debug max_reached =
     tclUNIT (mapi (fun i p -> transform i p) predictions) in
   tclUNIT cont
 
-let tclTIMEOUT2 n t =
-    Timeouttac.ptimeout n t
-
 let contains s1 s2 =
     let re = Str.regexp_string s2
     in
@@ -624,7 +621,7 @@ let benchmarkSearch name time deterministic : unit Proofview.tactic =
   let open Proofview in
   let open Notations in
   let abstract_time = time in
-  let timeout_command = if deterministic then fun x -> x else tclTIMEOUT2 abstract_time in
+  let timeout_command = if deterministic then fun x -> x else Timeouttac.ptimeout abstract_time in
   let max_exec = if deterministic then Some abstract_time else None in
   let print_success env (wit, count) start_time =
     let tcs, m = List.split (List.map (fun {tac;focus;prediction_index} ->
