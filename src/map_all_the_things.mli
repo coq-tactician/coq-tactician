@@ -11,6 +11,7 @@ open Tactypes
 open Locus
 open Tactics
 open Names
+open Genredexpr
 
 module type MapDef = sig
   include MonadNotations
@@ -62,6 +63,7 @@ module type MapDef = sig
     ; qualid_map : Libnames.qualid map
     ; globref_map : GlobRef.t map
     ; quantified_hypothesis_map : quantified_hypothesis map
+    ; red_expr_gen_map : 'a 'b 'c. 'a map -> 'b map -> 'c map -> ('a, 'b, 'c) red_expr_gen map
     }
 
   type ('raw, 'glb) gen_map =
@@ -118,6 +120,7 @@ module MapDefTemplate (M: Monad.Def) : sig
     ; qualid_map : Libnames.qualid map
     ; globref_map : GlobRef.t map
     ; quantified_hypothesis_map : quantified_hypothesis map
+    ; red_expr_gen_map : 'a 'b 'c. 'a map -> 'b map -> 'c map -> ('a, 'b, 'c) red_expr_gen map
     }
   val default_mapper : mapper
   type ('raw, 'glb) gen_map =
