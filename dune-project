@@ -31,4 +31,4 @@ automation.")
     (coq (and (>= 8.14) (< 8.15~)))
     conf-git
     (bos (>= 0.2.1))
-    (coq-tactician-dummy (and (= dev) :with-test))))
+    (coq-tactician-dummy (and (= 8.6.dev) :with-test))))
