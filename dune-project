@@ -24,7 +24,6 @@ automation.")
   (sites (share plugins))
   (depends
     (ocaml (>= 4.08))
-    (dune (>= 3.5.0))
     (dune-site (>= 2.9.1))
     (opam-client (>= 2.1.0))
     (cmdliner (>= 1.1.0))
