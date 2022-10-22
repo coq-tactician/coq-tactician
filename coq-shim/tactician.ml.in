@@ -123,12 +123,6 @@ let remove_rcfile () =
     print_endline "\nFile patched! Run 'tactician enable' to reverse this command"
   ); `Ok ()
 
-let string_in str ls =
-  let filtered = List.filter (fun s -> String.equal s str) ls in
-  match filtered with
-  | [] -> false
-  | _ -> true
-
 let opam_init_no_lock f =
   OpamClientConfig.opam_init ();
   OpamGlobalState.with_ `Lock_none f
