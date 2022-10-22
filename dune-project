@@ -1,6 +1,6 @@
-(lang dune 2.8)
+(lang dune 3.5)
 (name coq-tactician)
-(using coq 0.2)
+(using coq 0.6)
 (using dune_site 0.1)
 
 (generate_opam_files true)
@@ -24,11 +24,12 @@ automation.")
   (sites (share plugins))
   (depends
     (ocaml (>= 4.08))
-    dune
+    (dune (>= 3.5.0))
     (dune-site (>= 2.9.1))
     (opam-client (>= 2.1.0))
     (cmdliner (>= 1.1.0))
     (coq-core (= dev))
+    (coq-stdlib (and (= dev) :with-test))
     conf-git
     (bos (>= 0.2.1))
     (coq-tactician-dummy (and (= dev) :with-test))))
