@@ -56,6 +56,7 @@ module type MapDef = sig
     ; variable_map : Id.t map
     ; constr_expr_map : constr_expr map
     ; glob_constr_and_expr_map : glob_constr_and_expr map
+    ; glob_constr_pattern_and_expr_map : glob_constr_pattern_and_expr map
     ; intro_pattern_expr_map : 'a. 'a map -> 'a intro_pattern_expr map
     ; bindings_map : 'a. 'a map -> 'a bindings map
     ; with_bindings_map : 'a. 'a map -> 'a with_bindings map
@@ -137,6 +138,7 @@ module MapDefTemplate (M: Monad.Def) = struct
     ; variable_map : Id.t map
     ; constr_expr_map : constr_expr map
     ; glob_constr_and_expr_map : glob_constr_and_expr map
+    ; glob_constr_pattern_and_expr_map : glob_constr_pattern_and_expr map
     ; intro_pattern_expr_map : 'a. 'a map -> 'a intro_pattern_expr map
     ; bindings_map : 'a. 'a map -> 'a bindings map
     ; with_bindings_map : 'a. 'a map -> 'a with_bindings map
@@ -1284,6 +1286,7 @@ module MakeMapper (M: MapDef) = struct
     ; intro_pattern_expr_map = (fun f -> intro_pattern_expr_map m f)
     ; constr_expr_map = constr_expr_map m recursor
     ; glob_constr_and_expr_map = glob_constr_and_expr_map m recursor
+    ; glob_constr_pattern_and_expr_map = g_pat_map m recursor
     ; bindings_map = (fun f -> bindings_map m f)
     ; with_bindings_map = (fun f -> with_bindings_map m f)
     ; located_map = (fun f -> located_map m f)
