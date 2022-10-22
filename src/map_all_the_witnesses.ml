@@ -20,6 +20,7 @@ open Loc
 open Tactypes
 open Tactics
 open Tacexpr
+open Tacred
 
 module OList = List
 
@@ -300,6 +301,63 @@ let _ = register_generic_map wit_glob_constr_with_bindings (module struct
       open M
       let raw_map m = m.with_bindings_map m.constr_expr_map
       let glob_map m = m.with_bindings_map m.glob_constr_and_expr_map
+    end
+  end)
+
+let _ = register_generic_map wit_rewstrategy (module struct
+    type raw = raw_strategy
+    type glob = glob_strategy
+    module M = functor (M : MapDef) -> struct
+      open Rewrite
+      open M
+      open Monad.Make(M)
+      let rec strategy_map f g = function
+        | StratId | StratFail | StratRefl as s -> return s
+        | StratUnary (s, str) ->
+          let+ str = strategy_map f g str in
+          StratUnary (s, str)
+        | StratBinary (s, str, str') ->
+          let+ str = strategy_map f g str
+          and+ str' = strategy_map f g str' in
+          StratBinary (s, str, str')
+        | StratNAry (s, strs) ->
+          let+ strs = List.map (strategy_map f g) strs in
+          StratNAry (s, strs)
+        | StratConstr (c, b) ->
+          let+ c = f c in
+          StratConstr (c, b)
+        | StratTerms l ->
+          let+ l = List.map f l in
+          StratTerms l
+        | StratHints _ as s -> return s
+        | StratEval r ->
+          let+ r = g r in
+          StratEval r
+        | StratFold c ->
+          let+ c = f c in
+          StratFold c
+      let or_by_notation_r_map f = function
+        | AN x -> let+ x = f x in AN x
+        | ByNotation x -> return (ByNotation x)
+      let and_short_name_map m f (x, n) =
+        let+ x = f x
+        and+ n = m.short_name_map n in
+        (x, n)
+      let evaluable_global_reference_map m = function
+        | EvalConstRef c ->
+          let+ c = m.constant_map c in
+          EvalConstRef c
+        | EvalVarRef id ->
+          let+ id = m.variable_map id in
+          EvalVarRef id
+      let raw_map m = strategy_map m.constr_expr_map
+          (m.red_expr_gen_map m.constr_expr_map
+             (m.cast_map (or_by_notation_r_map m.qualid_map))
+             m.constr_expr_map)
+      let glob_map m = strategy_map m.glob_constr_and_expr_map
+          (m.red_expr_gen_map m.glob_constr_and_expr_map
+             (m.or_var_map (and_short_name_map m (evaluable_global_reference_map m)))
+             m.glob_constr_pattern_and_expr_map)
     end
   end)
 
