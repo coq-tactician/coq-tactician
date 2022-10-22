@@ -14,9 +14,6 @@ let at wit = register_generic_map_identity wit
 let _ = [
   (* Ssrparser *)
   at wit_ssrseqdir; at wit_ssrfwdfmt; at wit_ssrdir;
-
-  (* Ssrmatching *)
-  at Internal.wit_rpatternty
 ]
 
 let _ = [at wit_ssrtacarg; at wit_ssrtclarg]
@@ -512,7 +509,6 @@ let _ = register_generic_map wit_ssrintros_ne (module struct
     type raw = ssripats
     type glob = ssripats
     module M = functor (M : MapDef) -> struct
-      open M
       open SSRMap(M)
       let raw_map = ssripats_map
       let glob_map = ssripats_map
@@ -597,5 +593,15 @@ let _ = register_generic_map wit_ssrhint3arg (module struct
       open SSRMap(M)
       let raw_map m = ssrhint_map m m.raw_tactic_expr_map
       let glob_map m = ssrhint_map m m.glob_tactic_expr_map
+    end
+  end)
+
+let _ = register_generic_map Internal.wit_rpatternty (module struct
+    type raw = rpattern
+    type glob = rpattern
+    module M = functor (M : MapDef) -> struct
+      open SSRMap(M)
+      let raw_map = rpattern_map
+      let glob_map = rpattern_map
     end
   end)
