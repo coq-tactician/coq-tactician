@@ -1,5 +1,4 @@
 open Map_all_the_things
-open Genarg
 open Names
 open Monad_util
 open Glob_term
@@ -19,14 +18,6 @@ module OneVariableDef = struct
         let comb (ls1, b1) (ls2, b2) = List.append ls1 ls2, b1 && b2 end)
       (struct type r = Id.t list end)
   include MapDefTemplate (M)
-  let map_sort = "one_free_variable"
-  let warnProblem wit =
-    Feedback.msg_warning (Pp.(str "Tactician is having problems with " ++
-                              str "the following tactic. Please report. " ++
-                              pr_argument_type wit))
-  let default wit = { raw = (fun _ -> warnProblem (ArgumentType wit); id)
-                    ; glb = (fun _ -> warnProblem (ArgumentType wit); id)}
-
   let with_binders ids = M.local (fun ids' -> (ids@ids'))
 end
 module OneVariableMapper = MakeMapper(OneVariableDef)
@@ -117,13 +108,6 @@ module SubstituteDef = struct
   module M = StateMonadT(MaybeMonad)
       (struct type s = var_type list end)
   include MapDefTemplate (M)
-  let map_sort = "substitute"
-  let warnProblem wit =
-    Feedback.msg_warning (Pp.(str "Tactician is having problems with " ++
-                              str "the following tactic. Please report. " ++
-                              pr_argument_type wit))
-  let default wit = { raw = (fun _ -> warnProblem (ArgumentType wit); id)
-                    ; glb = (fun _ -> warnProblem (ArgumentType wit); id)}
 end
 module SubstituteMapper = MakeMapper(SubstituteDef)
 open SubstituteDef
@@ -183,13 +167,6 @@ let tactic_substitute ls t =
 open Mapping_helpers
 module StripDef = struct
   include MapDefTemplate(IdentityMonad)
-  let map_sort = "normalize"
-  let warnProblem wit =
-    Feedback.msg_warning (Pp.(str "Tactician is having problems with " ++
-                              str "the following tactic. Please report. " ++
-                              pr_argument_type wit))
-  let default wit = { raw = (fun _ -> warnProblem (ArgumentType wit); id)
-                    ; glb = (fun _ -> warnProblem (ArgumentType wit); id)}
 end
 module StripMapper = MakeMapper(StripDef)
 open StripDef

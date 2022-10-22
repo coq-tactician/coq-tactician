@@ -1,5 +1,4 @@
 open Map_all_the_things
-open Genarg
 open Names
 open Monad_util
 
@@ -8,14 +7,6 @@ module M = ReaderStateMonad
 module AbstractDef = struct
   include MapDefTemplate(M)
   open M
-  let map_sort = "abstract"
-  let warnProblem wit =
-    Feedback.msg_warning (Pp.(str "Tactician is having problems with " ++
-                              str "the following tactic. Please report. " ++
-                              pr_argument_type wit))
-  let default wit = { raw = (fun _ -> warnProblem (ArgumentType wit); id)
-                    ; glb = (fun _ -> warnProblem (ArgumentType wit); id)}
-
   let with_binders ids x = local (fun ids' -> (ids@ids')) x
 end
 module AbstractMapper = MakeMapper(AbstractDef)
@@ -40,14 +31,6 @@ module M2 = WriterMonad
   (struct type w = Constant.t list let comb = List.append let id = [] end)
 module ConstantsDef = struct
   include MapDefTemplate(M2)
-  let map_sort = "abstract"
-  let warnProblem wit =
-    Feedback.msg_warning (Pp.(str "Tactician is having problems with " ++
-                              str "the following tactic. Please report. " ++
-                              pr_argument_type wit))
-  let default wit = { raw = (fun _ -> warnProblem (ArgumentType wit); id)
-                    ; glb = (fun _ -> warnProblem (ArgumentType wit); id)}
-
   let with_binders _ids x = x
 end
 module ConstantsMapper = MakeMapper(ConstantsDef)

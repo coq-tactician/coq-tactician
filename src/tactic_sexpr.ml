@@ -1,7 +1,6 @@
 open Ltac_plugin
 open Monad_util
 open Map_all_the_things
-open Genarg
 open Mapping_helpers
 open Tacexpr
 open Sexpr
@@ -150,13 +149,6 @@ module SexprDef = struct
   module M = WriterMonad
       (struct type w = sexpr list let id = [] let comb = List.append end)
   include MapDefTemplate (M)
-  let map_sort = "sexpr"
-  let warnProblem wit =
-    Feedback.msg_warning (Pp.(str "Tactician is having problems with " ++
-                              str "the following tactic. Please report. " ++
-                              pr_argument_type wit))
-  let default wit = { raw = (fun _ -> warnProblem (ArgumentType wit); id)
-                    ; glb = (fun _ -> warnProblem (ArgumentType wit); id)}
 end
 module SexprMapper = MakeMapper(SexprDef)
 open SexprDef

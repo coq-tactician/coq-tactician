@@ -11,6 +11,7 @@ open Tactypes
 open Locus
 open Tactics
 open Names
+open Genredexpr
 
 module type MapDef = sig
   include MonadNotations
@@ -52,6 +53,7 @@ module type MapDef = sig
     ; variable_map : Id.t map
     ; constr_expr_map : constr_expr map
     ; glob_constr_and_expr_map : glob_constr_and_expr map
+    ; glob_constr_pattern_and_expr_map : glob_constr_pattern_and_expr map
     ; intro_pattern_expr_map : 'a. 'a map -> 'a intro_pattern_expr map
     ; bindings_map : 'a. 'a map -> 'a bindings map
     ; with_bindings_map : 'a. 'a map -> 'a with_bindings map
@@ -62,13 +64,13 @@ module type MapDef = sig
     ; qualid_map : Libnames.qualid map
     ; globref_map : GlobRef.t map
     ; quantified_hypothesis_map : quantified_hypothesis map
+    ; red_expr_gen_map : 'a 'b 'c. 'a map -> 'b map -> 'c map -> ('a, 'b, 'c) red_expr_gen map
     }
 
   type ('raw, 'glb) gen_map =
     { raw : recursor -> 'raw map
     ; glb : recursor -> 'glb map }
 
-  val map_sort : string
   val default : ('raw, 'glb, 'top) genarg_type -> ('raw, 'glb) gen_map
 
 end
@@ -109,6 +111,7 @@ module MapDefTemplate (M: Monad.Def) : sig
     ; variable_map : Id.t map
     ; constr_expr_map : constr_expr map
     ; glob_constr_and_expr_map : glob_constr_and_expr map
+    ; glob_constr_pattern_and_expr_map : glob_constr_pattern_and_expr map
     ; intro_pattern_expr_map : 'a. 'a map -> 'a intro_pattern_expr map
     ; bindings_map : 'a. 'a map -> 'a bindings map
     ; with_bindings_map : 'a. 'a map -> 'a with_bindings map
@@ -119,11 +122,13 @@ module MapDefTemplate (M: Monad.Def) : sig
     ; qualid_map : Libnames.qualid map
     ; globref_map : GlobRef.t map
     ; quantified_hypothesis_map : quantified_hypothesis map
+    ; red_expr_gen_map : 'a 'b 'c. 'a map -> 'b map -> 'c map -> ('a, 'b, 'c) red_expr_gen map
     }
   val default_mapper : mapper
   type ('raw, 'glb) gen_map =
     { raw : recursor -> 'raw map
     ; glb : recursor -> 'glb map }
+  val default : ('raw, 'glb, 'top) genarg_type -> ('raw, 'glb) gen_map
 end with type 'a t = 'a M.t
 
 module type GenMap = sig

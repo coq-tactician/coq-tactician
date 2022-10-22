@@ -117,17 +117,28 @@ let windows_timeout n f x =
     Exninfo.iraise e
 
 let unix_timeout n f x e =
-  match unix_timeout (float_of_int n) f x with
+  match unix_timeout n f x with
   | None -> raise e
   | Some x -> x
 
 let windows_timeout n f x e =
-  match windows_timeout (float_of_int n) f x with
+  match windows_timeout n f x with
   | None -> raise e
   | Some x -> x
 
-let timeout_fun = match Sys.os_type with
-  | "Unix" | "Cygwin" -> { timeout = unix_timeout }
-  | _ -> { timeout = windows_timeout }
+(* We employ a hack to get sub-second timeouts:
+   When the timeout gets extremely large, we actually interpret it as small. *)
+let timeout_max = 100000
+let timeout_fun =
+  { timeout = fun n ->
+        let n = if n >= timeout_max then
+            float_of_int n /. float_of_int (100 * timeout_max)
+          else float_of_int n in
+        match Sys.os_type with
+        | "Unix" | "Cygwin" -> unix_timeout n
+        | _ -> windows_timeout n }
 
 let () = Control.set_timeout timeout_fun
+
+let tclTIMEOUTF f t =
+  Proofview.tclTIMEOUT (int_of_float (f *. float_of_int (100 * timeout_max))) t
