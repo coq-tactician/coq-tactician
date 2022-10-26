@@ -73,9 +73,14 @@ let unix_timeout n f x =
       let res = f x in
       restore_timeout ();
       Some res
-    with CErrors.Timeout ->
+    with
+    | Timeout ->
       restore_timeout ();
       None
+    | reraise ->
+      let (e, info) = CErrors.push reraise in
+      restore_timeout ();
+      Exninfo.iraise (e, info)
 
 let interrupt = ref false
 
