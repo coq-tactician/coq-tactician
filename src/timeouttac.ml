@@ -74,7 +74,7 @@ let unix_timeout n f x =
       restore_timeout ();
       Some res
     with
-    | Timeout ->
+    | CErrors.Timeout ->
       restore_timeout ();
       None
     | reraise ->
