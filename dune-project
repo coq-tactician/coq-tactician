@@ -22,6 +22,7 @@ proof synthesis. Tactician's goal is to provide the user with a seamless,
 interactive, and intuitive experience together with strong, adaptive proof
 automation.")
   (sites (share plugins))
+  (license MIT)
   (depends
     (ocaml (>= 4.08))
     dune
