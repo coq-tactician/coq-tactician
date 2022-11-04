@@ -322,7 +322,7 @@ let warn tac =
   (* The unshelve tactic is the only tactic known to generate goals that do not inherit state from their
      parents (because those goals were on the shelf). We filter tactics expressions that contain this
      tactic out of the warning. *)
-  let unshelve_ml = Tacexpr.{ mltac_name = { mltac_plugin = "ltac_plugin"; mltac_tactic = "unshelve" }
+  let unshelve_ml = Tacexpr.{ mltac_name = { mltac_plugin = "coq-core.plugins.ltac"; mltac_tactic = "unshelve" }
                             ; mltac_index = 0 } in
   if not (Find_tactic_syntax.contains_ml_tactic unshelve_ml tac) then
     Feedback.msg_warning Pp.(str "Tactician has uncovered a bug in a tactic. Please report. " ++ tac_pp tac)
