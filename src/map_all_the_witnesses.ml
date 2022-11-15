@@ -163,11 +163,8 @@ let _ = register_generic_map wit_hloc (module struct
     type glob = loc_place
     module M = functor (M : MapDef) -> struct
       open M
-      let location_map f g = function
-        | HypLocation x -> let+ x = f x in HypLocation x
-        | ConclLocation x -> let+ x = g x in ConclLocation x
-      let raw_map m = location_map (fun (a, b) -> let+ a = m.cast_map m.variable_map a in a, b) id
-      let glob_map m = location_map (fun (a, b) -> let+ a = m.cast_map m.variable_map a in a, b) id
+      let raw_map m = m.option_map (fun (a, b) -> let+ a = m.cast_map m.variable_map a in a, b)
+      let glob_map m = m.option_map (fun (a, b) -> let+ a = m.cast_map m.variable_map a in a, b)
     end
   end)
 
