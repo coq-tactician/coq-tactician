@@ -605,3 +605,23 @@ let _ = register_generic_map Internal.wit_rpatternty (module struct
       let glob_map = rpattern_map
     end
   end)
+
+let _ = register_generic_map wit_ssr_idcomma (module struct
+    type raw = Id.t option option
+    type glob = Id.t option option
+    module M = functor (M : MapDef) -> struct
+      open M
+      let raw_map m = m.option_map (m.option_map m.variable_map)
+      let glob_map m = m.option_map (m.option_map m.variable_map)
+    end
+  end)
+
+let _ = register_generic_map wit_ssrclear (module struct
+    type raw = ssrhyps
+    type glob = ssrclear
+    module M = functor (M : MapDef) -> struct
+      open SSRMap(M)
+      let raw_map m = ssrhyps_map m
+      let glob_map m = ssrhyps_map m
+    end
+  end)
