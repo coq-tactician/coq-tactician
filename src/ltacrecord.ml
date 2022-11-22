@@ -200,7 +200,6 @@ let load_plugins () =
    vernac command. Hence, we can use it to execute arbitrary code. We use this to load extra plugins. *)
 let load_plugin_hack_option =
   Goptions.{ optdepr = true
-           ; optname = ""
            ; optkey = ["Tactician"; "Internal"; "LoadPluginHack"]
            ; optread = (fun () -> load_plugins (); false)
            ; optwrite = (fun _ -> ()) }
