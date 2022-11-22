@@ -193,7 +193,18 @@ let load_plugins () =
   let load (dep, target) =
     if module_is_known dep && not (module_is_known target) then
       declare_ml_modules false [target] in
-  List.iter load plugins
+  if module_is_known "tactician_ltac1_record_plugin" then
+    List.iter load plugins
+
+(* TODO: Hack: Option have the property that they are being read by Coq's stm (multiple times) on every
+   vernac command. Hence, we can use it to execute arbitrary code. We use this to load extra plugins. *)
+let load_plugin_hack_option =
+  Goptions.{ optdepr = true
+           ; optname = ""
+           ; optkey = ["Tactician"; "Internal"; "LoadPluginHack"]
+           ; optread = (fun () -> load_plugins (); false)
+           ; optwrite = (fun _ -> ()) }
+let () = Goptions.declare_bool_option load_plugin_hack_option
 
 let in_db : data_in -> Libobject.obj =
   Libobject.(declare_object { (default_object "LTACRECORD") with
