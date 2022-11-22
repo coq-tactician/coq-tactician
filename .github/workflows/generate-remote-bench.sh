@@ -22,7 +22,7 @@ jobs:
               ${{ secrets.BENCH_HOST }} coq-tactician git+https://github.com/${{ github.repository }}.git \
               $GITHUB_SHA 40 coq-tactician-stdlib)
           echo $BENCHID
-          echo "::set-output name=benchid::$BENCHID"
+          echo "benchid=$BENCHID" >> $GITHUB_OUTPUT
 
 EOF
 
@@ -39,7 +39,7 @@ ATTACH=$(cat <<'EOF'
           EXIT=$?
           echo "Exit code $EXIT"
           if [ $EXIT -eq 124 ]; then
-              echo "::set-output name=finished::false"
+              echo "finished=false" >> $GITHUB_OUTPUT
               echo "Job did not finish before Github time limit, spilling to next step"
           else
               exit $EXIT
