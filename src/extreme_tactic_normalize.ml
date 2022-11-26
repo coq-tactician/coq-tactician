@@ -9,14 +9,14 @@ module NormalizeMapper = MakeMapper(NormalizeDef)
 open NormalizeDef
 open Helpers(NormalizeDef)
 
-let placeholder = match Coqlib.lib_ref "tactician.private_constant_placeholder" with
+let placeholder () = match Coqlib.lib_ref "tactician.private_constant_placeholder" with
   | Names.GlobRef.ConstRef const -> const
   | _ -> assert false
 
 let mapper = { NormalizeDef.default_mapper with
                glob_constr_and_expr = (fun (expr, _) g -> g (expr, None))
              ; variable = (fun _ -> Names.Id.of_string "X")
-             ; constant = (fun c -> placeholder)
+             ; constant = (fun c -> placeholder ())
              ; constr_pattern = (fun _ _ -> Pattern.PMeta None)
              ; constr_expr = (fun _ _ -> CHole (None, IntroAnonymous, None))
              ; glob_constr = (fun _ _ -> Glob_term.GHole (Evar_kinds.GoalEvar, IntroAnonymous, None))

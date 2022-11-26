@@ -100,7 +100,7 @@ let tactic_one_variable t =
   M.run (OneVariableMapper.glob_tactic_expr_map mapper t) []
 
 let marker = Names.Id.of_string_soft "__argument_marker__"
-let placeholder = match Coqlib.lib_ref "tactician.private_constant_placeholder" with
+let placeholder () = match Coqlib.lib_ref "tactician.private_constant_placeholder" with
   | Names.GlobRef.ConstRef const -> const
   | _ -> assert false
 
@@ -138,7 +138,7 @@ let mapper =
           | TOther -> return (Id.of_string_soft "_")
           | _ -> fail)
   ; constant = (fun c ->
-        if not (Constant.equal c placeholder) then return c else
+        if not (Constant.equal c (placeholder ())) then return c else
           let* var = retrieve_variable in
           match var with
           | TRef (GlobRef.ConstRef c) -> return c
@@ -176,7 +176,7 @@ let mapper = { StripDef.default_mapper with
                glob_constr_and_expr = (fun (expr, _) g -> g (expr, None))
              ; glob_constr_pattern_and_expr = (fun (_, expr, pat) g -> g (Names.Id.Set.empty, expr, pat))
              ; variable = (fun id -> return marker)
-             ; constant = (fun c -> return placeholder)
+             ; constant = (fun c -> return (placeholder ()))
              ; constr_pattern = (fun _ _ -> return @@ Pattern.PMeta None)
              ; constr_expr = (fun c _ -> return c)
              ; glob_constr = (fun _ _ ->
