@@ -19,12 +19,7 @@ let append file str =
 let open_permanently file =
   open_out_gen [Open_creat; Open_text; Open_trunc; Open_wronly] 0o640 file
 
-let global_record = ref true
-let recordoptions = Goptions.{optdepr = false;
-                              optkey = ["Tactician"; "Record"];
-                              optread = (fun () -> !global_record);
-                              optwrite = (fun b -> global_record := b)}
-let _ = Goptions.declare_bool_option recordoptions
+let global_record = Goptions.declare_bool_option_and_ref ~depr:false ~key:["Tactician"; "Record"] ~value:true
 
 let _ = Random.self_init ()
 
@@ -211,7 +206,7 @@ let in_db : data_in -> Libobject.obj =
                                   learner_learn (kn, path, status) outcomes tactic)
                             ; load_function = (fun _ ((path, kn), { outcomes; tactic; name; status; path=_ }) ->
                                   if Names.KerName.equal (Names.Constant.canonical name) (Names.Constant.user name) then
-                                    if !global_record then learner_learn (kn, path, status) outcomes tactic else ())
+                                    if global_record () then learner_learn (kn, path, status) outcomes tactic else ())
                             ; open_function = (fun _ _ (_, _) -> ())
                             ; classify_function = (fun data -> Libobject.Substitute data)
                             ; subst_function = (fun x ->
@@ -794,7 +789,7 @@ let wit_glbtactic : (Empty.t, glob_tactic_expr, glob_tactic_expr) Genarg.genarg_
   wit
 
 let should_record b =
-  b && !global_record
+  b && global_record ()
 
 let push_state_tac () =
   let open Proofview in
