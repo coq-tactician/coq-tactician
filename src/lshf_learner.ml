@@ -75,11 +75,12 @@ let query f feats max =
       res @ res', List.length res' + c in
   query f
 
-let depth = Goptions.declare_int_option_and_ref ~depr:false ~key:["Tactician"; "LSHF"; "Depth"] ~value:9
+let depth = Goptions.declare_int_option_and_ref
+    ~stage:Summary.Stage.Interp ~depr:false ~key:["Tactician"; "LSHF"; "Depth"] ~value:9
 let trie_count = Goptions.declare_int_option_and_ref
-    ~depr:false ~key:["Tactician"; "LSHF"; "Trie"; "Count"] ~value:11
+    ~stage:Summary.Stage.Interp ~depr:false ~key:["Tactician"; "LSHF"; "Trie"; "Count"] ~value:11
 let sort_window = Goptions.declare_int_option_and_ref
-    ~depr:false ~key:["Tactician"; "LSHF"; "Sort"; "Window"] ~value:1000
+    ~stage:Summary.Stage.Interp ~depr:false ~key:["Tactician"; "LSHF"; "Sort"; "Window"] ~value:1000
 
 module LSHF =
   functor (TS : TacticianStructures) -> struct

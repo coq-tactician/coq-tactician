@@ -19,7 +19,8 @@ let append file str =
 let open_permanently file =
   open_out_gen [Open_creat; Open_text; Open_trunc; Open_wronly] 0o640 file
 
-let global_record = Goptions.declare_bool_option_and_ref ~depr:false ~key:["Tactician"; "Record"] ~value:true
+let global_record = Goptions.declare_bool_option_and_ref
+    ~stage:Summary.Stage.Interp ~depr:false ~key:["Tactician"; "Record"] ~value:true
 
 let _ = Random.self_init ()
 
@@ -220,6 +221,7 @@ let load_plugins () =
    vernac command. Hence, we can use it to execute arbitrary code. We use this to load extra plugins. *)
 let load_plugin_hack_option =
   Goptions.{ optdepr = true
+           ; optstage = Summary.Stage.Interp
            ; optkey = ["Tactician"; "Internal"; "LoadPluginHack"]
            ; optread = (fun () -> load_plugins (); false)
            ; optwrite = (fun _ -> ()) }
