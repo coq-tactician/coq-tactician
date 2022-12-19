@@ -28,7 +28,7 @@ automation.")
     (dune-site (>= 2.9.1))
     (opam-client (>= 2.1.0))
     (cmdliner (>= 1.1.0))
-    (coq-core (= dev))
+    (coq-core (and (>= 8.17) (< 8.18~)))
     (coq-stdlib (and (= dev) :with-test))
     conf-git
     (bos (>= 0.2.1))
