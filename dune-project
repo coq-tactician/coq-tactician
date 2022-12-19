@@ -29,7 +29,7 @@ automation.")
     (opam-client (>= 2.1.0))
     (cmdliner (>= 1.1.0))
     (coq-core (= dev))
-    (coq-stdlib (and (= dev) :with-test))
+    (coq-stdlib :with-test)
     conf-git
     (bos (>= 0.2.1))
     (coq-tactician-dummy (and (= 8.17.dev) :with-test))))

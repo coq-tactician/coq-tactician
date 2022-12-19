@@ -23,7 +23,7 @@ depends: [
   "opam-client" {>= "2.1.0"}
   "cmdliner" {>= "1.1.0"}
   "coq-core" {= "dev"}
-  "coq-stdlib" {= "dev" & with-test}
+  "coq-stdlib" {with-test}
   "conf-git"
   "bos" {>= "0.2.1"}
   "coq-tactician-dummy" {= "8.17.dev" & with-test}
