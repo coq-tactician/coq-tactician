@@ -75,27 +75,11 @@ let query f feats max =
       res @ res', List.length res' + c in
   query f
 
-let declare_option name var d =
-  Goptions.declare_int_option Goptions.{
-    optdepr = false;
-    optkey = name;
-    optread = (fun () -> Some !var);
-    optwrite = (function
-        | None -> var := d
-        | Some i -> var := i)
-  }
-
-let depth_default = 9
-let depth = ref depth_default
-let () = declare_option ["Tactician"; "LSHF"; "Depth"] depth depth_default
-
-let trie_count_default = 11
-let trie_count = ref trie_count_default
-let () = declare_option ["Tactician"; "LSHF"; "Trie"; "Count"] trie_count trie_count_default
-
-let sort_window_default = 1000
-let sort_window = ref sort_window_default
-let () = declare_option ["Tactician"; "LSHF"; "Sort"; "Window"] sort_window sort_window_default
+let depth = Goptions.declare_int_option_and_ref ~depr:false ~key:["Tactician"; "LSHF"; "Depth"] ~value:9
+let trie_count = Goptions.declare_int_option_and_ref
+    ~depr:false ~key:["Tactician"; "LSHF"; "Trie"; "Count"] ~value:11
+let sort_window = Goptions.declare_int_option_and_ref
+    ~depr:false ~key:["Tactician"; "LSHF"; "Sort"; "Window"] ~value:1000
 
 module LSHF =
   functor (TS : TacticianStructures) -> struct
@@ -112,7 +96,7 @@ module LSHF =
     ; frequencies : int Frequencies.t }
 
   let empty () =
-    { forest = List.init !trie_count (fun _ -> init_trie random !depth)
+    { forest = List.init (trie_count ()) (fun _ -> init_trie random (depth ()))
     ; length = 0
     ; frequencies = Frequencies.empty }
 
@@ -134,7 +118,7 @@ module LSHF =
   let predict db f to_feats remove_kind tfidf =
     if f = [] then IStream.of_list [] else
       let feats = to_feats (List.hd f).state in
-      let candidates, _ = query db.forest (remove_kind feats) !sort_window in
+      let candidates, _ = query db.forest (remove_kind feats) (sort_window ()) in
       let tdidfs = List.map
           (fun (o, f) -> let x = tfidf db.length db.frequencies feats f in (x, o))
           candidates in

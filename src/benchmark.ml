@@ -20,17 +20,7 @@ type bench_response =
   | Skip
   | Bench of int
 
-let declare_option name d =
-  let var = ref d in
-  Goptions.declare_int_option Goptions.{
-      optdepr = false;
-      optkey = name;
-      optread = (fun () -> !var);
-      optwrite = (fun v -> var := v)
-    };
-  var
-
-let port = declare_option ["Tactician"; "Prebench"; "Port"] None
+let port = Goptions.declare_intopt_option_and_ref ~depr:false ~key:["Tactician"; "Prebench"; "Port"]
 
 let info =
   { exec = Sys.executable_name
@@ -46,7 +36,7 @@ let add_lemma l =
   lemmas := Libnames.Spmap.add l () !lemmas
 
 let write_info () =
-  match !port with
+  match port () with
   | None -> ()
   | Some p ->
     let info = { info with
