@@ -11,6 +11,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - branch: coq8.17
+            coq_version: 8.17
+            ocaml_version: 4.13-flambda
           - branch: coqdev
             coq_version: dev
             ocaml_version: 4.13-flambda
@@ -34,7 +37,7 @@ jobs:
             endGroup
           script: |
             startGroup "Build"
-              no | tactician inject
+              yes n | tactician inject
               opam reinstall coq-stdlib --yes
             endGroup
           uninstall: |
