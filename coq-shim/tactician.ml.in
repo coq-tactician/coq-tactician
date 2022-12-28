@@ -350,6 +350,7 @@ let inject_path cmd args =
                 OS.Path.symlink ~target:Fpath.(bin/name) Fpath.(tmp/name) in
               link_binary "coqchk" >>= fun () ->
               link_binary "coqdep" >>= fun () ->
+              link_binary "ocamllibdep" >>= fun () ->
               link_binary "coqdoc" >>= fun () ->
               link_binary "coq_makefile" >>= fun () ->
               link_binary "coqpp" >>= fun () ->
