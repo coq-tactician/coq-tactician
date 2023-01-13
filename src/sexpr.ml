@@ -41,6 +41,9 @@ let sorts2s = function
   | Set    -> [s2s "Set"]
   | Type l -> [s2s "Type"; (* TODO: Printing is not optimal here *)
                s2s (Pp.string_of_ppcmds (format_oneline (Univ.Universe.pr l)))]
+  | QSort (v, l) -> [s2s "QSort";
+                     s2s (Pp.string_of_ppcmds (QVar.pr v));
+                     s2s (Pp.string_of_ppcmds (format_oneline (Univ.Universe.pr l)))]
 
 let instance2s i =
   let levels = Univ.Instance.to_array i in
