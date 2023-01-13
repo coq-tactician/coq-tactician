@@ -619,7 +619,9 @@ let solved_check t fail =
   let calc_defined_deps sigma es =
     let open Evd in
     Evar.Set.fold
-      (fun e evs -> match Evd.evar_body (find sigma e) with
+      (fun e evs ->
+         let Evd.EvarInfo info = find sigma e in
+         match Evd.evar_body info with
          | Evar_empty -> Evar.Set.add e evs
          | Evar_defined term -> Evar.Set.union evs @@ Evd.evars_of_term sigma term)
       es Evar.Set.empty in
@@ -648,7 +650,7 @@ let type_check t fail =
   tclENV >>= fun env -> tclEVARMAP >>= fun sigma ->
   try
     List.iter (fun ev ->
-        let info = Evd.find sigma ev in
+        let Evd.EvarInfo info = Evd.find sigma ev in
         let env = Environ.reset_with_named_context (Evd.evar_filtered_hyps info) env in
         match Evd.evar_body info with
         | Evd.Evar_empty -> ()
