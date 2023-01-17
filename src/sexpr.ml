@@ -57,6 +57,7 @@ let cast_kind2s = function
 let relevance2s = function
   | Relevant -> s2s "Relevant"
   | Irrelevant -> s2s "Irrelevant"
+  | RelevanceVar v -> Node [s2s "RelevanceVar"; s2s (Pp.string_of_ppcmds (QVar.pr v))]
 
 let constant2s c = global2s (GlobRef.ConstRef c)
 
