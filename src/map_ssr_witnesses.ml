@@ -8,12 +8,13 @@ open Ssrparser
 open Ssrmatching
 open Ssrequality
 open Ssrast
+open Ssrtacs
 open Names
 
 let at wit = register_generic_map_identity wit
 let _ = [
   (* Ssrparser *)
-  at wit_ssrseqdir; at wit_ssrfwdfmt; at wit_ssrdir;
+  at wit_ssrseqdir; at wit_ssrfwdfmt; at wit_ssrdir; at wit_ssrocc; at wit_ssrmult
 ]
 
 let _ = [at wit_ssrtacarg; at wit_ssrtclarg]
@@ -425,7 +426,7 @@ let _ = register_generic_map wit_ssrwlogfwd (module struct
     end
   end)
 
-let _ = register_generic_map wit_ssrfixfwd (module struct
+let at wit = register_generic_map wit (module struct
     type raw = Id.t * (ssrfwdfmt * ast_closure_term)
     type glob = Id.t * (ssrfwdfmt * ast_closure_term)
     module M = functor (M : MapDef) -> struct
@@ -439,6 +440,8 @@ let _ = register_generic_map wit_ssrfixfwd (module struct
       let glob_map = map
     end
   end)
+
+let () = at wit_ssrfixfwd; at wit_ssrcofixfwd
 
 let _ = register_generic_map wit_ssrfwd (module struct
     type raw = ssrfwdfmt * ast_closure_term
@@ -505,7 +508,7 @@ let _ = register_generic_map wit_ssrseqarg (module struct
     end
   end)
 
-let _ = register_generic_map wit_ssrintros_ne (module struct
+let at wit = register_generic_map wit (module struct
     type raw = ssripats
     type glob = ssripats
     module M = functor (M : MapDef) -> struct
@@ -514,6 +517,8 @@ let _ = register_generic_map wit_ssrintros_ne (module struct
       let glob_map = ssripats_map
     end
   end)
+
+let () = at wit_ssrintros; at wit_ssrintros_ne
 
 let _ = register_generic_map wit_ssrintrosarg (module struct
     type raw = raw_tactic_expr * ssripats
@@ -538,6 +543,23 @@ let _ = register_generic_map wit_ssrsufffwd (module struct
       open SSRMap(M)
       let raw_map m = ffwbinders_map m m.raw_tactic_expr_map
       let glob_map m = ffwbinders_map m m.glob_tactic_expr_map
+    end
+  end)
+
+let _ = register_generic_map wit_ssrhavefwd (module struct
+    type raw = (ssrfwdfmt * ast_closure_term) * Tacexpr.raw_tactic_expr ssrhint
+    type glob = (ssrfwdfmt * ast_closure_term) * Tacexpr.glob_tactic_expr ssrhint
+    module M = functor (M : MapDef) -> struct
+      open M
+      open SSRMap(M)
+      let raw_map m ((fmt, t), tac) =
+        let+ t = ast_closure_term_map m t
+        and+ tac = ssrhint_map m m.raw_tactic_expr_map tac in
+        (fmt, t), tac
+      let glob_map m ((fmt, t), tac) =
+        let+ t = ast_closure_term_map m t
+        and+ tac = ssrhint_map m m.glob_tactic_expr_map tac in
+        (fmt, t), tac
     end
   end)
 
@@ -623,5 +645,35 @@ let _ = register_generic_map wit_ssrclear (module struct
       open SSRMap(M)
       let raw_map m = ssrhyps_map m
       let glob_map m = ssrhyps_map m
+    end
+  end)
+
+let _ = register_generic_map wit_ssrdocc (module struct
+    type raw = ssrdocc
+    type glob = ssrdocc
+    module M = functor (M : MapDef) -> struct
+      open SSRMap(M)
+      let raw_map m = ssrdocc_map m
+      let glob_map m = ssrdocc_map m
+    end
+  end)
+
+let _ = register_generic_map wit_ssrfwdview (module struct
+    type raw = ast_closure_term list
+    type glob = ast_closure_term list
+    module M = functor (M : MapDef) -> struct
+      open SSRMap(M)
+      let raw_map m = List.map (ast_closure_term_map m)
+      let glob_map m = List.map (ast_closure_term_map m)
+    end
+  end)
+
+let _ = register_generic_map wit_ssrbwdview (module struct
+    type raw = ssrterm list
+    type glob = ssrterm list
+    module M = functor (M : MapDef) -> struct
+      open SSRMap(M)
+      let raw_map m = List.map (ssrterm_map m)
+      let glob_map m = List.map (ssrterm_map m)
     end
   end)
