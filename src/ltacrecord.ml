@@ -116,7 +116,8 @@ let discharge_outcomes senv { outcomes; tactic; name; status; path } =
     let secctx = Environ.named_context @@ Safe_typing.env_of_safe_env senv in
     let constantctx = Names.Id.Set.of_list @@ Array.to_list @@ snd @@ Names.Cmap.find name @@ fst modlist in
     let irrelevantctx = Names.Id.Set.of_list @@ List.filter
-        (fun x -> not @@ Names.Id.Set.mem x constantctx) @@ List.map Context.Named.Declaration.get_id secctx in
+        (fun x -> not @@ Names.Id.Set.mem x constantctx) @@ List.map Context.Named.Declaration.get_id @@
+      List.filter Context.Named.Declaration.is_local_assum secctx in
     let discharge_constr t = Cooking.expmod_constr modlist t in
     let discharge_proof_state (ctx, concl) =
       List.map (Tactician_util.map_named discharge_constr) @@
