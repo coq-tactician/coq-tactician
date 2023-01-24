@@ -113,11 +113,13 @@ let discharge_outcomes senv { outcomes; tactic; name; status; path } =
     let sections = Safe_typing.sections_of_safe_env senv in
     let env = Safe_typing.env_of_safe_env senv in
     let modlist = Section.replacement_context env @@ Option.get sections in
-    let secctx = Environ.named_context @@ Safe_typing.env_of_safe_env senv in
-    let constantctx = Names.Id.Set.of_list @@ Array.to_list @@ snd @@ Names.Cmap.find name @@ fst modlist in
+    let secctx = Environ.named_context env in
+    let constantctx = if Environ.mem_constant name env
+      then Names.Id.Set.of_list @@
+        List.map Context.Named.Declaration.get_id @@ (Environ.lookup_constant name env).const_hyps
+      else raise Not_found in
     let irrelevantctx = Names.Id.Set.of_list @@ List.filter
-        (fun x -> not @@ Names.Id.Set.mem x constantctx) @@ List.map Context.Named.Declaration.get_id @@
-      List.filter Context.Named.Declaration.is_local_assum secctx in
+        (fun x -> not @@ Names.Id.Set.mem x constantctx) @@ List.map Context.Named.Declaration.get_id secctx in
     let discharge_constr t = Cooking.expmod_constr modlist t in
     let discharge_proof_state (ctx, concl) =
       List.map (Tactician_util.map_named discharge_constr) @@
