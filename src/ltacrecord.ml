@@ -109,10 +109,14 @@ let rebuild_outcomes { outcomes; tactic; name; status=_; path } =
   ; name; status = Discharged path; path = Lib.make_path @@ Libnames.basename path }
 
 let expmod_constr info c =
-  let c = Cooking.abstract_as_type info c in
-  let n_assums = Context.Rel.nhyps (Cooking.rel_context_of_cooking_cache info) in
-  let _, c = Term.decompose_prod_n n_assums c in
-  let args = List.rev @@ Array.to_list @@ Cooking.instance_of_cooking_cache info in
+  let c = Cooking.abstract_as_body info c in
+  let rels = Cooking.rel_context_of_cooking_cache info in
+  let n_assums = Context.Rel.length rels in
+  let _, c = Term.decompose_lam_n_decls n_assums c in
+  let args = List.map (fun d -> Constr.mkVar @@ Context.Named.Declaration.get_id d) @@
+    List.map (Context.Named.Declaration.of_rel_decl (function
+      | Names.Name.Anonymous -> assert false
+      | Names.Name.Name id -> id)) rels in
   Vars.substl args c
 
 let discharge_outcomes senv { outcomes; tactic; name; status; path } =
