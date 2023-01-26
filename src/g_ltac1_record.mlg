@@ -121,6 +121,12 @@ VERNAC { tactician_mode } EXTEND VernacSolveTactician STATE proof
     let g = Option.default (Goal_select.get_default_goal_selector ()) g in
     vernac_solve g n t (snd def) (fst def)
   }
+| [ "par" ":" ltac_info_opt(n) tactic(t) ltac_use_default_hack(def) ] =>
+  { (* TODO: Enormously ugly hack *)
+    VtSideff ([], VtNow)
+  } -> {
+    vernac_solve Goal_select.SelectAll n t (snd def) (fst def)
+  }
 END
 
 VERNAC COMMAND EXTEND VernacDeclareTacticDefinition
