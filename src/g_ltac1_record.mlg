@@ -108,6 +108,12 @@ VERNAC { tactician_mode } EXTEND VernacSolveTactician STATE proof
     | e when CErrors.noncritical e || e = CErrors.Timeout ->
       save_exn id e; raise e
   }
+| [ "par" ":" ltac_info_opt(n) tactic(t) ltac_use_default_hack(def) ] =>
+  { (* TODO: Enormously ugly hack *)
+    VtSideff ([], VtNow)
+  } -> {
+    vernac_solve Goal_select.SelectAll n t (snd def) (fst def)
+  }
 END
 
 VERNAC COMMAND EXTEND VernacDeclareTacticDefinition
