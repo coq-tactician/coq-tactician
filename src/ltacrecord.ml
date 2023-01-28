@@ -113,7 +113,7 @@ let expmod_constr info c =
   let c = Cooking.abstract_as_body info c in
   let rels = Cooking.rel_context_of_cooking_cache info in
   let n_assums = Context.Rel.length rels in
-  let _, c = Term.decompose_lam_n_decls n_assums c in
+  let _, c = Term.decompose_lambda_n_decls n_assums c in
   let args = List.map (fun d -> Constr.mkVar @@ Context.Named.Declaration.get_id d) @@
     List.map (Context.Named.Declaration.of_rel_decl (function
       | Names.Name.Anonymous -> assert false
