@@ -1,4 +1,4 @@
-name: Stdlib Daily
+name: Stdlib Daily 2
 
 on:
   schedule:
@@ -11,26 +11,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - branch: coq8.10
-            coq_version: '8.10'
-            ocaml_version: 4.09-flambda
-          - branch: coq8.11
-            coq_version: 8.11
-            ocaml_version: 4.11-flambda
-          - branch: coq8.12
-            coq_version: 8.12
-            ocaml_version: 4.11-flambda
-          - branch: coq8.13
-            coq_version: 8.13
+          - branch: coq8.17
+            coq_version: 8.17
             ocaml_version: 4.13-flambda
-          - branch: coq8.14
-            coq_version: 8.14
-            ocaml_version: 4.13-flambda
-          - branch: coq8.15
-            coq_version: 8.15
-            ocaml_version: 4.13-flambda
-          - branch: coq8.16
-            coq_version: 8.16
+          - branch: coqdev
+            coq_version: dev
             ocaml_version: 4.13-flambda
 
     steps:
@@ -38,11 +23,6 @@ jobs:
         with:
           path: 'coq-tactician'
           ref: ${{ matrix.branch }}
-      - uses: actions/checkout@v2
-        with:
-          repository: 'coq-tactician/coq-tactician-stdlib'
-          ref: ${{ matrix.branch }}
-          path: 'coq-tactician-stdlib'
       - uses: coq-community/docker-coq-action@v1.2.3
         with:
           opam_file: 'coq-tactician.opam'
@@ -57,10 +37,10 @@ jobs:
             endGroup
           script: |
             startGroup "Build"
-              sudo chmod -R 777 .
-              opam exec -- make -C coq-tactician-stdlib -j2
+              yes n | tactician inject
+              opam reinstall coq-stdlib --yes
             endGroup
           uninstall: |
             startGroup "Uninstallation test"
-              opam remove coq-tactician
+              opam remove coq-stdlib --yes
             endGroup

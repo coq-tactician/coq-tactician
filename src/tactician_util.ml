@@ -137,6 +137,13 @@ let with_flag flg f =
   Fun.protect ~finally:(fun () -> CWarnings.set_flags original)
     (fun () -> CWarnings.set_flags added; f ())
 
+let map_named f = function
+  | Context.Named.Declaration.LocalAssum (id, ty) ->
+    let ty' = f ty in Context.Named.Declaration.LocalAssum (id, ty')
+  | Context.Named.Declaration.LocalDef (id, v, ty) ->
+    let v' = f v in
+    let ty' = f ty in Context.Named.Declaration.LocalDef (id, v', ty')
+
 open Geninterp
 open Util
 open Ltac_plugin
@@ -158,3 +165,4 @@ let wit_glbtactic : (Empty.t, glob_tactic_expr, glob_tactic_expr) Genarg.genarg_
 let register tac name =
   let fullname = {mltac_plugin = "recording"; mltac_tactic = name} in
   Tacenv.register_ml_tactic fullname [| tac |]
+

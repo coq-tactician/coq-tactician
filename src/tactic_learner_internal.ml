@@ -112,6 +112,14 @@ module TS = struct
     ; tactic     : tactic }
 end
 
+let calculate_deps sigma acc e =
+  let rec aux e acc =
+    if Evar.Set.mem e acc then acc else
+      Evar.Set.fold aux
+        (Evd.evars_of_filtered_evar_info sigma @@ Evd.find_undefined sigma e)
+        (Evar.Set.add e acc)
+  in aux e acc
+
 let goal_to_proof_state ps =
   let map = Goal.sigma ps in
   let to_term t = EConstr.to_constr ~abort_on_undefined_evars:false map t in

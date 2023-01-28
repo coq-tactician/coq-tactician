@@ -1,5 +1,4 @@
 open Map_all_the_things
-open Genarg
 open Names
 open Monad_util
 
@@ -7,14 +6,6 @@ module FreeVarsDef = struct
   module M = WriterMonad
       (struct type w = Id.Set.t let id = Id.Set.empty let comb = Id.Set.union end)
   include MapDefTemplate (M)
-  let map_sort = "freevars"
-  let warnProblem wit =
-    Feedback.msg_warning (Pp.(str "Tactician is having problems with " ++
-                              str "the following tactic. Please report. " ++
-                              pr_argument_type wit))
-  let default wit = { raw = (fun _ -> warnProblem (ArgumentType wit); id)
-                    ; glb = (fun _ -> warnProblem (ArgumentType wit); id)}
-
   let with_binders ids a cont = map (fun x -> (fun x -> x), x) @@
     M.censor (fun w -> Id.Set.filter (fun id -> not @@ List.exists (Id.equal id) ids) w) @@ cont a
 end
@@ -33,14 +24,6 @@ let glob_constr_free_variables t : Id.Set.t =
 module SubstituteDef = struct
   module M = ReaderMonad(struct type r = Id.Set.t end)
   include MapDefTemplate (M)
-  let map_sort = "substitute"
-  let warnProblem wit =
-    Feedback.msg_warning (Pp.(str "Tactician is having problems with " ++
-                              str "the following tactic. Please report. " ++
-                              pr_argument_type wit))
-  let default wit = { raw = (fun _ -> warnProblem (ArgumentType wit); id)
-                    ; glb = (fun _ -> warnProblem (ArgumentType wit); id)}
-
   let with_binders ids a cont = M.map (fun x -> (fun x -> x), x) @@
     M.local (fun ids' -> Id.Set.union (Id.Set.of_list ids) ids') @@ cont a
 end
