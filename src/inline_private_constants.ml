@@ -3,7 +3,6 @@ open TS
 open Constr
 open Monad_util
 open Map_all_the_things
-open Genarg
 open Glob_term
 
 (* This file has the purpose of dealing with side effects of the `abstract` tactic and schemes. This is all very
@@ -17,13 +16,6 @@ open Glob_term
 
 module TacticFinderDef = struct
   include MapDefTemplate (IdentityMonad)
-  let map_sort = "tactic-finder"
-  let warnProblem wit =
-    Feedback.msg_warning (Pp.(str "Tactician is having problems with " ++
-                              str "the following tactic. Please report. " ++
-                              pr_argument_type wit))
-  let default wit = { raw = (fun _ -> warnProblem (ArgumentType wit); id)
-                    ; glb = (fun _ -> warnProblem (ArgumentType wit); id)}
 end
 module TacticFinderMapper = MakeMapper(TacticFinderDef)
 open TacticFinderDef
@@ -127,4 +119,4 @@ let inline env sideff t =
         | _ -> Constr.fold collect_vars vars c in
       let extra_deps = List.map (fun pt -> get_id pt, fold_constr (fun c ids -> collect_vars ids c) pt Id.Set.empty)
           extra_ctx in
-      inline env extra_ctx extra_deps t
+      List.map (inline env extra_ctx extra_deps) t

@@ -22,6 +22,7 @@ proof synthesis. Tactician's goal is to provide the user with a seamless,
 interactive, and intuitive experience together with strong, adaptive proof
 automation.")
   (sites (share plugins))
+  (license MIT)
   (depends
     (ocaml (>= 4.08))
     dune
@@ -31,4 +32,4 @@ automation.")
     (coq (and (>= 8.11.0) (< 8.12~)))
     conf-git
     (bos (>= 0.2.1))
-    (coq-tactician-dummy (and (= dev) :with-test))))
+    (coq-tactician-dummy (and (= 8.6.dev) :with-test))))

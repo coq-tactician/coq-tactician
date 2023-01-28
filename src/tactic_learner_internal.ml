@@ -144,13 +144,12 @@ let evar_to_proof_state sigma e =
   hyps, goal, e
 
 let calculate_deps sigma acc e =
-  let rec aux acc e =
+  let rec aux e acc =
     if Evar.Set.mem e acc then acc else
-      Evar.Set.fold (fun e acc ->
-          aux acc e)
+      Evar.Set.fold aux
         (Evd.evars_of_filtered_evar_info sigma @@ Evd.find_undefined sigma e)
         (Evar.Set.add e acc)
-  in aux acc e
+  in aux e acc
 
 let goal_to_proof_state ps =
   let e = Goal.goal ps in
