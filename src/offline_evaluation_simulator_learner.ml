@@ -11,14 +11,11 @@ let data_file =
      | Some f -> f)
 
 module OfflineEvaluationSimulatorLearner : TacticianOnlineLearnerType = functor (TS : TacticianStructures) -> struct
-  module LH = Learner_helper.L(TS)
   open TS
-  module Learner = Lshf_learner.ComplexLSHF
 
   type dynamic_learner =
     { learn : origin -> outcome list -> TS.tactic -> dynamic_learner
-    ; predict : situation list -> prediction IStream.t
-    ; evaluate : outcome -> tactic -> dynamic_learner * float }
+    ; predict : situation list -> prediction IStream.t }
 
   let new_learner (module Learner : TacticianOnlineLearnerType) =
     let module Learner = Learner(TS) in
@@ -26,10 +23,7 @@ module OfflineEvaluationSimulatorLearner : TacticianOnlineLearnerType = functor 
       { learn = (fun origin exes tac ->
             recurse @@ Lazy.from_val @@ Learner.learn (Lazy.force model) origin exes tac)
       ; predict = (fun t ->
-            Learner.predict (Lazy.force model) t)
-      ; evaluate = (fun outcome tac ->
-            let f, model = Learner.evaluate (Lazy.force model) outcome tac in
-            recurse @@ Lazy.from_val model, f) } in
+            Learner.predict (Lazy.force model) t) } in
     (* Note: This is lazy to give people a chance to set GOptions before a learner gets initialized *)
     recurse (lazy (Learner.empty ()))
 

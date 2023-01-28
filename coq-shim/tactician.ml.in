@@ -123,29 +123,40 @@ let remove_rcfile () =
     print_endline "\nFile patched! Run 'tactician enable' to reverse this command"
   ); `Ok ()
 
-let string_in str ls =
-  let filtered = List.filter (fun s -> String.equal s str) ls in
-  match filtered with
-  | [] -> false
-  | _ -> true
-
-let recompile_packages no_pkgs_msg pkgs_msg confirm_msg =
-  let packages = String.split_on_char '\n' (String.trim (syscall ("opam list -i --depends-on coq --short"))) in
-  let blacklist = ["coqide"; "coq-tactician"; "coq-tactician-dummy"; "coq-tactician-stdlib" ] in
-  let packages = List.filter (fun p -> not (string_in p blacklist)) packages in
-  if packages == [] then
-    print_endline no_pkgs_msg
-  else (
-    print_endline pkgs_msg;
-    print_endline (String.concat " " packages);
-    let ans = OpamConsole.confirm confirm_msg in
-    if ans then
-      ignore (Sys.command ("opam reinstall " ^ (String.concat " " packages)))
-  )
-
 let opam_init_no_lock f =
   OpamClientConfig.opam_init ();
   OpamGlobalState.with_ `Lock_none f
+
+let recompile_packages no_pkgs_msg pkgs_msg confirm_msg =
+  print_endline "Calculating relevant packages...";
+  opam_init_no_lock @@ fun gt ->
+  OpamSwitchState.with_ `Lock_none gt @@ fun st ->
+  let coq_packages = OpamListCommand.(filter ~base:st.packages st OpamFormula.(
+      And (
+        Atom Installed,
+        Atom (Depends_on ({ default_dependency_toggles with recursive = true },
+                          [OpamPackage.Name.of_string "coq", None]))))) in
+  let tactician_packages = OpamListCommand.(filter ~base:st.packages st OpamFormula.(
+      And (
+        Atom Installed,
+        Atom (Depends_on ({ default_dependency_toggles with recursive = true },
+                          [OpamPackage.Name.of_string "coq-tactician", None]))))) in
+  let blacklist = List.map OpamPackage.Name.of_string
+      ["coq"; "coq-core"; "coq-tactician-dummy"; "coqide"; "coqide-server"] in
+  let packages = OpamPackage.Set.diff coq_packages tactician_packages in
+  let packages = OpamPackage.Set.filter
+      (fun p -> not @@ List.exists (OpamPackage.Name.equal (OpamPackage.name p)) blacklist) packages in
+  if OpamPackage.Set.is_empty packages then
+    print_endline no_pkgs_msg
+  else (
+    print_endline pkgs_msg;
+    let packages = String.concat " " @@ List.map OpamPackage.to_string @@ OpamPackage.Set.elements packages in
+    print_endline packages;
+    let ans = OpamConsole.confirm confirm_msg in
+    if ans then
+      ignore (Sys.command ("opam reinstall " ^ packages))
+  )
+
 
 let config_add_remove gt ?st name value =
   let st = set_opt_switch gt ?st name (`Remove value) in
@@ -341,6 +352,7 @@ let inject_path cmd args =
                 OS.Path.symlink ~target:Fpath.(bin/name) Fpath.(tmp/name) in
               link_binary "coqchk" >>= fun () ->
               link_binary "coqdep" >>= fun () ->
+              link_binary "ocamllibdep" >>= fun () ->
               link_binary "coqdoc" >>= fun () ->
               link_binary "coq_makefile" >>= fun () ->
               link_binary "coqpp" >>= fun () ->

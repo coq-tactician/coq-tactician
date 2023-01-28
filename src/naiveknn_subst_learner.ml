@@ -5,7 +5,6 @@ open Context
 open Names
 
 module NaiveKnnSubst (SF : sig type second_feat end) = functor (TS : TacticianStructures) -> struct
-  module LH = L(TS)
   open TS
   open SF
 
@@ -146,7 +145,6 @@ module ComplexNaiveSubstKnn : TacticianOnlineLearnerType = functor (TS : Tactici
   module NaiveKnnSubst = NaiveKnnSubst(struct type second_feat = Features.feat_kind * int end)(TS)
   include NaiveKnnSubst
   module FH = F(TS)
-  module LH = L(TS)
   open FH
   let learn db _status outcomes tac = learn db _status outcomes tac
       proof_state_to_complex_ints_no_kind

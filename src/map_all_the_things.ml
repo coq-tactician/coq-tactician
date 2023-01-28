@@ -56,6 +56,7 @@ module type MapDef = sig
     ; variable_map : Id.t map
     ; constr_expr_map : constr_expr map
     ; glob_constr_and_expr_map : glob_constr_and_expr map
+    ; glob_constr_pattern_and_expr_map : glob_constr_pattern_and_expr map
     ; intro_pattern_expr_map : 'a. 'a map -> 'a intro_pattern_expr map
     ; bindings_map : 'a. 'a map -> 'a bindings map
     ; with_bindings_map : 'a. 'a map -> 'a with_bindings map
@@ -66,18 +67,19 @@ module type MapDef = sig
     ; qualid_map : Libnames.qualid map
     ; globref_map : GlobRef.t map
     ; quantified_hypothesis_map : quantified_hypothesis map
+    ; red_expr_gen_map : 'a 'b 'c. 'a map -> 'b map -> 'c map -> ('a, 'b, 'c) red_expr_gen map
     }
 
   type ('raw, 'glb) gen_map =
     { raw : recursor -> 'raw map
     ; glb : recursor -> 'glb map }
 
-  val map_sort : string
   val default : ('raw, 'glb, 'top) genarg_type -> ('raw, 'glb) gen_map
 
 end
 
 module MapDefTemplate (M: Monad.Def) = struct
+  module OList = List
   include WithMonadNotations(M)
 
   type 'a transformer = 'a -> ('a -> 'a t) -> 'a t
@@ -136,6 +138,7 @@ module MapDefTemplate (M: Monad.Def) = struct
     ; variable_map : Id.t map
     ; constr_expr_map : constr_expr map
     ; glob_constr_and_expr_map : glob_constr_and_expr map
+    ; glob_constr_pattern_and_expr_map : glob_constr_pattern_and_expr map
     ; intro_pattern_expr_map : 'a. 'a map -> 'a intro_pattern_expr map
     ; bindings_map : 'a. 'a map -> 'a bindings map
     ; with_bindings_map : 'a. 'a map -> 'a with_bindings map
@@ -146,10 +149,22 @@ module MapDefTemplate (M: Monad.Def) = struct
     ; qualid_map : Libnames.qualid map
     ; globref_map : GlobRef.t map
     ; quantified_hypothesis_map : quantified_hypothesis map
+    ; red_expr_gen_map : 'a 'b 'c. 'a map -> 'b map -> 'c map -> ('a, 'b, 'c) red_expr_gen map
     }
   type ('raw, 'glb) gen_map =
     { raw : recursor -> 'raw map
     ; glb : recursor -> 'glb map }
+  (* These are witnesses that are known to be unmappable at the moment *)
+  let exclude = ["ssrrwarg"; "ssrintros_ne"; "ssrhint3arg"]
+  let warnProblem wit =
+    let pp = pr_argument_type wit in
+    let pps = Pp.string_of_ppcmds pp in
+    if OList.exists (fun w -> String.equal w pps) exclude then () else
+      Feedback.msg_warning (Pp.(str "Tactician is having problems with " ++
+                                str "the following tactic. Please report. " ++
+                                pr_argument_type wit))
+  let default wit = { raw = (fun _ -> warnProblem (ArgumentType wit); id)
+                    ; glb = (fun _ -> warnProblem (ArgumentType wit); id)}
 end
 
 module type GenMap = sig
@@ -586,7 +601,6 @@ module MakeMapper (M: MapDef) = struct
     tactic_map   : 'tacexpr map;
     generic_map  : 'lev generic_argument map;
     trm_map      : 'trm map;
-    dtrm_map     : 'dtrm map;
     pat_map      : 'pat map;
     ref_map      : 'ref map;
     cst_map      : 'cst map;
@@ -1256,6 +1270,7 @@ module MakeMapper (M: MapDef) = struct
     ; intro_pattern_expr_map = (fun f -> intro_pattern_expr_map m f)
     ; constr_expr_map = constr_expr_map m recursor
     ; glob_constr_and_expr_map = glob_constr_and_expr_map m recursor
+    ; glob_constr_pattern_and_expr_map = g_pat_map m recursor
     ; bindings_map = (fun f -> bindings_map m f)
     ; with_bindings_map = (fun f -> with_bindings_map m f)
     ; located_map = (fun f -> located_map m f)
@@ -1267,11 +1282,11 @@ module MakeMapper (M: MapDef) = struct
     ; qualid_map = qualid_map m
     ; globref_map = globref_map m
     ; quantified_hypothesis_map = quantified_hypothesis_map m
+    ; red_expr_gen_map = (fun f g h -> red_expr_gen_map m f g h)
     }
   and raw_tactic_mapper m = {
     tactic_map   = raw_tactic_expr_map m;
     trm_map      = constr_expr_map m recursor;
-    dtrm_map     = constr_expr_map m recursor;
     pat_map      = constr_expr_map m recursor;
     ref_map      = qualid_map m;
     nam_map      = mcast m m.variable;
@@ -1287,7 +1302,6 @@ module MakeMapper (M: MapDef) = struct
   and glob_tactic_mapper m = {
     tactic_map   = glob_tactic_expr_map m;
     trm_map      = glob_constr_and_expr_map m recursor;
-    dtrm_map     = glob_constr_and_expr_map m recursor;
     pat_map      = g_pat_map m recursor;
     ref_map      = or_var_map m (fun x -> m.located @@ return x);
     nam_map      = mcast m m.variable;
