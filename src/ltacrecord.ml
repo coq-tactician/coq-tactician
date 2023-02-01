@@ -164,19 +164,22 @@ let discharge_outcomes senv { outcomes; tactic; name; status; path } =
             discharge_tactic tactic
               (Tactic_learner_internal.TS.proof_state_hypotheses (fst @@ List.hd executions))
               (Tactic_learner_internal.TS.proof_state_sigma (fst @@ List.hd executions)) } in
-    let discharge_result (term, map, ustate, pss) =
+    let discharge_result before_masks (term, map, ustate, pss) =
       let masks = Evar.Map.map (fun (hyps, _, _) -> mk_mask hyps) map in
       let map = Evar.Map.map (discharge_single_proof_state masks) map in
-      discharge_constr masks term, map, ustate, List.map (fun (_, _, e) -> Evar.Map.find e map) pss in
+      discharge_constr before_masks term, map, ustate, List.map (fun (_, _, e) -> Evar.Map.find e map) pss in
     let tactic = if outcomes = [] then tactic else
         discharge_tactic tactic
           (Tactic_learner_internal.TS.proof_state_hypotheses (List.hd outcomes).before)
           (Tactic_learner_internal.TS.proof_state_sigma (List.hd outcomes).before) in
     let outcomes = List.map (fun {parents; siblings; before; result} ->
+        let before_masks =
+          let map, _, _ = before in
+          Evar.Map.map (fun (hyps, _, _) -> mk_mask hyps) map in
         { parents = List.map (fun (psa, pse) -> (psa, discharge_ps pse)) parents
         ; siblings = discharge_pd siblings
         ; before = discharge_proof_state before
-        ; result = discharge_result result }) outcomes in
+        ; result = discharge_result before_masks result }) outcomes in
     Some { outcomes; tactic; name; status; path }
   with Not_found -> None
 
