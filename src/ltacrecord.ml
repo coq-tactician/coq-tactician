@@ -133,7 +133,7 @@ let discharge_outcomes senv { outcomes; tactic; name; status; path } =
     let irrelevantctx = Names.Id.Set.of_list @@ List.filter
         (fun x -> not @@ Names.Id.Set.mem x constantctx) @@ List.map Context.Named.Declaration.get_id secctx in
     let mk_mask hyps =
-      List.map (fun x -> Names.Id.Set.mem (Context.Named.Declaration.get_id x) irrelevantctx) hyps in
+      List.map (fun x -> not @@ Names.Id.Set.mem (Context.Named.Declaration.get_id x) irrelevantctx) hyps in
     let discharge_constr masks t =
       let t = Cooking.expmod_constr modlist t in
       let rec fix_evars c =
