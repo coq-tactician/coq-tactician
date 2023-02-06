@@ -107,6 +107,10 @@ let rec with_let_prefix ltac_defs tac =
   prefix tac ltac_defs
 
 let rebuild_outcomes { outcomes; tactic; name; status=_; path; sec_vars } =
+  let sec_vars =
+    Names.Id.Set.inter sec_vars @@
+    Names.Id.Set.of_list @@
+    List.map Context.Named.Declaration.get_id @@ Environ.named_context (Global.env ()) in
   let rebuild_tac tac = tactic_make (with_let_prefix !tmp_ltac_defs (tactic_repr tac)) in
   let rec rebuild_pd = function
     | End -> End
@@ -119,7 +123,8 @@ let rebuild_outcomes { outcomes; tactic; name; status=_; path; sec_vars } =
       ; siblings = rebuild_pd siblings
       ; before; result }) outcomes in
   { outcomes; tactic = rebuild_tac tactic
-  ; name; status = Discharged path; path = Lib.make_path @@ Libnames.basename path; sec_vars }
+  ; name; status = Discharged path; path = Lib.make_path @@ Libnames.basename path
+  ; sec_vars }
 
 let discharge_outcomes senv { outcomes; tactic; name; status; path; sec_vars } =
   let sections = Safe_typing.sections_of_safe_env senv in
