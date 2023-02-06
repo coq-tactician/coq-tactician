@@ -78,17 +78,23 @@ module TS = struct
   let term_sexpr t = constr2s t
   let term_repr t = t
 
-  type single_proof_state = named_context * term * Evar.t
+  type hyps_origin = Id.t Id.Map.t
+  type single_proof_state =
+    { hyps : named_context
+    ; goal : term
+    ; evar : Evar.t
+    ; hyps_origin : hyps_origin }
   type proof_state = single_proof_state Evar.Map.t * UState.t * single_proof_state
   type tactic_result = term * single_proof_state Evar.Map.t * UState.t * single_proof_state list
 
-  let proof_state_hypotheses (_, _, (hyps, _, _)) = hyps
-  let proof_state_goal (_, _, (_, goal, _)) = goal
-  let proof_state_evar (_, _, (_, _, evar)) = evar
+  let proof_state_hypotheses (_, _, { hyps; _ }) = hyps
+  let proof_state_goal (_, _, { goal; _}) = goal
+  let proof_state_evar (_, _, { evar; _}) = evar
+  let proof_state_hyps_origin (_, _, { hyps_origin; _}) = hyps_origin
   let proof_state_dependent (map, ustate, _) var = map, ustate, Evar.Map.find var map
   let proof_state_sigma ((map, ustate, _) : proof_state) =
-    Evar.Map.fold (fun e (ctx, concl, _) evd ->
-        Evd.add evd e @@ Evd.make_evar (Environ.val_of_named_context ctx) (EConstr.of_constr concl)) map @@
+    Evar.Map.fold (fun e { hyps; goal; _} evd ->
+        Evd.add evd e @@ Evd.make_evar (Environ.val_of_named_context hyps) (EConstr.of_constr goal)) map @@
     Evd.set_universe_context Evd.empty ustate
 
   let proof_state_equal _ps1 _ps2 = false
@@ -106,8 +112,8 @@ module TS = struct
 
   let tactic_result_term (t, _, _, _) = t
   let tactic_result_sigma (_, map, ustate, _) =
-    Evar.Map.fold (fun e (ctx, concl, _) evd ->
-        Evd.add evd e @@ Evd.make_evar (Environ.val_of_named_context ctx) (EConstr.of_constr concl)) map @@
+    Evar.Map.fold (fun e { hyps; goal; _} evd ->
+        Evd.add evd e @@ Evd.make_evar (Environ.val_of_named_context hyps) (EConstr.of_constr goal)) map @@
     Evd.set_universe_context Evd.empty ustate
   let tactic_result_dependent (_, map, ustate, _) var = map, ustate, Evar.Map.find var map
   let tactic_result_states (_, map, ustate, ls) = List.map (fun ps -> map, ustate, ps) ls
@@ -136,38 +142,93 @@ module TS = struct
     ; tactic     : tactic }
 end
 
-let evar_to_proof_state sigma e =
-  let info = Evd.find_undefined sigma e in
+let evars_of_term sigma acc c =
+  let rec evrec acc c =
+    match EConstr.kind sigma c with
+    | Evar (n, l) -> Evar.Map.add n l (Array.fold_left evrec acc l)
+    | _ -> EConstr.fold sigma evrec acc c
+  in
+  evrec acc c
+
+let evars_of_named_context sigma acc nc =
+  Context.Named.fold_outside
+    (Context.Named.Declaration.fold_constr (fun constr acc -> evars_of_term sigma acc constr))
+    nc
+    ~init:acc
+
+let evars_of_filtered_evar_info sigma acc evi =
+    let acc = evars_of_term sigma acc Evd.(evi.evar_concl) in
+    let acc = match evi.evar_body with
+     | Evar_empty -> acc
+     | Evar_defined b -> evars_of_term sigma acc b in
+    evars_of_named_context sigma acc (Evd.evar_filtered_context evi)
+
+let update_hyps_origin sigma hyps_origin substs hyps =
+  let dest = Array.map
+      (fun c ->
+         try
+           let hyp = EConstr.destVar sigma c in
+           Names.Id.Map.find_opt hyp hyps_origin
+         with Constr.DestKO -> None) substs in
+  List.fold_left2 (fun m source dest ->
+      match dest with
+      | None -> m
+      | Some dest -> Names.Id.Map.add (Context.Named.Declaration.get_id source) dest m)
+    Names.Id.Map.empty hyps (Array.to_list dest)
+
+let calculate_deps sigma acc e hyps_origin =
+  let rec aux e hyps_origin acc =
+    if Evar.Map.mem e acc then acc else
+      let evars = evars_of_filtered_evar_info sigma Evar.Map.empty @@ Evd.find_undefined sigma e in
+      let evars = Evar.Map.mapi (fun e substs ->
+          update_hyps_origin sigma hyps_origin substs
+            (Evd.evar_filtered_context @@ Evd.find_undefined sigma e)) evars in
+      Evar.Map.fold aux
+        evars
+        (Evar.Map.add e hyps_origin acc)
+  in aux e hyps_origin acc
+
+let evar_to_proof_state sigma evar hyps_origin =
+  let info = Evd.find_undefined sigma evar in
   let to_term t = EConstr.to_constr ~abort_on_undefined_evars:false sigma t in
   let hyps = List.map (Tactician_util.map_named to_term) @@ Evd.evar_filtered_context info in
   let goal = to_term @@ Evd.evar_concl info in
-  hyps, goal, e
+  TS.{ hyps; goal; evar; hyps_origin }
 
-let calculate_deps sigma acc e =
-  let rec aux e acc =
-    if Evar.Set.mem e acc then acc else
-      Evar.Set.fold aux
-        (Evd.evars_of_filtered_evar_info sigma @@ Evd.find_undefined sigma e)
-        (Evar.Set.add e acc)
-  in aux e acc
+type parent_info =
+  { hyps_origin : Names.Id.t Names.Id.Map.t
+  ; parent_goal : Proofview.Goal.t }
+let parent_info_field : parent_info Proofview_monad.StateStore.field = Proofview_monad.StateStore.field ()
+
+let get_hyps_origin ps =
+  let state = Goal.state ps in
+  match Proofview_monad.StateStore.get state parent_info_field with
+  | None -> Names.Id.Map.empty
+  | Some { hyps_origin; _ } -> hyps_origin
 
 let goal_to_proof_state ps =
   let e = Goal.goal ps in
   let sigma = Goal.sigma ps in
-  let ctx = calculate_deps sigma Evar.Set.empty e in
-  let ctx = Evar.Map.bind (evar_to_proof_state sigma) ctx in
+  let hyps_origin = get_hyps_origin ps in
+  let ctx = calculate_deps sigma Evar.Map.empty e hyps_origin in
+  let ctx = Evar.Map.mapi (evar_to_proof_state sigma) ctx in
   ctx, Evd.evar_universe_context sigma, Evar.Map.find e ctx
 
-let make_result term sigma pss =
-  let ctx = Evd.evars_of_term sigma term in
-  let ctx = Evar.Set.fold (fun e ctx -> calculate_deps sigma ctx e) ctx Evar.Set.empty in
+let make_result before term sigma pss =
+  let evars = evars_of_term sigma Evar.Map.empty term in
+  let hyps_origin = get_hyps_origin before in
+  let evars = Evar.Map.mapi (fun e substs ->
+      update_hyps_origin sigma hyps_origin substs
+        (Evd.evar_filtered_context @@ Evd.find_undefined sigma e)) evars in
+  let evars = Evar.Map.fold (fun e ho acc -> calculate_deps sigma acc e ho) evars Evar.Map.empty in
   (* NOTE: This should not be necessary, because all proof states should be reachable from the proof term.
      However, Coq8.11 contains some tactics that wrongly associate some proof states to the wrong tactic.
      In addition the `unshelve` tactic is screwed up. *)
-  let ctx = List.fold_left (fun ctx ps -> calculate_deps sigma ctx @@ Goal.goal ps) ctx pss in
-  let ctx = Evar.Map.bind (evar_to_proof_state sigma) ctx in
+  let evars = List.fold_left
+      (fun acc ps -> calculate_deps sigma acc (Goal.goal ps) (get_hyps_origin ps)) evars pss in
+  let evars = Evar.Map.mapi (evar_to_proof_state sigma) evars in
   let term = EConstr.to_constr ~abort_on_undefined_evars:false sigma term in
-  term, ctx, Evd.evar_universe_context sigma, List.map (fun ps -> Evar.Map.find (Goal.goal ps) ctx) pss
+  term, evars, Evd.evar_universe_context sigma, List.map (fun ps -> Evar.Map.find (Goal.goal ps) evars) pss
 
 type data_status =
   | Original
@@ -177,7 +238,7 @@ type data_status =
 
 type origin = KerName.t * Libnames.full_path * data_status
 
-type data_in = { outcomes : TS.outcome list; tactic : TS.tactic option ; name : Constant.t; status : data_status; path : Libnames.full_path }
+type data_in = { outcomes : TS.outcome list; tactic : TS.tactic option ; name : Constant.t; status : data_status; path : Libnames.full_path; sec_vars : Names.Id.Set.t }
 
 module type TacticianOnlineLearnerType =
   functor (TS : TacticianStructures) -> sig
