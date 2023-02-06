@@ -147,7 +147,7 @@ let discharge_outcomes senv { outcomes; tactic; name; status; path; sec_vars } =
         match Constr.kind c with
         | Constr.Evar (e, subst) ->
           let subst = Array.filter_with (Evar.Map.find e masks) subst in
-          Constr.of_kind (Constr.Evar (e, subst))
+          Constr.of_kind (Constr.Evar (e, Array.map fix_evars subst))
         | _ -> Constr.map fix_evars c in
       fix_evars t in
     let discharge_tactic t ctx evd =
