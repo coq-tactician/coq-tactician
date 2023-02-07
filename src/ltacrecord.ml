@@ -139,8 +139,11 @@ let discharge_outcomes senv { outcomes; tactic; name; status; path; sec_vars } =
   match irrelevantctx with
   | None -> None
   | Some irrelevantctx ->
-    let mk_mask hyps =
-      List.map (fun x -> not @@ Names.Id.Set.mem (Context.Named.Declaration.get_id x) irrelevantctx) hyps in
+    let is_relevant hyps_origin hyp =
+      Option.default true @@ Option.map (fun orig ->
+          not @@ Names.Id.Set.mem orig irrelevantctx) @@
+      Names.Id.Map.find_opt (Context.Named.Declaration.get_id hyp) hyps_origin in
+    let mk_mask hyps_origin hyps = List.map (is_relevant hyps_origin) hyps in
     let discharge_constr masks t =
       let t = Cooking.expmod_constr modlist t in
       let rec fix_evars c =
@@ -156,15 +159,11 @@ let discharge_outcomes senv { outcomes; tactic; name; status; path; sec_vars } =
       tactic_make @@ Discharge_tacexpr.discharge t env evd modlist in
     let discharge_single_proof_state masks { hyps; goal; evar; hyps_origin } =
       { hyps = List.map (Tactician_util.map_named (discharge_constr masks)) @@
-           List.filter (fun hyp ->
-               Option.default true @@ Option.map (fun orig ->
-                  not @@ Names.Id.Set.mem orig irrelevantctx) @@
-                 Names.Id.Map.find_opt (Context.Named.Declaration.get_id hyp) hyps_origin
-               ) hyps
+           List.filter (is_relevant hyps_origin) hyps
       ; goal = discharge_constr masks goal
       ; evar; hyps_origin } in
     let discharge_proof_state (map, ustate, { evar; _ }) =
-      let masks = Evar.Map.map (fun { hyps;  _ } -> mk_mask hyps) map in
+      let masks = Evar.Map.map (fun { hyps; hyps_origin;  _ } -> mk_mask hyps_origin hyps) map in
       let map = Evar.Map.map (discharge_single_proof_state masks) map in
       map, ustate, Evar.Map.find evar map in
     let rec discharge_pd = function
@@ -177,7 +176,7 @@ let discharge_outcomes senv { outcomes; tactic; name; status; path; sec_vars } =
               (Tactic_learner_internal.TS.proof_state_hypotheses (fst @@ List.hd executions))
               (Tactic_learner_internal.TS.proof_state_sigma (fst @@ List.hd executions)) } in
     let discharge_result (term, map, ustate, pss) =
-      let masks = Evar.Map.map (fun { hyps; _ } -> mk_mask hyps) map in
+      let masks = Evar.Map.map (fun { hyps; hyps_origin; _ } -> mk_mask hyps_origin hyps) map in
       let map = Evar.Map.map (discharge_single_proof_state masks) map in
       discharge_constr masks term, map, ustate, List.map (fun { evar; _ } -> Evar.Map.find evar map) pss in
     let tactic = if outcomes = [] then tactic else
