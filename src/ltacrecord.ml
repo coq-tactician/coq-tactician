@@ -858,22 +858,24 @@ let vernac_solve ~pstate n info tcom b id =
     let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic env t) in
     let string_tac t = Pp.string_of_ppcmds (tac_pp t) in
     let tryadd (execs, tac) =
-      let filter =
+      let tac =
         match tac with
-        | None -> false
+        | None -> None
         | Some tac ->
-          try
-            (* In v8.11 and v8.12, this is know to very occasionally crash (particularly for 'simpl in').
-               Therefore, we have to wrap it in a try-catch. *)
-            let s = string_tac tac in
-            (* TODO: Move this to annotation time *)
-            String.equal s "admit" || String.equal s "synth" || String.is_prefix "synth with cache" s
-            || String.is_prefix "tactician ignore" s || String.is_prefix "fix" s || String.is_prefix "cofix" s
-            || String.is_prefix "change_no_check" s || String.is_prefix "exact_no_checK" s
-            || String.is_prefix "native_cast_no_check" s || String.is_prefix "vm_cast_no_check" s
-            || String.is_prefix "shelve" s
-          with _ -> false in
-      if filter then () else add_to_db2 id (execs, tac) sideff const path;
+          let filter =
+            try
+              (* In v8.11 and v8.12, this is know to very occasionally crash (particularly for 'simpl in').
+                 Therefore, we have to wrap it in a try-catch. *)
+              let s = string_tac tac in
+              (* TODO: Move this to annotation time *)
+              String.equal s "admit" || String.equal s "synth" || String.is_prefix "synth with cache" s
+              || String.is_prefix "tactician ignore" s || String.is_prefix "fix" s || String.is_prefix "cofix" s
+              || String.is_prefix "change_no_check" s || String.is_prefix "exact_no_checK" s
+              || String.is_prefix "native_cast_no_check" s || String.is_prefix "vm_cast_no_check" s
+              || String.is_prefix "shelve" s
+            with _ -> false in
+          if filter then None  else Some tac in
+      add_to_db2 id (execs, tac) sideff const path;
       let msg typ t =
         Feedback.msg_warning Pp.(
             str "Tactician detected a " ++ str typ ++ str " problem " ++
