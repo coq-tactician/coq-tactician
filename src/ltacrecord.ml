@@ -655,16 +655,16 @@ let type_check t fail =
   let open Proofview in
   let open Notations in
   Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
-  let gls = List.map Goal.goal gls in
+  (* let gls = List.map Goal.goal gls in *)
   t >>= fun res ->
   tclENV >>= fun env -> tclEVARMAP >>= fun sigma ->
   try
-    List.iter (fun ev ->
-        let Evd.EvarInfo info = Evd.find sigma ev in
+    List.iter (fun gl ->
+        let Evd.EvarInfo info = Evd.find sigma (Goal.goal gl) in
         let env = Environ.reset_with_named_context (Evd.evar_filtered_hyps info) env in
         match Evd.evar_body info with
         | Evd.Evar_empty -> ()
-        | Evd.Evar_defined term -> ignore (Typing.check env sigma term @@ Evd.evar_concl info)
+        | Evd.Evar_defined term -> ignore (Typing.check env sigma term @@ Goal.concl gl)
       ) gls;
     tclUNIT res
   with
