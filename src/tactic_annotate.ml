@@ -83,13 +83,28 @@ let inner_record ast = match ast_setting_lookup ast with
   | Decompose | Both -> true
   | Keep | Discard -> false
 
-let substitute_runtime_terms =
-  let wit_annotate : (Util.Empty.t, glob_tactic_expr -> glob_tactic_expr, glob_tactic_expr -> glob_tactic_expr) Genarg.genarg_type =
-    let wit = Genarg.create_arg "tactician_annotate" in
+let with_runtime_info : (Geninterp.interp_sign -> unit Proofview.tactic) -> glob_tactic_expr =
+  let wit_runtime_info :
+    (Util.Empty.t,
+     Geninterp.interp_sign -> unit Proofview.tactic,
+     Geninterp.interp_sign -> unit Proofview.tactic) Genarg.genarg_type =
+    let wit = Genarg.create_arg "wit_runtime_info" in
     let () = Geninterp.register_val0 wit None in
     Tactician_util.register_interp0 wit (fun ist v -> Ftactic.return v);
     wit in
-  let implementation annotate tac is =
+  let ml_implementation args is =
+    match args with
+    | [f] -> Tacinterp.Value.cast (Genarg.topwit wit_runtime_info) f is
+    | _ -> assert false in
+  let () = Tactician_util.register ml_implementation "with_runtime_info" in
+  fun f ->
+    let f = Genarg.in_gen (Genarg.glbwit wit_runtime_info) f in
+    TacML (CAst.make ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = "with_runtime_info"}
+                      ; mltac_index = 0},
+                      [TacGeneric f]))
+
+let substitute_runtime_terms annotate tac =
+  let implementation is =
     let open Proofview in
     Proofview.Goal.enter @@ fun gl ->
     let env = Goal.env gl in
@@ -103,19 +118,7 @@ let substitute_runtime_terms =
     let lfun = Names.Id.Map.filter (fun id _ -> not @@ Names.Id.Map.mem id map) is.lfun in
     Tacinterp.eval_tactic_ist { is with lfun } tac
   in
-  let ml_implementation args is =
-    match args with
-    | [annotate; tac] ->
-      let annotate = Tacinterp.Value.cast (Genarg.topwit wit_annotate) annotate in
-      let tac = Tacinterp.Value.cast (Genarg.topwit Tactician_util.wit_glbtactic) tac in
-      implementation annotate tac is
-    | _ -> assert false in
-  let () = Tactician_util.register ml_implementation "substitute_runtime_terms" in
-  (fun annotate tac ->
-     let annotate = Genarg.in_gen (Genarg.glbwit wit_annotate) annotate in
-     let tac = Genarg.in_gen (Genarg.glbwit Tactician_util.wit_glbtactic) tac in
-     TacML (CAst.make ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = "substitute_runtime_terms"}; mltac_index = 0},
-                       [TacGeneric annotate; TacGeneric tac])))
+  with_runtime_info implementation
 
 let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr option -> glob_tactic_expr -> glob_tactic_expr) : glob_tactic_expr =
   let rself t = r (Some t) t in
