@@ -269,7 +269,7 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr option -> 
       | [s] -> mkatom loc (TacGeneralize [s])
       | s::ls -> TacThen (mkatom loc (TacGeneralize [s]), aux ls)
     in aux ls in
-  let decompose_single_destruct loc eflg (c, (eqn, asc), inc) =
+  let decompose_single_destruct loc recflg eflg (c, (eqn, asc), inc) =
     let interp_arg f =
       with_runtime_info @@ fun is ->
       let open Proofview in
@@ -290,7 +290,7 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr option -> 
     | None, None, Some (ArgArg (CAst.{v=Tactypes.IntroAndPattern ps; _})) ->
       let ps, i, cont = expand_intro_patterns loc eflg 0 ps in
       let destruct = interp_arg @@ fun c ->
-        TacInductionDestruct (false, eflg,
+        TacInductionDestruct (recflg, eflg,
                               ([c, (eqn, Some (ArgArg (CAst.make (Tactypes.IntroAndPattern ps)))), inc], None)) in
       let tac = cont (fun _ -> TacId []) i in
       TacThens3parts (destruct, Array.of_list [], TacId[],
@@ -300,12 +300,12 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr option -> 
       let ps = Tactypes.IntroOrPattern (List.map (fun (ps, _, _) -> ps) expanded) in
       let destruct =
         interp_arg @@ fun c -> TacInductionDestruct
-          (false, eflg, ([c, (eqn, Some (ArgArg (CAst.make ps))), inc], None)) in
+          (recflg, eflg, ([c, (eqn, Some (ArgArg (CAst.make ps))), inc], None)) in
       let tacs = List.map (fun (_, i, cont) -> cont (fun _ -> TacId []) i) expanded in
       TacThens3parts (destruct, Array.of_list [], TacId[],
                       Array.of_list tacs)
     | _ ->
-      interp_arg @@ fun c -> TacInductionDestruct (false, eflg, ([c, (eqn, asc), inc], None)) in
+      interp_arg @@ fun c -> TacInductionDestruct (recflg, eflg, ([c, (eqn, asc), inc], None)) in
 
     match c with
     | None, Tactics.ElimOnIdent id ->
@@ -315,11 +315,11 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr option -> 
       TacThen (TacTry intro, tac)
     | _ -> tac
   in
-  let decompose_destruct loc eflg ls =
+  let decompose_destruct loc recflg eflg ls =
     let rec aux = function
       | [] -> assert false
-      | [s] -> decompose_single_destruct loc eflg s
-      | s::ls -> TacThen (decompose_single_destruct loc eflg s, aux ls)
+      | [s] -> decompose_single_destruct loc recflg eflg s
+      | s::ls -> TacThen (decompose_single_destruct loc recflg eflg s, aux ls)
     in
     let tac = aux ls in
     (* Feedback.msg_info (Pptactic.pr_glob_tactic (Global.env ()) tac); *)
@@ -419,11 +419,14 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr option -> 
     | TacLetTac _ -> router LetTac at
     (* This is induction .. using .., which is not decomposable *)
     | TacInductionDestruct (_, _, (_, Some _)) -> rself at
+    | TacInductionDestruct (false, eflg, (ts, None)) ->
+      let at = if inner_record InductionDestruct then decompose_destruct a.loc false eflg ts else at in
+      router InductionDestruct at
+    | TacInductionDestruct (true, eflg, ([t], None)) ->
+      let at = if inner_record InductionDestruct then decompose_destruct a.loc true eflg [t] else at in
+      router InductionDestruct at
     (* TODO: induction a, b is not equal to induction a; induction b due to name mangling *)
     | TacInductionDestruct (true, _, _) -> rself at
-    | TacInductionDestruct (false, eflg, (ts, None)) ->
-      let at = if inner_record InductionDestruct then decompose_destruct a.loc eflg ts else at in
-      router InductionDestruct at
     | TacReduce (expr, occ) ->
       let open Genredexpr in
       (match expr with
