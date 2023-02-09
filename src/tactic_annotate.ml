@@ -269,22 +269,27 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr option -> 
       | [s] -> mkatom loc (TacGeneralize [s])
       | s::ls -> TacThen (mkatom loc (TacGeneralize [s]), aux ls)
     in aux ls in
-  let preprocess_term (flg, trm) =
-    match flg with
-    | Some _ -> None, (flg, trm)
-    | None ->
-      match trm with
-      | Tactics.ElimOnIdent id ->
-        let c = (DAst.make (Glob_term.GVar id.v),
-                 Some (CAst.make @@ Constrexpr.CRef (Libnames.qualid_of_ident ?loc:id.loc id.v, None))), Tactypes.NoBindings in
-           Some id, (flg, Tactics.ElimOnConstr c)
-      | _ -> None, (flg, trm) in
   let decompose_single_destruct loc eflg (c, (eqn, asc), inc) =
-    let do_intro, c = preprocess_term c in
+    let interp_arg f =
+      with_runtime_info @@ fun is ->
+      let open Proofview in
+        Goal.enter @@ fun gl ->
+        let flg, trm = c in
+        let trm =
+          match trm with
+          | Tactics.ElimOnIdent id ->
+            let interpreted =
+              Constrintern.intern_constr (Goal.env gl) (Goal.sigma gl)
+                (CAst.make ?loc:id.loc @@ Constrexpr.CRef (Libnames.qualid_of_ident ?loc:id.loc id.v, None)),
+              None in
+            Tactics.ElimOnConstr (interpreted, Tactypes.NoBindings)
+          | _ -> trm in
+        let tac = mkatom loc @@ f (flg, trm) in
+        Tacinterp.eval_tactic_ist is tac in
     let tac = match eqn, inc, asc with
     | None, None, Some (ArgArg (CAst.{v=Tactypes.IntroAndPattern ps; _})) ->
       let ps, i, cont = expand_intro_patterns loc eflg 0 ps in
-      let destruct = mkatom loc @@
+      let destruct = interp_arg @@ fun c ->
         TacInductionDestruct (false, eflg,
                               ([c, (eqn, Some (ArgArg (CAst.make (Tactypes.IntroAndPattern ps)))), inc], None)) in
       let tac = cont (fun _ -> TacId []) i in
@@ -294,20 +299,21 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr option -> 
       let expanded = List.map (expand_intro_patterns loc eflg 0) ps in
       let ps = Tactypes.IntroOrPattern (List.map (fun (ps, _, _) -> ps) expanded) in
       let destruct =
-        mkatom loc @@ TacInductionDestruct
+        interp_arg @@ fun c -> TacInductionDestruct
           (false, eflg, ([c, (eqn, Some (ArgArg (CAst.make ps))), inc], None)) in
       let tacs = List.map (fun (_, i, cont) -> cont (fun _ -> TacId []) i) expanded in
       TacThens3parts (destruct, Array.of_list [], TacId[],
                       Array.of_list tacs)
     | _ ->
-      mkatom loc @@ TacInductionDestruct (false, eflg, ([c, (eqn, asc), inc], None)) in
-    match do_intro with
-    | Some id ->
+      interp_arg @@ fun c -> TacInductionDestruct (false, eflg, ([c, (eqn, asc), inc], None)) in
+
+    match c with
+    | None, Tactics.ElimOnIdent id ->
       let intro = internal_tactics_ref_lookup "intros_until" in
       let id = TacGeneric (Genarg.in_gen (Genarg.glbwit Tacarg.wit_quantified_hypothesis) (NamedHyp id.v)) in
       let intro = rself @@ TacAlias (CAst.make (intro, [id])) in
       TacThen (TacTry intro, tac)
-    | None -> tac
+    | _ -> tac
   in
   let decompose_destruct loc eflg ls =
     let rec aux = function
