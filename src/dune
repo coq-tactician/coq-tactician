@@ -28,6 +28,7 @@
    tactic_normalize
    extreme_tactic_normalize
    tactic_one_variable
+   tactic_arguments
    tactic_annotate
    cook_tacexpr
    discharge_tacexpr
