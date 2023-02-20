@@ -154,9 +154,14 @@ let mapper =
          | TOther -> return (DAst.make (GHole (Evar_kinds.GoalEvar, IntroAnonymous, None)), None))
       | _ -> return c)
   ; glob_constr_pattern_and_expr = (fun c cont ->
-      let+ (_, (c, _), _) = cont c in
-      let _, pat = Patternops.pattern_of_glob_constr c in
+      let+ (_, (c, _), pat) = cont c in
       let bound = Glob_ops.bound_glob_vars c in
+      let pat =
+        match pat with
+        | PRel 0 -> pat
+        | _ ->
+          let _, pat = Patternops.pattern_of_glob_constr c in
+          pat in
       bound, (c, None), pat)
   }
 

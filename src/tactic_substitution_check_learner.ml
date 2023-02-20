@@ -69,6 +69,11 @@ module SubstitutionChecker = functor (TS : TacticianStructures) -> struct
           ) in
         CErrors.anomaly expr
 
+  let learn () _status outcomes tac =
+    match tac with
+    | None -> ()
+    | Some tac -> learn () _status outcomes tac
+
   let predict () f = IStream.empty
 
   let evaluate () _ _ = 1., ()
