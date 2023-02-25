@@ -452,7 +452,12 @@ let update_hyps_origin () =
             Some subst
           | _ -> EConstr.fold sigma find_subst acc t in
       match find_subst None term with
-      | None -> CErrors.anomaly Pp.(str "Tactician could not find the substitution map of a new goal")
+      | None ->
+        (* This can happen when a tactic generates dangling goal that is not used in the final proof term.
+           One tactic that does this is setoit_rewrite X in H; auto, when auto solves the main goal without
+           using hypothesis H. *)
+        Feedback.msg_warning Pp.(str "Tactician could not find the substitution map of a new goal");
+        tclUNIT ()
       | Some substs ->
         let dest = Array.map
             (fun c ->
