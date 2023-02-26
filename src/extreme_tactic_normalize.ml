@@ -18,8 +18,8 @@ let mapper = { NormalizeDef.default_mapper with
              ; variable = (fun _ -> Names.Id.of_string "X")
              ; constant = (fun c -> placeholder ())
              ; constr_pattern = (fun _ _ -> Pattern.PMeta None)
-             ; constr_expr = (fun _ _ -> CHole (None, IntroAnonymous, None))
-             ; glob_constr = (fun _ _ -> Glob_term.GHole (Evar_kinds.GoalEvar, IntroAnonymous, None))
+             ; constr_expr = (fun _ _ -> CHole (None, IntroAnonymous))
+             ; glob_constr = (fun _ _ -> Glob_term.GHole (Evar_kinds.GoalEvar, IntroAnonymous))
              }
 
 let tactic_normalize = NormalizeMapper.glob_tactic_expr_map mapper

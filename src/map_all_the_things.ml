@@ -694,11 +694,13 @@ module MakeMapper (M: MapDef) = struct
            (array_combine terms bindrs_array) in
        GRec (fk, ids, decls, typs, terms)
      | GSort _ as c -> return c
-     | GHole (k, intr, gen) ->
+     | GHole (k, intr) ->
        (* TODO: Sometime we have to deal with some of these evar kinds *)
-       let+ gen = option_map (generic_glob_map (r m)) gen
-       and+ intr = intro_pattern_naming_expr_map m intr in
-       GHole (k, intr, gen)
+       let+ intr = intro_pattern_naming_expr_map m intr in
+       GHole (k, intr)
+     | GGenarg gen ->
+       let+ gen = generic_glob_map (r m) gen in
+       GGenarg gen
      | GCast (c1, k, c3) ->
        let+ c1 = glob_constr_map c1
        and+ c3 = glob_constr_map c3 in
@@ -873,11 +875,16 @@ module MakeMapper (M: MapDef) = struct
       and+ c3 = constr_expr_map c3
       and+ c4 = constr_expr_map c4 in
       CIf (c1, (l, c2), c3, c4)
-    | CHole (k, intr, gen) ->
+    | CHole (k, intr) ->
       (* TODO: At some point we have to deal with some of these evar kinds *)
-      let+ intr = intro_pattern_naming_expr_map m intr
-      and+ gen = option_map (generic_raw_map (r m)) gen in
-      CHole (k, intr, gen)
+      let+ intr = intro_pattern_naming_expr_map m intr in
+      CHole (k, intr)
+    | CGenarg gen ->
+      let+ gen = generic_raw_map (r m) gen in
+      CGenarg gen
+    | CGenargGlob gen ->
+      let+ gen = generic_glob_map (r m) gen in
+      CGenargGlob gen
     | CPatVar _ as x -> (* Not regarded as a variable*)
       return x
     | CEvar (e, xs) ->
