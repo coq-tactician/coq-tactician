@@ -61,7 +61,9 @@ let inline env extra_ctx extra_deps { outcomes; tactic; name; status; path; sec_
     extra_substs, extra_ctx in
   let inline_single_proof_state extra_substs_map extra_ctx { hyps; goal; evar; hyps_origin } =
     let open Context.Named.Declaration in
-    let hyps = List.map (map_constr (inline_constr extra_substs_map)) (hyps @ extra_ctx) in
+    let hyps, sec_hyps = CList.split_when
+        (fun pt -> Names.Id.Set.mem (Context.Named.Declaration.get_id pt) sec_vars) hyps in
+    let hyps = List.map (map_constr (inline_constr extra_substs_map)) (hyps @ extra_ctx @ sec_hyps) in
     let goal = inline_constr extra_substs_map goal in
     { hyps; goal; evar; hyps_origin } in
   let inline_map map =
