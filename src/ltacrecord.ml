@@ -803,6 +803,10 @@ let get_benchmarked () =
 let set_benchmarked () =
   modify_field benchmarked_field (fun _ -> true, ()) (fun () -> true)
 
+(* Hook that allows running some code outside of the benchmark sub-process.
+   This should go away once we remove that sub-process and utilize the normal timeout command. *)
+let pre_benchmark, pre_benchmark_hook = Hook.make ~default:(fun () -> ()) ()
+
 let benchmarkSearch name time deterministic : unit Proofview.tactic =
   let open Proofview in
   let open Notations in
@@ -819,6 +823,7 @@ let benchmarkSearch name time deterministic : unit Proofview.tactic =
                                         ; inferences = count }));
   in
   let start_time = Unix.gettimeofday () in
+  Hook.get pre_benchmark ();
   timeout_command (tclENV >>= fun env ->
                    let solved_check_fail err (wit, _) =
                      let tstring = synthesize_tactic env wit in
