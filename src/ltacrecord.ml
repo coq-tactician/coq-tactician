@@ -173,7 +173,7 @@ let discharge_outcomes senv { outcomes; tactic; name; status; path } =
 
 let section_ltac_helper bodies =
   tmp_ltac_defs := []; (* Safe to discard tmp state from old section discharge *)
-  let ist = Tacintern.make_empty_glob_sign () in
+  let ist = Tacintern.make_empty_glob_sign ~strict:true in
   let intern t = Tacintern.intern_tactic_or_tacarg ist t in
   let def_trans = function
     | TacticDefinition (id, tac) ->
@@ -928,7 +928,7 @@ let hide_interp_t (global, t, id, name) =
   let open Proofview in
   let open Notations in
   let hide_interp env =
-    let ist = Genintern.empty_glob_sign env in
+    let ist = Genintern.empty_glob_sign ~strict:false env in
     let te = Tacintern.intern_pure_tactic ist t in
     let t = recorder te id name in
     t
