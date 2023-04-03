@@ -40,6 +40,7 @@
    tactic_substitution_check_learner
  ))
  (libraries
+   coq-core.stm
    coq-core.plugins.ltac
    coq-core.plugins.firstorder
    coq-core.plugins.funind
