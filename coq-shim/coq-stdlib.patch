@@ -1,24 +1,23 @@
-From 178f7b1823806687cf4a64fb38ac014b4ed0801b Mon Sep 17 00:00:00 2001
+From fdd299172cf74306cfe2f617227715348675fe15 Mon Sep 17 00:00:00 2001
 From: Lasse Blaauwbroek <lasse@blaauwbroek.eu>
-Date: Wed, 22 Jun 2022 13:14:35 +0200
-Subject: [PATCH] Patch to inject Tactician into the standard library
+Date: Tue, 4 Apr 2023 17:24:01 +0200
+Subject: [PATCH] Patch to inject tactician into the standard library
 
 ---
- theories/Init/Ltac.v | 4 ++--
- 1 file changed, 2 insertions(+), 2 deletions(-)
+ theories/Init/Ltac.v | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
 
 diff --git a/theories/Init/Ltac.v b/theories/Init/Ltac.v
-index fbd60a940f..ee0dd7e88d 100644
+index 319776da5f..58d8271b24 100644
 --- a/theories/Init/Ltac.v
 +++ b/theories/Init/Ltac.v
-@@ -9,5 +9,5 @@
- (************************************************************************)
+@@ -10,4 +10,5 @@
  
  Declare ML Module "ltac_plugin:coq-core.plugins.ltac".
--
--Export Set Default Proof Mode "Classic".
+ 
+-#[export] Set Default Proof Mode "Classic".
 +From Tactician Require Export Ltac1.Record.
-+Export Set Default Proof Mode "Tactician Ltac1".
++#[export] Set Default Proof Mode "Tactician Ltac1".
 -- 
-2.38.1
+2.40.0
 
