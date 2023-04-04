@@ -73,8 +73,8 @@ let inline env sideff t =
     let should_inline = Option.cata (fun CAst.{ loc; v } ->
         let open Vernacexpr in
         match v.expr with
-        | VernacEndProof (Proved (Opaque, _)) -> true
-        | VernacEndProof (Vernacexpr.Proved (Transparent, _)) -> false
+        | VernacSynPure (VernacEndProof (Proved (Opaque, _))) -> true
+        | VernacSynPure (VernacEndProof (Vernacexpr.Proved (Transparent, _))) -> false
         | _ -> CErrors.anomaly Pp.(str "Unexpected vernac ast during Tactician side-effect inlining")) true @@
       Stm.(get_ast ~doc (get_current_state ~doc)) in
     if not should_inline then t else

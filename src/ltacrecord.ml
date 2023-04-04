@@ -774,7 +774,7 @@ let pre_vernac_solve id =
       let doc = Stm.get_doc 0 in
       Option.cata (fun CAst.{ v = { expr; _ }; _ } ->
           match expr with
-          | VernacAbort | VernacEndProof Admitted -> true
+          | VernacSynPure (VernacAbort | VernacEndProof Admitted) -> true
           | _ -> false) true
         Stm.(get_ast ~doc (get_current_state ~doc)) in
     (if not aborted then
@@ -800,7 +800,7 @@ let pre_vernac_solve id =
                    ; out_spaces = (fun _ -> reset ())
                    ; out_indent = (fun _ -> reset ())
                    }) in
-       if not !Flags.quiet || !Vernacinterp.test_mode then begin
+       if not !Flags.quiet || !Synterp.test_mode then begin
          Topfmt.std_ft := ignore_one_formatter !Topfmt.std_ft;
          raise exn
        end else raise exn)

@@ -94,8 +94,8 @@ GRAMMAR EXTEND Gram
   GLOBAL: tactician_mode;
 
   tactician_mode:
-    [ [ g = OPT toplevel_selector; tac = G_vernac.query_command -> { tac g }
-      | g = OPT toplevel_selector; "{" -> { Vernacexpr.VernacSubproof g } ] ]
+    [ [ g = OPT toplevel_selector; tac = G_vernac.query_command -> { Vernacexpr.VernacSynPure (tac g) }
+      | g = OPT toplevel_selector; "{" -> { Vernacexpr.(VernacSynPure (VernacSubproof g)) } ] ]
   ;
   END
 
