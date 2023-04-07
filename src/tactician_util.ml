@@ -128,7 +128,7 @@ let try_locate_absolute_library dir =
     None
 
 let base_filename =
-  let dirpath = Global.current_dirpath () in
+  let dirpath = Lib.library_dp() in
   Option.map (fun f -> Filename.remove_extension f) (try_locate_absolute_library dirpath)
 
 let with_flag flg f =
