@@ -116,7 +116,7 @@ VERNAC { tactician_mode } EXTEND VernacSolveTactician STATE CUSTOM
   } -> { vernac_solve (Some Goal_select.SelectAll) info t def }
 END
 
-VERNAC COMMAND EXTEND VernacDeclareTacticDefinition
+VERNAC COMMAND EXTEND VernacDeclareTacticDefinitionTactician
 | #[ deprecation; locality; ] [ "Ltac" ne_ltac_tacdef_body_list_sep(l, "with") ] => {
     VtSideff (List.map (function
       | TacticDefinition (CAst.{v; _},_) -> v
@@ -127,7 +127,7 @@ VERNAC COMMAND EXTEND VernacDeclareTacticDefinition
   }
 END
 
-VERNAC COMMAND EXTEND VernacTacticNotation
+VERNAC COMMAND EXTEND VernacTacticNotationTactician
 | #[ deprecation; locality; ]
   [ "Tactic" "Notation" ltac_tactic_level_opt(n) ne_ltac_production_item_list(r) ":=" tactic(e) ] =>
   { VtSideff ([], VtNow) } ->

@@ -5,7 +5,8 @@ DECLARE PLUGIN "coq-tactician.tactics-plugin"
 open Ltac_plugin
 open Tacarg
 
-let () = Mltop.add_known_plugin Tactician_ltac1_record_plugin.Tactic_learner_internal.disable_queue __coq_plugin_name
+let () = Mltop.add_known_plugin Tactician_ltac1_record_plugin.Tactic_learner_internal.disable_queue
+    "coq-tactician.tactics-plugin"
 
 }
 
