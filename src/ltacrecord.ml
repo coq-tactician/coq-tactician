@@ -575,6 +575,16 @@ let get_witness () =
 let empty_witness () =
   modify_field search_witness_field (fun _ -> [], ()) (fun () -> [])
 
+let timeout_option =
+  let timeout = ref 10 in
+  Goptions.declare_int_option
+    { optdepr = false
+    ; optname = "Tactician Tactic Timeout"
+    ; optkey = ["Tactician Tactic Timeout"]
+    ; optread = (fun () -> Some !timeout)
+    ; optwrite = (fun v -> timeout := Option.default 10 v) };
+  fun () -> !timeout
+
 let tclDebugTac t env debug =
     let open Proofview in
     let open Notations in
@@ -587,7 +597,7 @@ let tclDebugTac t env debug =
              str "Exec: " ++ Pptactic.pr_glob_tactic env t)) <*>
       print_goal_short
      else tclUNIT ()) <*>
-    tclPROGRESS @@ Timeouttac.tclTIMEOUTF 0.1 @@ parse_tac t
+    tclPROGRESS @@ Timeouttac.tclTIMEOUTF (float_of_int (timeout_option ()) /. 100.) @@ parse_tac t
 
 let predict () =
   let open Proofview in
