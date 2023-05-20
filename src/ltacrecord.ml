@@ -684,7 +684,7 @@ let benchmarkSearch name time deterministic : unit Proofview.tactic =
   let open Proofview in
   let open Notations in
   let abstract_time = time in
-  let timeout_command = if deterministic then fun x -> x else Timeouttac.ptimeout abstract_time in
+  let timeout_command = if deterministic then fun x -> x else tclTIMEOUT abstract_time in
   let max_exec = if deterministic then Some abstract_time else None in
   let print_success env (wit, count) start_time =
     let tdiff = Unix.gettimeofday () -. start_time in
