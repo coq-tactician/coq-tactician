@@ -143,8 +143,8 @@ module LSHF =
           (fun (o, f) -> let x = tfidf db.length db.frequencies feats f in (x, o))
           candidates in
       let out = remove_dups_and_sort tdidfs in
-      let out = List.map (fun (a, c) -> { confidence = a; focus = 0; tactic = c }) out in
-      IStream.of_list out
+      let out, _ = List.fold_left (fun (acc, prb) (a, c) -> { confidence = prb; focus = 0; tactic = c }::acc, prb/.2.) ([], 0.5) out in
+      IStream.of_list @@ List.rev out
 
   let evaluate db _ _ = 1., db
 
