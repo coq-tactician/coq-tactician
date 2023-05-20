@@ -63,4 +63,4 @@ let tclSearchDijkstraIterative d max_reached predict : cont_tactic =
           | (e, info) -> tclZERO ~info e ) in
   Cont (aux d)
 
-let () = register_search_strategy "dijkstra iterative search" (tclSearchDijkstraIterative 0.)
+(* let () = register_search_strategy "dijkstra iterative search" (tclSearchDijkstraIterative 0.) *)

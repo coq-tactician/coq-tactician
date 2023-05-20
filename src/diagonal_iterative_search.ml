@@ -79,4 +79,4 @@ let tclSearchDiagonalIterative d max_reached predict : cont_tactic =
             aux (d * 2)) in
   Cont (aux d)
 
-(* let () = register_search_strategy "diagonal iterative search" (tclSearchDiagonalIterative 8) *)
+let () = register_search_strategy "diagonal iterative search" (tclSearchDiagonalIterative 8)
