@@ -469,7 +469,7 @@ let timeout_option =
   Goptions.declare_int_option
     { optdepr = false
     ; optname = "Tactician Tactic Timeout"
-    ; optkey = ["Tactician Tactic Timeout"]
+    ; optkey = ["Tactician"; "Tactic"; "Timeout"]
     ; optread = (fun () -> Some !timeout)
     ; optwrite = (fun v -> timeout := Option.default 10 v) };
   fun () -> !timeout
