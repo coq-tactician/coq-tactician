@@ -943,8 +943,9 @@ let vernac_solve ~pstate n info tcom b id =
                      | Some (time, deterministic) -> benchmarkSearch path time deterministic
                  ) p);
               ) pstate)
-        with e ->
-          Feedback.msg_warning (CErrors.print e)
+        with
+        | Logic_monad.TacticFailure _ -> ()
+        | e -> Feedback.msg_warning (CErrors.print e)
       end;
 
       let pstate, status = Proof_global.map_fold_proof_endline (fun etac p ->
