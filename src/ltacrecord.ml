@@ -931,14 +931,23 @@ let vernac_solve ~pstate n info tcom b id =
       let open Proofview in
       let open Proofview.Notations in
       Benchmark.add_lemma path;
+      begin try
+          ignore(
+            States.with_state_protection
+              (Proof_global.map_proof @@ fun p ->
+               fst (Pfedit.solve n None (
+                   get_benchmarked () >>= fun benchmarked ->
+                   if benchmarked then tclUNIT () else
+                     match Benchmark.should_benchmark path with
+                     | None -> tclUNIT ()
+                     | Some (time, deterministic) -> benchmarkSearch path time deterministic
+                 ) p);
+              ) pstate)
+        with e ->
+          Feedback.msg_warning (CErrors.print e)
+      end;
+
       let pstate, status = Proof_global.map_fold_proof_endline (fun etac p ->
-          ignore (Pfedit.solve n None (
-              get_benchmarked () >>= fun benchmarked ->
-              if benchmarked then tclUNIT () else
-                match Benchmark.should_benchmark path with
-                | None -> tclUNIT ()
-                | Some (time, deterministic) -> benchmarkSearch path time deterministic
-            ) p);
 
           let with_end_tac = if b then Some etac else None in
           let global = match n with SelectAll | SelectList _ -> true | _ -> false in
