@@ -943,7 +943,7 @@ let vernac_solve ~pstate n info tcom b id =
           let with_end_tac = if b then Some etac else None in
           let global = match n with SelectAll | SelectList _ -> true | _ -> false in
           let info = Option.append info G_ltac.(!print_info_trace) in
-          let pstate, status = Pfedit.solve n info
+          let p, status = Pfedit.solve n info
             (set_benchmarked () <*>
              hide_interp_t global tcom with_end_tac
                (fun t -> decompose_annotate t record_tac_complete) const path) p
