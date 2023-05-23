@@ -51,13 +51,21 @@ let ptimeout n tac =
 (* TODO: This is a hack to fix the timeout function. *)
 (** This function does not work on windows, sigh... *)
 (* This function assumes it is the only function calling [setitimer] *)
+let level = ref 0
+let thrown = ref false
 let unix_timeout n f x =
+  if !thrown then
+    CErrors.anomaly Pp.(str "Thrown but not caught");
   let open Unix in
-  let timeout_handler _ = raise CErrors.Timeout in
+  let timeout_handler level _ =
+    print_endline ("interrupt level: " ^ string_of_int level);
+    thrown := true;
+    raise CErrors.Timeout in
   let old_timer = getitimer ITIMER_REAL in
   (* Here we assume that the existing timer will also interrupt us. *)
   if old_timer.it_value > 0. && old_timer.it_value <= n then Some (f x) else
-    let psh = Sys.signal Sys.sigalrm (Sys.Signal_handle timeout_handler) in
+    let psh = Sys.signal Sys.sigalrm (Sys.Signal_handle (timeout_handler !level)) in
+    level := !level + 1;
     let restore_timeout () =
       let timer_status = getitimer ITIMER_REAL in
       let old_timer_value = old_timer.it_value -. n +. timer_status.it_value in
@@ -66,6 +74,7 @@ let unix_timeout n f x =
       let old_timer_value = if old_timer.it_value <= 0. then 0. else
           (if old_timer_value <= 0. then epsilon_float else old_timer_value) in
       let _ = setitimer ITIMER_REAL { old_timer with it_value = old_timer_value } in
+      level := !level - 1;
       Sys.set_signal Sys.sigalrm psh
     in
     try
@@ -75,6 +84,7 @@ let unix_timeout n f x =
       Some res
     with
     | CErrors.Timeout ->
+      thrown := false;
       restore_timeout ();
       None
     | reraise ->
