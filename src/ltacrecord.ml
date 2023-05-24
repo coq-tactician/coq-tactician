@@ -869,7 +869,10 @@ let vernac_solve ~pstate n info tcom b id =
           || String.is_prefix "change_no_check" s || String.is_prefix "exact_no_checK" s
           || String.is_prefix "native_cast_no_check" s || String.is_prefix "vm_cast_no_check" s
           || String.is_prefix "shelve" s
-        with _ -> false in
+        with
+        (* Intentionally catching assert failure coming from constrextern.ml l629 in 8.11 and 8.12 *)
+        | Assert_failure _ -> false
+        | e when CErrors.noncritical e -> false in
       if not filter then
         add_to_db2 id (execs, tac) sideff const path;
       let msg typ t =
@@ -880,8 +883,11 @@ let vernac_solve ~pstate n info tcom b id =
         let s = string_tac tac in
         try
           let _ = Pcoq.parse_string Pltac.tactic_eoi s in ()
-        with _ -> msg "printing/parsing" s
-      with _ -> msg "printing" "" in
+        with e when CErrors.noncritical e -> msg "printing/parsing" s
+      with
+      (* Intentionally catching assert failure coming from constrextern.ml l629 in 8.11 and 8.12 *)
+      | Assert_failure _ -> msg "printing" ""
+      | e when CErrors.noncritical e -> msg "printing" "" in
     List.iter (fun trp -> tryadd trp) @@ List.rev db in
   (* Returns true if tactic execution should be skipped *)
   let pre_vernac_solve id =
