@@ -693,7 +693,7 @@ let benchmarkSearch name time deterministic : unit Proofview.tactic =
                                         ; trace = synthesize_trace wit
                                         ; witness = tstring
                                         ; time = tdiff
-                                        ; inferences = count }));
+                                        ; inferences = count }))
   in
   let start_time = Unix.gettimeofday () in
   timeout_command (tclENV >>= fun env ->
@@ -934,24 +934,30 @@ let vernac_solve ~pstate n info tcom b id =
   let skip = pre_vernac_solve id in
   if skip then pstate else
     try
-      let open Proofview in
       let open Proofview.Notations in
       Benchmark.add_lemma path;
-      begin try
-          ignore(
-            States.with_state_protection
-              (Proof_global.map_proof @@ fun p ->
-               fst (Pfedit.solve n None (
-                   get_benchmarked () >>= fun benchmarked ->
-                   if benchmarked then tclUNIT () else
-                     match Benchmark.should_benchmark path with
-                     | None -> tclUNIT ()
-                     | Some (time, deterministic) -> benchmarkSearch path time deterministic
-                 ) p);
-              ) pstate)
-        with
-        | Logic_monad.TacticFailure _ -> ()
-        | e -> Feedback.msg_warning (CErrors.print e)
+      let benchmarked =
+        let Proof.{ sigma; _ } = Proof.data @@ Proof_global.get_proof pstate in
+        Option.default false @@ Evd.Store.get (Evd.get_extra_data sigma) benchmarked_field in
+      if not benchmarked then begin
+        match Benchmark.should_benchmark path with
+        | None -> ()
+        | Some (time, deterministic) ->
+          (* fork_timeout could potentially be removed, but the asyncroneous timeouts of tclTIMEOUT are
+             inherently unreliable, because it relies on a global-program property that asynchroneous
+             exceptions are never caught anywhere in Coq. Even if this could be satisfied for Coq itself,
+             we could never fully guarantee that no plugin ever misbehaves. *)
+          match Timeouttac.fork_timeout (time + 5) (fun () ->
+              try
+                ignore(States.with_state_protection (
+                    Proof_global.map_proof @@ fun p ->
+                    fst @@ Pfedit.solve n None (benchmarkSearch path time deterministic) p) pstate)
+              with
+              | Logic_monad.TacticFailure _ -> ()
+              | e -> Feedback.msg_warning Pp.(str "Benchmarking error: " ++ CErrors.print e)
+            ) with
+          | None -> ()
+          | Some msg -> Feedback.msg_warning Pp.(str "Benchmarking error: " ++ msg)
       end;
 
       let pstate, status = Proof_global.map_fold_proof_endline (fun etac p ->
