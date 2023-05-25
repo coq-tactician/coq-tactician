@@ -36,11 +36,9 @@ let tclSearchDijkstraDFS max_reached predict max_dfs : cont_tactic tactic =
            tclFoldPredictions max_reached
              (mapi
                 (fun _i {focus=_; tactic; confidence} -> (* TODO: At some point we should start using the focus *)
-                   if confidence <= 0. then tclZERO PredictionsEnd else
-                     let lconfidence = Float.log confidence /. Float.log 2. in
-                     let max_dfs = max_dfs +. lconfidence in
-                     if max_dfs <= 0. then tclZERO (DepthEnd max_dfs) else
-                       (tactic >>= fun _ -> aux max_dfs))
+                   let max_dfs = max_dfs +. confidence in
+                   if max_dfs <= 0. then tclZERO (DepthEnd max_dfs) else
+                     (tactic >>= fun _ -> aux max_dfs))
                 predictions) >>= aux) in
         tclFOCUS 1 1 @@ tclUntilIndependent independent >>= aux in
   let rec cont max_dfs =
