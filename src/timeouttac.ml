@@ -1,20 +1,9 @@
-(* Proofview.tclTIMEOUT is incorrect because of a bug in OCaml
-   runtime. This file contains a timeout implementation based on
-   Unix.fork and Unix.sleep. See:
-   https://caml.inria.fr/mantis/view.php?id=7709
-   https://caml.inria.fr/mantis/view.php?id=4127
-   https://github.com/coq/coq/issues/7430
-   https://github.com/coq/coq/issues/7408
-*)
-
-(* ptimeout implements timeout using fork and sleep *)
-let ptimeout n tac =
+(** fork_timeout implements timeout using fork and sleep *)
+let fork_timeout n f =
   let pid = Unix.fork () in
   if pid = 0 then
     begin (* the worker *)
-      Proofview.tclOR
-        (Proofview.tclBIND tac (fun _ -> exit 0))
-        (fun _ -> exit 0)
+      Fun.protect ~finally:(fun () -> exit 0) (fun () -> f (); exit 0)
     end
   else
     begin
@@ -26,22 +15,15 @@ let ptimeout n tac =
           exit 0
         end
       else
-        begin
-          let clean () =
-            try Unix.kill pid2 Sys.sigterm with _ -> ()
-          in
-          try
-            let (_, status) = Unix.waitpid [] pid in
-            (* TODO: Clean up this mess *)
-            (match status with
-            | Unix.WEXITED 0 -> clean ();
-            | _ -> (match status with
-                | Unix.WEXITED _ -> (); (* assert false *)
-                | Unix.WSIGNALED n -> if n != -11 then () (* assert false *) else ()
-                | Unix.WSTOPPED _ -> () (* assert false *)));
-            ignore (Unix.waitpid [] pid2);
-            Proofview.tclUNIT ()
-          with
-          | e -> raise e
-        end
+        let clean () =
+          try Unix.kill pid2 Sys.sigterm with _ -> ()
+        in
+        let (_, status) = Unix.waitpid [] pid in
+        let msg = match status with
+          | Unix.WEXITED 0 -> clean (); None
+          | Unix.WEXITED n -> Some (Pp.(str "Forked process exited with code " ++ int n))
+          | Unix.WSIGNALED n -> Some (Pp.(str "Forked process exited with signal " ++ int n))
+          | Unix.WSTOPPED _ -> assert false in
+        ignore (Unix.waitpid [] pid2);
+        msg
     end
