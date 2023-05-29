@@ -73,21 +73,6 @@ open Tacexpr
 open Libnames
 open Stdarg
 
-let vernac_solve g info t def =
-  let id = fst def in
-  let skip = pre_vernac_solve id in
-  if skip then vtdefault (fun () -> ()) else vtmodifyproof @@ fun ~pstate ->
-    let with_end_tac = snd def in
-    try
-      let g = Option.default (Goal_select.get_default_goal_selector ()) g in
-      let global = match g with Goal_select.SelectAll | Goal_select.SelectList _ -> true | _ -> false in
-      let name = Declare.Proof.get_name pstate in
-      let t = hide_interp_t (global, t, id, name) in
-      ComTactic.solve ~pstate g ~info t ~with_end_tac
-    with
-    | e when CErrors.noncritical e || e = CErrors.Timeout ->
-      save_exn id e; raise e
-
 }
 
 GRAMMAR EXTEND Gram
@@ -109,11 +94,11 @@ VERNAC { tactician_mode } EXTEND VernacSolveTactician STATE CUSTOM
 | [ ltac_selector_opt(g) ltac_info_opt(info) tactic(t) ltac_use_default_hack(def) ] =>
     { (* TODO: Enormously ugly hack *)
     VtSideff ([], VtNow)
-    } -> { vernac_solve g info t def }
+    } -> { Ltacrecord.vernac_solve g info t (snd def) (fst def) }
 | [ "par" ":" ltac_info_opt(info) tactic(t) ltac_use_default_hack(def) ] =>
   { (* TODO: Enormously ugly hack *)
     VtSideff ([], VtNow)
-  } -> { vernac_solve (Some Goal_select.SelectAll) info t def }
+  } -> { Ltacrecord.vernac_solve (Some Goal_select.SelectAll) info t (snd def) (fst def) }
 END
 
 VERNAC COMMAND EXTEND VernacDeclareTacticDefinition
