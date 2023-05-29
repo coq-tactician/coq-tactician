@@ -816,7 +816,7 @@ let benchmarkSearch name time deterministic : unit Proofview.tactic =
   let open Proofview in
   let open Notations in
   let abstract_time = time in
-  let timeout_command = if deterministic then fun x -> x else Timeouttac.ptimeout abstract_time in
+  let timeout_command = if deterministic then fun x -> x else tclTIMEOUT abstract_time in
   let max_exec = if deterministic then Some abstract_time else None in
   let print_success env (wit, count) start_time =
     let tdiff = Unix.gettimeofday () -. start_time in
@@ -825,7 +825,7 @@ let benchmarkSearch name time deterministic : unit Proofview.tactic =
                                         ; trace = synthesize_trace wit
                                         ; witness = tstring
                                         ; time = tdiff
-                                        ; inferences = count }));
+                                        ; inferences = count }))
   in
   let start_time = Unix.gettimeofday () in
   timeout_command (tclENV >>= fun env ->
@@ -896,54 +896,6 @@ let qualid_of_global env r =
 
 (* End name globalization *)
 
-(* Returns true if tactic execution should be skipped *)
-let pre_vernac_solve id =
-  load_plugins ();
-  let env = Global.env () in
-  match Hashtbl.find_opt int64_to_knn id with
-  | Some (db, exn, sideff) ->
-    let aborted =
-      let open Vernacexpr in
-      let doc = Stm.get_doc 0 in
-      Option.cata (fun CAst.{ v = { expr; _ }; _ } ->
-          match expr with
-          | VernacAbort _ | VernacEndProof Admitted -> true
-          | _ -> false) true
-        Stm.(get_ast ~doc (get_current_state ~doc)) in
-    (if not aborted then
-       let db = Inline_private_constants.inline env sideff db in
-       List.iter add_to_db @@ List.rev db);
-    Hashtbl.remove int64_to_knn id;
-    (match exn with
-     | None -> true
-     | Some exn ->
-       (* TODO: This is truly evil:
-          Because Tactician registers tactics as side-effecting, the tactics are run again at Qed-time.
-          Therefore, we have to actually prevent them from running. However, if tactics throw an exception, we still need to raise those,
-          because the `Fail` command expects them. That works. However, this now causes `Fail` to print failure messages during Qed.
-          In itself, this is not a huge problem, but it causes the IO-tests of some projects to fail (notably Iris). Therefore, we pull out
-          another hugely ugly hack to temporarily block the message of `Fail` from being printed by replacing the formatter.
-          This is extremely dangerous because it cannot be fully guaranteed that the formatter is being reset afterwards. *)
-       let ignore_one_formatter original =
-         let reset () = Topfmt.std_ft := original in
-         Format.(formatter_of_out_functions
-	                 { out_string = (fun _ _ _ -> reset ())
-                   ; out_flush = (fun _ -> reset ())
-                   ; out_newline = (fun _ -> reset ())
-                   ; out_spaces = (fun _ -> reset ())
-                   ; out_indent = (fun _ -> reset ())
-                   }) in
-       if not !Flags.quiet || !Vernacinterp.test_mode then begin
-         Topfmt.std_ft := ignore_one_formatter !Topfmt.std_ft;
-         raise exn
-       end else raise exn)
-  | None -> Hashtbl.add int64_to_knn id ([], None, Safe_typing.empty_private_constants); false
-
-let save_exn id exn =
-  match Hashtbl.find_opt int64_to_knn id with
-  | Some (v, None, sideff) -> Hashtbl.replace int64_to_knn id (v, Some exn, sideff)
-  | _ -> assert false (* Should not happen *)
-
 (* Tactic recording tactic *)
 
 let val_tag wit = val_tag (Genarg.topwit wit)
@@ -1013,12 +965,30 @@ let run_pushs_state_tac (): glob_tactic_expr =
 let record_tac_complete orig tac : glob_tactic_expr =
   TacThen (run_pushs_state_tac (), TacThen (tac, run_record_tac orig))
 
-let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO: Implement self-learning *)
+let hide_interp_t global t ot rtac const path =
   let open Proofview in
   let open Notations in
+  let hide_interp env =
+    let ist = Genintern.empty_glob_sign env in
+    let t = Tacintern.intern_pure_tactic ist t in
+    let t = Tacinterp.eval_tactic @@ rtac t in
+    let t = match ot with
+      | None -> t
+      | Some t' -> Tacticals.New.tclTHEN t t' in
+    empty_localdb () >>= fun _ -> set_name (const, path) <*> t
+  in
+  if global then
+    Proofview.tclENV >>= fun env ->
+    hide_interp env
+  else
+    Proofview.Goal.enter begin fun gl ->
+      hide_interp (Proofview.Goal.env gl)
+    end
+
+let vernac_solve ~pstate n info tcom b id =
+  let name = Proof_global.get_proof_name pstate in
   let const = Names.Constant.make2 (Global.current_modpath ()) (Names.Label.of_id name) in
   let path = Lib.make_path name in
-  Benchmark.add_lemma path;
   let save_db env sideff (db : localdb) =
     let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic env t) in
     let string_tac t = Pp.string_of_ppcmds (tac_pp t) in
@@ -1034,8 +1004,12 @@ let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO:
           || String.is_prefix "change_no_check" s || String.is_prefix "exact_no_checK" s
           || String.is_prefix "native_cast_no_check" s || String.is_prefix "vm_cast_no_check" s
           || String.is_prefix "shelve" s
-        with _ -> false in
-      if filter then () else add_to_db2 id (execs, tac) sideff const path;
+        with
+        (* Intentionally catching assert failure coming from constrextern.ml l629 in 8.11 and 8.12 *)
+        | Assert_failure _ -> false
+        | e when CErrors.noncritical e -> false in
+      if not filter then
+        add_to_db2 id (execs, tac) sideff const path;
       let msg typ t =
         Feedback.msg_warning Pp.(
             str "Tactician detected a " ++ str typ ++ str " problem " ++
@@ -1044,40 +1018,111 @@ let recorder (tac : glob_tactic_expr) id name : unit Proofview.tactic = (* TODO:
         let s = string_tac tac in
         try
           let _ = Pcoq.parse_string Pltac.tactic_eoi s in ()
-        with _ -> msg "printing/parsing" s
-      with _ -> msg "printing" "" in
-    List.iter (fun trp -> tryadd trp) @@ List.rev db; tclUNIT () in
-  let rtac = decompose_annotate tac record_tac_complete in
-  let ptac = Tacinterp.eval_tactic rtac in
-  let ptac = set_name (const, path) <*> ptac <*> tclENV >>= fun env ->
-    tclEVARMAP >>= fun sigma ->
-    let sideff = Evd.eval_side_effects sigma in
-    empty_localdb () >>= save_db env sideff.seff_private in
-  get_benchmarked () >>= fun benchmarked ->
-  set_benchmarked () <*>
-  if benchmarked then ptac else
-    match Benchmark.should_benchmark path with
-    | None -> ptac
-    | Some (time, deterministic) -> benchmarkSearch path time deterministic <*> ptac
+        with e when CErrors.noncritical e -> msg "printing/parsing" s
+      with
+      (* Intentionally catching assert failure coming from constrextern.ml l629 in 8.11 and 8.12 *)
+      | Assert_failure _ -> msg "printing" ""
+      | e when CErrors.noncritical e -> msg "printing" "" in
+    List.iter (fun trp -> tryadd trp) @@ List.rev db in
+  (* Returns true if tactic execution should be skipped *)
+  let pre_vernac_solve id =
+    load_plugins ();
+    let env = Global.env () in
+    match Hashtbl.find_opt int64_to_knn id with
+    | Some (db, exn, sideff) ->
+      let aborted =
+        let open Vernacexpr in
+        let doc = Stm.get_doc 0 in
+        Option.cata (fun CAst.{ v = { expr; _ }; _ } ->
+            match expr with
+            | VernacAbort _ | VernacEndProof Admitted -> true
+            | _ -> false) true
+          Stm.(get_ast ~doc (get_current_state ~doc)) in
+      (if not aborted then
+         let db = Inline_private_constants.inline env sideff db in
+         List.iter add_to_db @@ List.rev db);
+      Hashtbl.remove int64_to_knn id;
+      (match exn with
+       | None -> true
+       | Some exn ->
+         (* TODO: This is truly evil:
+            Because Tactician registers tactics as side-effecting, the tactics are run again at Qed-time.
+            Therefore, we have to actually prevent them from running. However, if tactics throw an exception, we still need to raise those,
+            because the `Fail` command expects them. That works. However, this now causes `Fail` to print failure messages during Qed.
+            In itself, this is not a huge problem, but it causes the IO-tests of some projects to fail (notably Iris). Therefore, we pull out
+            another hugely ugly hack to temporarily block the message of `Fail` from being printed by replacing the formatter.
+            This is extremely dangerous because it cannot be fully guaranteed that the formatter is being reset afterwards. *)
+         let ignore_one_formatter original =
+           let reset () = Topfmt.std_ft := original in
+           Format.(formatter_of_out_functions
+	                   { out_string = (fun _ _ _ -> reset ())
+                     ; out_flush = (fun _ -> reset ())
+                     ; out_newline = (fun _ -> reset ())
+                     ; out_spaces = (fun _ -> reset ())
+                     ; out_indent = (fun _ -> reset ())
+                     }) in
+         if not !Flags.quiet || !Vernacinterp.test_mode then begin
+           Topfmt.std_ft := ignore_one_formatter !Topfmt.std_ft;
+           raise exn
+         end else raise exn)
+    | None -> Hashtbl.add int64_to_knn id ([], None, Safe_typing.empty_private_constants); false in
+  let skip = pre_vernac_solve id in
+  if skip then pstate else
+    try
+      let open Proofview.Notations in
+      Benchmark.add_lemma path;
+      let benchmarked =
+        let Proof.{ sigma; _ } = Proof.data @@ Proof_global.get_proof pstate in
+        Option.default false @@ Evd.Store.get (Evd.get_extra_data sigma) benchmarked_field in
+      if not benchmarked then begin
+        match Benchmark.should_benchmark path with
+        | None -> ()
+        | Some (time, deterministic) ->
+          (* fork_timeout could potentially be removed, but the asyncroneous timeouts of tclTIMEOUT are
+             inherently unreliable, because it relies on a global-program property that asynchroneous
+             exceptions are never caught anywhere in Coq. Even if this could be satisfied for Coq itself,
+             we could never fully guarantee that no plugin ever misbehaves. *)
+          match Timeouttac.fork_timeout (time + 5) (fun () ->
+              try
+                ignore(States.with_state_protection (
+                    Proof_global.map_proof @@ fun p ->
+                    fst @@ Pfedit.solve n None (benchmarkSearch path time deterministic) p) pstate)
+              with
+              | Logic_monad.TacticFailure _ -> ()
+              | e -> Feedback.msg_warning Pp.(str "Benchmarking error: " ++ CErrors.print e)
+            ) with
+          | None -> ()
+          | Some msg -> Feedback.msg_warning Pp.(str "Benchmarking error: " ++ msg)
+      end;
 
-let hide_interp_t global t ot id name =
-  let open Proofview in
-  let open Notations in
-  let hide_interp env =
-    let ist = Genintern.empty_glob_sign env in
-    let te = Tacintern.intern_pure_tactic ist t in
-    let t = recorder te id name in
-    match ot with
-    | None -> t
-    | Some t' -> Tacticals.New.tclTHEN t t'
-  in
-  if global then
-    Proofview.tclENV >>= fun env ->
-    hide_interp env
-  else
-    Proofview.Goal.enter begin fun gl ->
-      hide_interp (Proofview.Goal.env gl)
-    end
+      let pstate, status = Proof_global.map_fold_proof_endline (fun etac p ->
+
+          let with_end_tac = if b then Some etac else None in
+          let global = match n with SelectAll | SelectList _ -> true | _ -> false in
+          let info = Option.append info G_ltac.(!print_info_trace) in
+          let p, status = Pfedit.solve n info
+            (set_benchmarked () <*>
+             hide_interp_t global tcom with_end_tac
+               (fun t -> decompose_annotate t record_tac_complete) const path) p
+          in
+          let env = Global.env () in
+          let Proof.{ sigma; _ } = Proof.data p in
+          let sideff = Evd.eval_side_effects sigma in
+          let store = Evd.get_extra_data sigma in
+          let data = Option.get @@ Evd.Store.get store localdb_field in
+          save_db env sideff.seff_private data;
+         (* in case a strict subtree was completed,
+             go back to the top of the prooftree *)
+          let p = Proof.maximal_unfocus Vernacentries.command_focus p in
+          p,status) pstate in
+      if not status then Feedback.feedback Feedback.AddedAxiom;
+      pstate
+    with
+    | e when CErrors.noncritical e || e = CErrors.Timeout ->
+      (match Hashtbl.find_opt int64_to_knn id with
+       | Some (v, None, sideff) -> Hashtbl.replace int64_to_knn id (v, Some e, sideff)
+       | _ -> assert false (* Should not happen *));
+      raise e
 
 let tactician_ignore t =
   let open Proofview in
