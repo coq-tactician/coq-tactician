@@ -65,29 +65,6 @@ let pr_decomposition = function
   | Both -> str "Both"
   | Discard -> str "Discard"
 
-let vernac_solve ~pstate n info tcom b id =
-  let open Goal_select in
-  let skip = pre_vernac_solve id in
-  if skip then pstate else
-    try
-      let pstate, status = Declare.Proof.map_fold_proof_endline (fun etac p ->
-          let with_end_tac = if b then Some etac else None in
-          let global = match n with SelectAll | SelectList _ -> true | _ -> false in
-          let info = Option.append info (print_info_trace ()) in
-          let name = Declare.Proof.get_proof_name pstate in
-          let (p,status) =
-              Pfedit.solve n info (hide_interp_t global tcom None id name) ?with_end_tac p
-          in
-          (* in case a strict subtree was completed,
-             go back to the top of the prooftree *)
-          let p = Proof.maximal_unfocus Vernacentries.command_focus p in
-          p,status) pstate in
-      if not status then Feedback.feedback Feedback.AddedAxiom;
-      pstate
-    with
-    | e when CErrors.noncritical e || e = CErrors.Timeout ->
-      save_exn id e; raise e
-
 let pr_ltac_use_default b =
   if (snd b) then (* Bug: a space is inserted before "..." *) Pp.str ".." else Pp.mt ()
 
@@ -119,13 +96,13 @@ VERNAC { tactician_mode } EXTEND VernacSolveTactician STATE proof
     VtSideff ([], VtNow)
     } -> {
     let g = Option.default (Goal_select.get_default_goal_selector ()) g in
-    vernac_solve g n t (snd def) (fst def)
+    Ltacrecord.vernac_solve g n t (snd def) (fst def)
   }
 | [ "par" ":" ltac_info_opt(n) tactic(t) ltac_use_default_hack(def) ] =>
   { (* TODO: Enormously ugly hack *)
     VtSideff ([], VtNow)
   } -> {
-    vernac_solve Goal_select.SelectAll n t (snd def) (fst def)
+    Ltacrecord.vernac_solve Goal_select.SelectAll n t (snd def) (fst def)
   }
 END
 
