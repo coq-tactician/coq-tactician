@@ -963,7 +963,6 @@ let vernac_solve ~pstate n info tcom b id =
   let skip = pre_vernac_solve id in
   if skip then pstate else
     try
-      let open Proofview in
       let open Proofview.Notations in
       Benchmark.add_lemma path;
       let benchmarked =
