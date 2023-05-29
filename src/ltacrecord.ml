@@ -878,50 +878,56 @@ let hide_interp_t (global, t, rtac, const, path) =
 let ComTactic.Interpreter hide_interp_t = ComTactic.register_tactic_interpreter "tactician-ltac1" hide_interp_t
 
 let vernac_solve g info tcom with_end_tac id =
-  (* Returns true if tactic execution should be skipped *)
-  let pre_vernac_solve id =
-    load_plugins ();
-    let env = Global.env () in
+  load_plugins (); (* TODO: Is this required here? *)
+  (* Returns none if the tactic has not been executed, some otherwise, with data about what was executed *)
+  let already_executed id =
     match Hashtbl.find_opt int64_to_knn id with
-    | Some (db, exn, sideff) ->
-      let aborted =
-        let open Vernacexpr in
-        let doc = Stm.get_doc 0 in
-        Option.cata (fun CAst.{ v = { expr; _ }; _ } ->
-            match expr with
-            | VernacSynPure (VernacAbort | VernacEndProof Admitted) -> true
-            | _ -> false) true
-          Stm.(get_ast ~doc (get_current_state ~doc)) in
-      (if not aborted then
-         let db = Inline_private_constants.inline env sideff db in
-         List.iter add_to_db @@ List.rev db);
+    | Some res ->
       Hashtbl.remove int64_to_knn id;
-      (match exn with
-       | None -> true
-       | Some exn ->
-         (* TODO: This is truly evil:
-            Because Tactician registers tactics as side-effecting, the tactics are run again at Qed-time.
-            Therefore, we have to actually prevent them from running. However, if tactics throw an exception, we still need to raise those,
-            because the `Fail` command expects them. That works. However, this now causes `Fail` to print failure messages during Qed.
-            In itself, this is not a huge problem, but it causes the IO-tests of some projects to fail (notably Iris). Therefore, we pull out
-            another hugely ugly hack to temporarily block the message of `Fail` from being printed by replacing the formatter.
-            This is extremely dangerous because it cannot be fully guaranteed that the formatter is being reset afterwards. *)
-         let ignore_one_formatter original =
-           let reset () = Topfmt.std_ft := original in
-           Format.(formatter_of_out_functions
-	                   { out_string = (fun _ _ _ -> reset ())
-                     ; out_flush = (fun _ -> reset ())
-                     ; out_newline = (fun _ -> reset ())
-                     ; out_spaces = (fun _ -> reset ())
-                     ; out_indent = (fun _ -> reset ())
-                     }) in
-         if not !Flags.quiet || !Synterp.test_mode then begin
-           Topfmt.std_ft := ignore_one_formatter !Topfmt.std_ft;
-           raise exn
-         end else raise exn)
-    | None -> Hashtbl.add int64_to_knn id ([], None, Safe_typing.empty_private_constants); false in
-  let skip = pre_vernac_solve id in
-  if skip then Vernacextend.vtdefault (fun () -> ()) else Vernacextend.vtmodifyproof @@ fun ~pstate ->
+      Some res
+    | None ->
+      Hashtbl.add int64_to_knn id ([], None, Safe_typing.empty_private_constants);
+      None in
+  let register_tactic_execution_data (db, exn, sideff) =
+    let env = Global.env () in
+    let aborted =
+      let open Vernacexpr in
+      let doc = Stm.get_doc 0 in
+      Option.cata (fun CAst.{ v = { expr; _ }; _ } ->
+          match expr with
+          | VernacSynPure (VernacAbort | VernacEndProof Admitted) -> true
+          | _ -> false) true
+        Stm.(get_ast ~doc (get_current_state ~doc)) in
+    (if not aborted then
+       let db = Inline_private_constants.inline env sideff db in
+       List.iter add_to_db @@ List.rev db);
+    Hashtbl.remove int64_to_knn id;
+    (match exn with
+     | None -> ()
+     | Some exn ->
+       (* TODO: This is truly evil:
+          Because Tactician registers tactics as side-effecting, the tactics are run again at Qed-time.
+          Therefore, we have to actually prevent them from running. However, if tactics throw an exception, we still need to raise those,
+          because the `Fail` command expects them. That works. However, this now causes `Fail` to print failure messages during Qed.
+          In itself, this is not a huge problem, but it causes the IO-tests of some projects to fail (notably Iris). Therefore, we pull out
+          another hugely ugly hack to temporarily block the message of `Fail` from being printed by replacing the formatter.
+          This is extremely dangerous because it cannot be fully guaranteed that the formatter is being reset afterwards. *)
+       let ignore_one_formatter original =
+         let reset () = Topfmt.std_ft := original in
+         Format.(formatter_of_out_functions
+	                 { out_string = (fun _ _ _ -> reset ())
+                   ; out_flush = (fun _ -> reset ())
+                   ; out_newline = (fun _ -> reset ())
+                   ; out_spaces = (fun _ -> reset ())
+                   ; out_indent = (fun _ -> reset ())
+                   }) in
+       if not !Flags.quiet || !Synterp.test_mode then begin
+         Topfmt.std_ft := ignore_one_formatter !Topfmt.std_ft;
+         raise exn
+       end else raise exn) in
+  match already_executed id with
+  | Some result -> Vernacextend.vtdefault (fun () -> register_tactic_execution_data result)
+  | None -> Vernacextend.vtmodifyproof @@ fun ~pstate ->
     let name = Declare.Proof.get_name pstate in
     let const = Names.Constant.make2 (Global.current_modpath ()) (Names.Label.of_id name) in
     let path = Lib.make_path name in
