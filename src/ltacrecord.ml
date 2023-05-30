@@ -594,8 +594,8 @@ let commonSearch debug max_exec =
   let predict_count = ref 0 in
 
   let tacpredict debug max_reached =
-    predict_count := 1 + !predict_count;
     predict () >>= fun (learner, cont) ->
+    predict_count := 1 + !predict_count;
     let cont = cont >>= fun predictions ->
       let taceval i focus (t, h) = tclUNIT () >>= fun () ->
         if max_reached () then Tacticals.New.tclZEROMSG (Pp.str "Ran out of executions") else
