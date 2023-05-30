@@ -6,7 +6,7 @@ open Diagonal_iterative_search
 
 exception DepthEnd of float
 
-let tclFoldPredictions max_reached tacs =
+let tclFoldPredictions max_reached tacs cont max_dfs =
   let rec aux tacs depth =
       let open Proofview in
       match IStream.peek tacs with
@@ -14,7 +14,11 @@ let tclFoldPredictions max_reached tacs =
           match depth with
           | None -> PredictionsEnd
           | Some depth -> DepthEnd depth)
-      | IStream.Cons (tac, tacs) ->
+      | IStream.Cons ({ focus=_; tactic; confidence }, tacs) ->
+        (* TODO: At some point we should start using the focus *)
+        let max_dfs = max_dfs +. confidence in
+        if max_dfs <= 0. then tclZERO (DepthEnd max_dfs) else
+        let tac = tactic >>= fun _ -> cont max_dfs in
         tclOR tac
           (fun e ->
              if max_reached () then tclZERO PredictionsEnd else
@@ -33,13 +37,8 @@ let tclSearchDijkstraDFS max_reached predict max_dfs =
       | _ ->
         let independent =
           (predict >>= fun predictions ->
-           tclFoldPredictions max_reached
-             (mapi
-                (fun _i {focus=_; tactic; confidence} -> (* TODO: At some point we should start using the focus *)
-                   let max_dfs = max_dfs +. confidence in
-                   if max_dfs <= 0. then tclZERO (DepthEnd max_dfs) else
-                     (tactic >>= fun _ -> aux max_dfs))
-                predictions)) in
+           tclFoldPredictions max_reached predictions aux max_dfs
+          ) in
         tclFOCUS 1 1 @@ tclUntilIndependent independent >>= aux in
   let rec cont max_dfs =
     aux max_dfs >>= fun max_dfs -> tclUNIT (Cont (cont max_dfs)) in
