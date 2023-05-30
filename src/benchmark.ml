@@ -7,14 +7,18 @@ type pre_bench_info =
   ; lemmas : string list
   ; time   : float }
 
-type bench_result =
+type proof =
+  { trace : int list
+  ; witness : string }
+
+type bench_request =
   | Should of string
-  | Found of
+  | Outcome of
       { lemma : string
-      ; trace : int list
       ; time : float
-      ; witness : string
-      ; inferences : int }
+      ; inferences : int
+      ; predictions : int
+      ; proof : proof option }
 
 type bench_response =
   | Skip
@@ -96,7 +100,7 @@ let should_benchmark name =
        Some (time, !deterministic))
   | None -> None
 
-let send_bench_result (res : bench_result) =
+let send_bench_result (res : bench_request) =
   match !benchmarking with
   | None -> CErrors.anomaly Pp.(str "Should be benchmarking")
   | Some (_, oc) ->
