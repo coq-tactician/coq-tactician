@@ -630,7 +630,6 @@ let commonSearch debug max_exec =
               Dumpglob.continue (); CWarnings.set_flags (oldFlags))) in
           (if not doFlags then tclUNIT () else
              tclLIFT (NonLogical.make (fun () ->
-                 tac_exec_count := 0;
                  Dumpglob.pause();
                  CWarnings.set_flags ("-all"))))
           <*> tclOR
