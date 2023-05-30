@@ -599,8 +599,8 @@ let commonSearch timeout debug max_exec =
 
   let tacpredict debug max_reached =
     predict () >>= fun (learner, cont) ->
-    predict_count := 1 + !predict_count;
     let cont = cont >>= fun predictions ->
+      predict_count := 1 + !predict_count;
       let taceval i focus (t, h) = tclUNIT () >>= fun () ->
         if max_reached () then Tacticals.New.tclZEROMSG (Pp.str "Ran out of executions") else
           tclFOCUS ~nosuchgoal:(Tacticals.New.tclZEROMSG (Pp.str "Predictor gave wrong focus"))
