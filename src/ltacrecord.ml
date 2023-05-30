@@ -719,25 +719,25 @@ let benchmarkSearch name time deterministic : unit Proofview.tactic =
                                           ; predictions = predict_count
                                           ; proof } ))
   in
+  let solved_check_fail err { witness; _ } =
+     let tstring = synthesize_tactic env witness in
+     let msg = Pp.(str "Incomplete witness for the following tactic:" ++ fnl () ++
+                   tstring ++ fnl () ++ str "Unsolved evars:" ++ fnl () ++
+                   prlist Evar.print (Evar.Set.elements err)) in
+     CErrors.anomaly msg in
+   let type_check_fail err { witness; _ } =
+     let tstring = synthesize_tactic env witness in
+     let err = match err with
+       | `Type_error (env, sigma, err) ->
+         Himsg.explain_type_error env sigma @@ Type_errors.map_ptype_error EConstr.of_constr err
+       | `Pretype_error (env, sigma, err) -> Himsg.explain_pretype_error env sigma err in
+     let msg = Pp.(str "Typing failure of the following tactic:" ++ fnl () ++
+                   tstring ++ fnl () ++ str "Typing error:" ++ fnl () ++ err) in
+     CErrors.anomaly msg in
   tclOR
-    (let solved_check_fail err { witness; _ } =
-       let tstring = synthesize_tactic env witness in
-       let msg = Pp.(str "Incomplete witness for the following tactic:" ++ fnl () ++
-                     tstring ++ fnl () ++ str "Unsolved evars:" ++ fnl () ++
-                     prlist Evar.print (Evar.Set.elements err)) in
-       CErrors.anomaly msg in
-     let type_check_fail err { witness; _ } =
-       let tstring = synthesize_tactic env witness in
-       let err = match err with
-         | `Type_error (env, sigma, err) ->
-           Himsg.explain_type_error env sigma @@ Type_errors.map_ptype_error EConstr.of_constr err
-         | `Pretype_error (env, sigma, err) -> Himsg.explain_pretype_error env sigma err in
-       let msg = Pp.(str "Typing failure of the following tactic:" ++ fnl () ++
-                     tstring ++ fnl () ++ str "Typing error:" ++ fnl () ++ err) in
-       CErrors.anomaly msg in
-       type_check (solved_check (commonSearch timeout false max_exec) solved_check_fail) type_check_fail >>=
-        fun { witness; stats } ->
-        report (Some witness) stats; tclUNIT ())
+     (type_check (solved_check (commonSearch timeout false max_exec) solved_check_fail) type_check_fail >>=
+      fun { witness; stats } ->
+      report (Some witness) stats; tclUNIT ())
     (function
       | SearchFailure (stats, e), info ->
         report None stats; tclZERO ~info e
