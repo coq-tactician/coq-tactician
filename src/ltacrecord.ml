@@ -587,11 +587,15 @@ type search_result =
   ; stats : search_stats }
 exception SearchFailure of search_stats * exn
 
-let commonSearch debug max_exec =
+let commonSearch timeout debug max_exec =
   let open Proofview in
   let open Notations in
   let tac_exec_count = ref 0 in
   let predict_count = ref 0 in
+
+  let timeout = match timeout with
+    | None -> fun x -> x
+    | Some time -> tclTIMEOUT time in
 
   let tacpredict debug max_reached =
     predict () >>= fun (learner, cont) ->
@@ -633,12 +637,12 @@ let commonSearch debug max_exec =
                  Dumpglob.pause();
                  CWarnings.set_flags ("-all"))))
           <*> tclOR
-            (tclONCE (search_and_unshelve max_reached predict) <*>
+            (timeout (tclONCE (search_and_unshelve max_reached predict) <*>
              get_witness () >>= fun witness -> empty_witness () <*>
              dec_search_recursion_depth () >>= fun () ->
              setFlags () <*> tclUNIT { witness
                                      ; stats = { tac_exec_count = !tac_exec_count
-                                               ; predict_count = !predict_count } })
+                                               ; predict_count = !predict_count } }))
             (fun (e, i) -> setFlags () <*>
                            tclZERO ~info:i (SearchFailure ({ tac_exec_count = !tac_exec_count
                                                            ; predict_count = !predict_count }, e))))
@@ -699,7 +703,7 @@ let benchmarkSearch name time deterministic : unit Proofview.tactic =
   let open Proofview in
   let open Notations in
   let abstract_time = time in
-  let timeout_command = if deterministic then fun x -> x else tclTIMEOUT abstract_time in
+  let timeout = if deterministic then None else Some abstract_time in
   let max_exec = if deterministic then Some abstract_time else None in
   let start_time = Unix.gettimeofday () in
   tclENV >>= fun env ->
@@ -715,7 +719,7 @@ let benchmarkSearch name time deterministic : unit Proofview.tactic =
                                           ; predictions = predict_count
                                           ; proof } ))
   in
-  let tac = timeout_command
+  tclOR
     (let solved_check_fail err { witness; _ } =
        let tstring = synthesize_tactic env witness in
        let msg = Pp.(str "Incomplete witness for the following tactic:" ++ fnl () ++
@@ -731,10 +735,9 @@ let benchmarkSearch name time deterministic : unit Proofview.tactic =
        let msg = Pp.(str "Typing failure of the following tactic:" ++ fnl () ++
                      tstring ++ fnl () ++ str "Typing error:" ++ fnl () ++ err) in
        CErrors.anomaly msg in
-       type_check (solved_check (commonSearch false max_exec) solved_check_fail) type_check_fail >>=
+       type_check (solved_check (commonSearch timeout false max_exec) solved_check_fail) type_check_fail >>=
         fun { witness; stats } ->
-        report (Some witness) stats; tclUNIT ()) in
-  tclOR tac
+        report (Some witness) stats; tclUNIT ())
     (function
       | SearchFailure (stats, e), info ->
         report None stats; tclZERO ~info e
@@ -749,7 +752,7 @@ let userSearch debug =
     let open Proofview in
     let open Notations in
     tclUNIT () >>= fun () ->
-    tclOR (commonSearch debug None) (function
+    tclOR (commonSearch None debug None) (function
         | SearchFailure (_, e), info -> tclZERO ~info e
         | _ -> assert false) >>= fun { witness; _ } ->
     get_search_recursion_depth () >>= fun n ->
