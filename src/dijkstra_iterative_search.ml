@@ -39,7 +39,7 @@ let tclSearchDijkstraDFS max_reached predict max_dfs =
                    let max_dfs = max_dfs +. confidence in
                    if max_dfs <= 0. then tclZERO (DepthEnd max_dfs) else
                      (tactic >>= fun _ -> aux max_dfs))
-                predictions) >>= aux) in
+                predictions)) in
         tclFOCUS 1 1 @@ tclUntilIndependent independent >>= aux in
   let rec cont max_dfs =
     aux max_dfs >>= fun max_dfs -> tclUNIT (Cont (cont max_dfs)) in
