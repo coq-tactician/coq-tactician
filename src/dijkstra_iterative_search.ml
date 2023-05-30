@@ -16,8 +16,9 @@ let tclFoldPredictions max_reached tacs cont max_dfs =
           | Some depth -> DepthEnd depth)
       | IStream.Cons ({ focus=_; tactic; confidence }, tacs) ->
         (* TODO: At some point we should start using the focus *)
-        if confidence <= 0. then tclZERO PredictionsEnd else
-        let confidence = Float.log confidence /. Float.log 2. in
+        let confidence =
+          if confidence <= 0. then confidence else
+          Float.log confidence /. Float.log 2. in
         let max_dfs = max_dfs +. confidence in
         if max_dfs <= 0. then tclZERO (DepthEnd max_dfs) else
         let tac = tactic >>= fun _ -> cont max_dfs in
