@@ -6,7 +6,7 @@ open Diagonal_iterative_search
 
 exception DepthEnd of float
 
-let tclFoldPredictions max_reached tacs =
+let tclFoldPredictions max_reached tacs cont max_dfs =
   let rec aux tacs depth =
       let open Proofview in
       match IStream.peek tacs with
@@ -14,7 +14,13 @@ let tclFoldPredictions max_reached tacs =
           match depth with
           | None -> PredictionsEnd
           | Some depth -> DepthEnd depth)
-      | IStream.Cons (tac, tacs) ->
+      | IStream.Cons ({ focus=_; tactic; confidence }, tacs) ->
+        (* TODO: At some point we should start using the focus *)
+        if confidence <= 0. then tclZERO PredictionsEnd else
+        let confidence = Float.log confidence /. Float.log 2. in
+        let max_dfs = max_dfs +. confidence in
+        if max_dfs <= 0. then tclZERO (DepthEnd max_dfs) else
+        let tac = tactic >>= fun _ -> cont max_dfs in
         tclOR tac
           (fun e ->
              if max_reached () then tclZERO PredictionsEnd else
@@ -33,15 +39,8 @@ let tclSearchDijkstraDFS max_reached predict max_dfs : cont_tactic tactic =
       | _ ->
         let independent =
           (predict >>= fun predictions ->
-           tclFoldPredictions max_reached
-             (mapi
-                (fun _i {focus=_; tactic; confidence} -> (* TODO: At some point we should start using the focus *)
-                   if confidence <= 0. then tclZERO PredictionsEnd else
-                     let lconfidence = Float.log confidence /. Float.log 2. in
-                     let max_dfs = max_dfs +. lconfidence in
-                     if max_dfs <= 0. then tclZERO (DepthEnd max_dfs) else
-                       (tactic >>= fun _ -> aux max_dfs))
-                predictions) >>= aux) in
+           tclFoldPredictions max_reached predictions aux max_dfs
+          ) in
         tclFOCUS 1 1 @@ tclUntilIndependent independent >>= aux in
   let rec cont max_dfs =
     aux max_dfs >>= fun max_dfs -> tclUNIT (Cont (cont max_dfs)) in
@@ -60,7 +59,7 @@ let tclSearchDijkstraIterative d max_reached predict : cont_tactic =
             let d = d -. delta +. 1. in
             (* Feedback.msg_notice Pp.(str "----------- new iteration : " ++ real d ++ str " previous reached " ++ real delta); *)
             aux d
-          | (e, info) -> tclZERO ~info e ) in
-  Cont (aux d)
+          | (e, info) -> tclZERO ~info e )
+  in Cont (aux d)
 
 let () = register_search_strategy "dijkstra iterative search" (tclSearchDijkstraIterative 0.)
