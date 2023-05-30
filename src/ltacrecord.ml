@@ -733,9 +733,13 @@ let benchmarkSearch name time deterministic : unit Proofview.tactic =
        CErrors.anomaly msg in
      tclOR
        (type_check (solved_check (commonSearch false max_exec) solved_check_fail) type_check_fail >>=
-        fun { witness; stats } -> report (Some witness) stats; tclUNIT ())
+        fun { witness; stats } ->
+        Feedback.msg_warning Pp.(str "Bench success of " ++ Libnames.pr_path name ++ str " " ++ int stats.predict_count);
+        report (Some witness) stats; tclUNIT ())
        (function
-         | SearchFailure (stats, e), info -> report None stats; tclZERO ~info e
+         | SearchFailure (stats, e), info ->
+           Feedback.msg_warning Pp.(str "Bench failure of " ++ Libnames.pr_path name ++ str " " ++ int stats.predict_count);
+           report None stats; tclZERO ~info e
          | _ -> assert false))
 
 let nested_search_solutions_field : witness_elem list list list Evd.Store.field = Evd.Store.field ()
