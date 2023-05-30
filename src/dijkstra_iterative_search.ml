@@ -37,8 +37,7 @@ let tclSearchDijkstraDFS max_reached predict max_dfs =
                (mapi
                   (fun _i {focus=_; tactic; confidence} -> (* TODO: At some point we should start using the focus *)
                      if confidence <= 0. then tclZERO PredictionsEnd else
-                       let lconfidence = Float.log confidence /. Float.log 2. in
-                       let max_dfs = max_dfs +. lconfidence in
+                       let max_dfs = max_dfs +. confidence in
                        if max_dfs <= 0. then tclZERO (DepthEnd max_dfs) else
                          (tactic >>= fun _ -> aux max_dfs))
                   predictions) >>= aux) in
@@ -63,4 +62,4 @@ let rec tclSearchDijkstraIterative d max_reached predict : cont_tactic =
           | (e, info) -> tclZERO ~info e )
   in Cont (aux d)
 
-(* let () = register_search_strategy "dijkstra iterative search" (tclSearchDijkstraIterative 0.) *)
+let () = register_search_strategy "dijkstra iterative search" (tclSearchDijkstraIterative 0.)
