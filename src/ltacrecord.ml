@@ -539,29 +539,6 @@ let userPredict debug =
                         NonLogical.print_info (Pp.str "Ran out of suggestions to give...") else
                         Proofview.NonLogical.print_info (print_rank debug env r)))
 
-let tac_exec_count = ref 0
-let tacpredict debug max_reached =
-  let open Proofview in
-  let open Notations in
-  predict () >>= fun (learner, cont) ->
-  let cont = cont >>= fun predictions ->
-    let taceval i focus (t, h) = tclUNIT () >>= fun () ->
-      if max_reached () then Tacticals.tclZEROMSG (Pp.str "Ran out of executions") else
-        tclFOCUS ~nosuchgoal:(Tacticals.tclZEROMSG (Pp.str "Predictor gave wrong focus"))
-          (focus+1) (focus+1)
-          (Goal.enter_one (fun gl ->
-               let env = Goal.env gl in
-               push_witness { tac = t; focus; prediction_index = i } <*>
-               (tac_exec_count := 1 + !tac_exec_count;
-                tclDebugTac t env debug) >>= fun () ->
-               Goal.goals >>= fun gls ->
-               let outcome = mk_outcome (gl, gls) in
-               tclUNIT (snd @@ learner.evaluate outcome (t, h)))) in
-    let transform i (r : Tactic_learner_internal.TS.prediction) =
-      { confidence = r.confidence; focus = r.focus; tactic = taceval i r.focus r.tactic } in
-    tclUNIT (mapi (fun i p -> transform i p) predictions) in
-  tclUNIT cont
-
 let contains s1 s2 =
     let re = Str.regexp_string s2
     in
@@ -594,9 +571,45 @@ let search_and_unshelve max_reached predict =
     if empty then Proofview.tclUNIT () else loop search in
   loop s
 
-let commonSearch debug max_exec =
-    let open Proofview in
-    let open Notations in
+type search_stats =
+  { tac_exec_count : int
+  ; predict_count : int }
+type search_result =
+  { witness : witness_elem list list
+  ; stats : search_stats }
+exception SearchFailure of search_stats * exn
+
+let commonSearch timeout debug max_exec =
+  let open Proofview in
+  let open Notations in
+  let tac_exec_count = ref 0 in
+  let predict_count = ref 0 in
+
+  let timeout = match timeout with
+    | None -> fun x -> x
+    | Some time -> tclTIMEOUT time in
+
+  let tacpredict debug max_reached =
+    predict () >>= fun (learner, cont) ->
+    let cont = cont >>= fun predictions ->
+      predict_count := 1 + !predict_count;
+      let taceval i focus (t, h) = tclUNIT () >>= fun () ->
+        if max_reached () then Tacticals.tclZEROMSG (Pp.str "Ran out of executions") else
+          tclFOCUS ~nosuchgoal:(Tacticals.tclZEROMSG (Pp.str "Predictor gave wrong focus"))
+            (focus+1) (focus+1)
+            (Goal.enter_one (fun gl ->
+                 let env = Goal.env gl in
+                 push_witness { tac = t; focus; prediction_index = i } <*>
+                 (tac_exec_count := 1 + !tac_exec_count;
+                  tclDebugTac t env debug) >>= fun () ->
+                 Goal.goals >>= fun gls ->
+                 let outcome = mk_outcome (gl, gls) in
+                 tclUNIT (snd @@ learner.evaluate outcome (t, h)))) in
+      let transform i (r : Tactic_learner_internal.TS.prediction) =
+        { confidence = r.confidence; focus = r.focus; tactic = taceval i r.focus r.tactic } in
+      tclUNIT (mapi (fun i p -> transform i p) predictions) in
+    tclUNIT cont in
+
     (* TODO: Remove this hack *)
     let max_reached () = match max_exec with
       | None -> false
@@ -612,12 +625,18 @@ let commonSearch debug max_exec =
               Dumpglob.pop_output (); CWarnings.set_flags (oldFlags))) in
           (if not doFlags then tclUNIT () else
              tclLIFT (NonLogical.make (fun () ->
-                 tac_exec_count := 0; Dumpglob.pause (); CWarnings.set_flags ("-all"))))
+                 Dumpglob.pause();
+                 CWarnings.set_flags ("-all"))))
           <*> tclOR
-            (tclONCE (search_and_unshelve max_reached predict) <*>
-             get_witness () >>= fun wit -> empty_witness () <*>
-             dec_search_recursion_depth () >>= fun () -> setFlags () <*> tclUNIT (wit, !tac_exec_count))
-            (fun (e, i) -> setFlags () <*> tclZERO ~info:i e))
+            (timeout (tclONCE (search_and_unshelve max_reached predict) <*>
+             get_witness () >>= fun witness -> empty_witness () <*>
+             dec_search_recursion_depth () >>= fun () ->
+             setFlags () <*> tclUNIT { witness
+                                     ; stats = { tac_exec_count = !tac_exec_count
+                                               ; predict_count = !predict_count } }))
+            (fun (e, i) -> setFlags () <*>
+                           tclZERO ~info:i (SearchFailure ({ tac_exec_count = !tac_exec_count
+                                                           ; predict_count = !predict_count }, e))))
 
 let solved_check t fail =
   let calc_defined_deps sigma es =
@@ -675,36 +694,45 @@ let benchmarkSearch name time deterministic : unit Proofview.tactic =
   let open Proofview in
   let open Notations in
   let abstract_time = time in
-  let timeout_command = if deterministic then fun x -> x else tclTIMEOUT abstract_time in
+  let timeout = if deterministic then None else Some abstract_time in
   let max_exec = if deterministic then Some abstract_time else None in
-  let print_success env (wit, count) start_time =
-    let tdiff = Unix.gettimeofday () -. start_time in
-    let tstring = Pp.string_of_ppcmds (synthesize_tactic env wit) in
-    Benchmark.(send_bench_result (Found { lemma = Libnames.string_of_path name
-                                        ; trace = synthesize_trace wit
-                                        ; witness = tstring
-                                        ; time = tdiff
-                                        ; inferences = count }))
-  in
   let start_time = Unix.gettimeofday () in
-  timeout_command (tclENV >>= fun env ->
-                   let solved_check_fail err (wit, _) =
-                     let tstring = synthesize_tactic env wit in
-                     let msg = Pp.(str "Incomplete witness for the following tactic:" ++ fnl () ++
-                                   tstring ++ fnl () ++ str "Unsolved evars:" ++ fnl () ++
-                                   prlist Evar.print (Evar.Set.elements err)) in
-                     CErrors.anomaly msg in
-                   let type_check_fail err (wit, _) =
-                     let tstring = synthesize_tactic env wit in
-                     let err = match err with
-                       | `Type_error (env, sigma, err) ->
-                         Himsg.explain_type_error env sigma @@ Type_errors.map_ptype_error EConstr.of_constr err
-                       | `Pretype_error (env, sigma, err) -> Himsg.explain_pretype_error env sigma err in
-                     let msg = Pp.(str "Typing failure of the following tactic:" ++ fnl () ++
-                                   tstring ++ fnl () ++ str "Typing error:" ++ fnl () ++ err) in
-                     CErrors.anomaly msg in
-                   type_check (solved_check (commonSearch false max_exec) solved_check_fail) type_check_fail >>=
-                   fun m -> print_success env m start_time; tclUNIT ())
+  tclENV >>= fun env ->
+  let report witness { tac_exec_count; predict_count } =
+    let open Benchmark in
+    let tdiff = Unix.gettimeofday () -. start_time in
+    let proof = Option.map (fun wit ->
+        { trace = synthesize_trace wit
+        ; witness = Pp.string_of_ppcmds (synthesize_tactic env wit) } ) witness in
+    (send_bench_result (Outcome { lemma = Libnames.string_of_path name
+                                          ; time = tdiff
+                                          ; inferences = tac_exec_count
+                                          ; predictions = predict_count
+                                          ; proof } ))
+  in
+  let solved_check_fail err { witness; _ } =
+     let tstring = synthesize_tactic env witness in
+     let msg = Pp.(str "Incomplete witness for the following tactic:" ++ fnl () ++
+                   tstring ++ fnl () ++ str "Unsolved evars:" ++ fnl () ++
+                   prlist Evar.print (Evar.Set.elements err)) in
+     CErrors.anomaly msg in
+   let type_check_fail err { witness; _ } =
+     let tstring = synthesize_tactic env witness in
+     let err = match err with
+       | `Type_error (env, sigma, err) ->
+         Himsg.explain_type_error env sigma @@ Type_errors.map_ptype_error EConstr.of_constr err
+       | `Pretype_error (env, sigma, err) -> Himsg.explain_pretype_error env sigma err in
+     let msg = Pp.(str "Typing failure of the following tactic:" ++ fnl () ++
+                   tstring ++ fnl () ++ str "Typing error:" ++ fnl () ++ err) in
+     CErrors.anomaly msg in
+  tclOR
+     (type_check (solved_check (commonSearch timeout false max_exec) solved_check_fail) type_check_fail >>=
+      fun { witness; stats } ->
+      report (Some witness) stats; tclUNIT ())
+    (function
+      | SearchFailure (stats, e), info ->
+        report None stats; tclZERO ~info e
+      | _ -> assert false)
 
 let nested_search_solutions_field : witness_elem list list list Evd.Store.field = Evd.Store.field ()
 let push_nested_search_solutions tcs =
@@ -714,12 +742,15 @@ let empty_nested_search_solutions () =
 let userSearch debug =
     let open Proofview in
     let open Notations in
-    tclUNIT () >>= fun () -> commonSearch debug None >>= fun (wit, _count) ->
+    tclUNIT () >>= fun () ->
+    tclOR (commonSearch None debug None) (function
+        | SearchFailure (_, e), info -> tclZERO ~info e
+        | _ -> assert false) >>= fun { witness; _ } ->
     get_search_recursion_depth () >>= fun n ->
-    if n >= 1 then push_nested_search_solutions wit else
+    if n >= 1 then push_nested_search_solutions witness else
       empty_nested_search_solutions () >>= fun acc -> tclENV >>= fun env ->
       let main_msg = Pp.(str "Tactician found a proof! The following tactic caches the proof:\n\n" ++
-                         synthesize_tactic env wit) in
+                         synthesize_tactic env witness) in
       let acc_msg = if List.is_empty acc then Pp.mt () else
           Pp.(str ("\n\nThe tactic above uses nested searching. The following tactics cache those nested searches.\n")
               ++ (prlist_with_sep fnl (synthesize_tactic env) acc)) in
