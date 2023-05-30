@@ -35,7 +35,7 @@ let tclFoldPredictions max_reached tacs cont max_dfs =
       | IStream.Nil -> tclZERO (if depth then DepthEnd else PredictionsEnd)
       | IStream.Cons ({ focus=_; tactic; confidence }, tacs) ->
         (* TODO: At some point we should start using the focus *)
-        let n_max_dfs = Stdlib.Int.shift_right max_dfs i in
+        let n_max_dfs = max_dfs - i in
         if n_max_dfs <= 0 then tclZERO DepthEnd else
         if confidence = Float.neg_infinity then tclZERO PredictionsEnd else (* TODO: Hack *)
         let tac = tactic >>= fun _ -> cont (n_max_dfs - 1) in
@@ -74,7 +74,7 @@ let tclSearchDiagonalIterative d max_reached predict : cont_tactic =
             Tacticals.New.tclZEROMSG (Pp.str "Tactician failed: there are no more tactics left")
           | _ ->
             (* Feedback.msg_notice Pp.(str "----------- new iteration : " ++ int ( d * 2)); *)
-            aux (d * 2)) in
+            aux (d + 1)) in
   Cont (aux d)
 
 let () = register_search_strategy "diagonal iterative search" (tclSearchDiagonalIterative 8)
