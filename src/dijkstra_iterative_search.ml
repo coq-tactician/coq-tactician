@@ -36,17 +36,16 @@ let tclSearchDijkstraDFS max_reached predict max_dfs =
              tclFoldPredictions max_reached
                (mapi
                   (fun _i {focus=_; tactic; confidence} -> (* TODO: At some point we should start using the focus *)
-                     if confidence <= 0. then tclZERO PredictionsEnd else
-                       let max_dfs = max_dfs +. confidence in
-                       if max_dfs <= 0. then tclZERO (DepthEnd max_dfs) else
-                         (tactic >>= fun _ -> aux max_dfs))
+                     let max_dfs = max_dfs +. confidence in
+                     if max_dfs <= 0. then tclZERO (DepthEnd max_dfs) else
+                       (tactic >>= fun _ -> aux max_dfs))
                   predictions) >>= aux) in
         tclONCE independent >>= aux in
   let rec cont max_dfs =
     aux max_dfs >>= fun max_dfs -> tclUNIT (Cont (cont max_dfs)) in
   cont max_dfs
 
-let rec tclSearchDijkstraIterative d max_reached predict : cont_tactic =
+let tclSearchDijkstraIterative d max_reached predict : cont_tactic =
   let rec aux d =
     (* (tclLIFT (NonLogical.print_info (Pp.str ("Iterative depth: " ^ string_of_float d)))) <*> *)
     if max_reached () then Tacticals.New.tclZEROMSG (Pp.str "No more executions") else
