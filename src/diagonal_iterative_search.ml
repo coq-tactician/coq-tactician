@@ -29,19 +29,18 @@ let tclUntilIndependent t =
   aux @@ withIsIndependent t
 
 let tclFoldPredictions max_reached tacs =
-  let rec aux tacs depth =
+  let rec aux tacs =
       let open Proofview in
       match IStream.peek tacs with
-      | IStream.Nil -> tclZERO (if depth then DepthEnd else PredictionsEnd)
+      | IStream.Nil -> tclZERO PredictionsEnd
       | IStream.Cons (tac, tacs) ->
         tclOR tac
           (fun e ->
              if max_reached () then tclZERO PredictionsEnd else
-               let depth = depth || (match e with
-                   | (DepthEnd, _) -> true
-                   | _ -> false) in
-               aux tacs depth) in
-  aux tacs false
+               match e with
+               | DepthEnd, _ -> tclZERO DepthEnd
+               | _ -> aux tacs) in
+  aux tacs
 
 (* TODO: max_reached is a hack, remove *)
 let tclSearchDiagonalDFS max_reached predict max_dfs =
