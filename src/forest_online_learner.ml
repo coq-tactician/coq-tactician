@@ -21,7 +21,7 @@ module OnlineForest : TacticianOnlineLearnerType = functor (TS : TacticianStruct
       let feats = proof_state_to_complex_ints_no_kind b in
       Forest.add
       ~min_impur:0.5
-      ~n_trees:175
+      ~n_trees:190
       ~part:0.3
       forest (Data.labeled (feats, obj))
 
