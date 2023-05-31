@@ -2,7 +2,7 @@
 (library
  (name tactician_ltac1_record_plugin)
  (public_name coq-tactician.record-plugin)
- (flags :standard -rectypes -w -27 -warn-error -A)
+ (flags :standard -rectypes -w -27)
  (modules (
    "g_ltac1_record"
    forest_online_learner
@@ -14,12 +14,12 @@
    ltacrecord
    inline_private_constants
    diagonal_iterative_search
+   dijkstra_iterative_search
    offline_evaluation_simulator_learner
    naiveknn_learner
    naiveknn_subst_learner
    trivial_learners
    lshf_learner
-   knn
    find_tactic_syntax
    tactic_substitute
    tactic_abstract
@@ -30,10 +30,10 @@
    tactic_learner
    tactic_learner_internal
    tactic_normalize
+   extreme_tactic_normalize
+   tactic_one_variable
    tactic_annotate
-   known_witnesses
    cook_tacexpr
-   gendischarge
    mapping_helpers
    map_all_the_witnesses
    map_all_the_things
@@ -41,6 +41,9 @@
    tactic_sexpr
    timeouttac
    tactician_util
+   benchmark
+   monad_util
+   tactic_substitution_check_learner
  ))
  (libraries
    coq.plugins.ltac
@@ -55,8 +58,7 @@
  (public_name coq-tactician.ssreflect-plugin)
  (flags :standard -rectypes -w -27 -warn-error -A)
  (modules (
-   "known_ssr_witnesses"
-   map_ssr_witnesses
+   "map_ssr_witnesses"
  ))
  (libraries
    coq.plugins.ltac

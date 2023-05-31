@@ -1,21 +1,12 @@
 open Map_all_the_things
-open Genarg
 open Names
-open Tactician_util
+open Monad_util
 
 module M = ReaderStateMonad
-  (struct type r = Id.t list type s = (Id.t * Id.t) list end)
+  (struct type r = Id.t list end) (struct type s = (Id.t * Id.t) list end)
 module AbstractDef = struct
   include MapDefTemplate(M)
   open M
-  let map_sort = "abstract"
-  let warnProblem wit =
-    Feedback.msg_warning (Pp.(str "Tactician is having problems with " ++
-                              str "the following tactic. Please report. " ++
-                              pr_argument_type wit))
-  let default wit = { raw = (fun _ -> warnProblem (ArgumentType wit); id)
-                    ; glb = (fun _ -> warnProblem (ArgumentType wit); id)}
-
   let with_binders ids x = local (fun ids' -> (ids@ids')) x
 end
 module AbstractMapper = MakeMapper(AbstractDef)
@@ -33,23 +24,14 @@ let mapper = { AbstractDef.default_mapper with
              }
 
 let tactic_abstract t =
-  let args, t = M.run [] [] @@ AbstractMapper.glob_tactic_expr_map mapper t in
+  let args, t = M.run (AbstractMapper.glob_tactic_expr_map mapper t) [] [] in
   List.rev args, t
 
 module M2 = WriterMonad
   (struct type w = Constant.t list let comb = List.append let id = [] end)
 module ConstantsDef = struct
   include MapDefTemplate(M2)
-  open M2
-  let map_sort = "abstract"
-  let warnProblem wit =
-    Feedback.msg_warning (Pp.(str "Tactician is having problems with " ++
-                              str "the following tactic. Please report. " ++
-                              pr_argument_type wit))
-  let default wit = { raw = (fun _ -> warnProblem (ArgumentType wit); id)
-                    ; glb = (fun _ -> warnProblem (ArgumentType wit); id)}
-
-  let with_binders ids x = x
+  let with_binders _ids x = x
 end
 module ConstantsMapper = MakeMapper(ConstantsDef)
 open ConstantsDef

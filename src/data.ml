@@ -1,4 +1,3 @@
-open Printf
 module ISet = Set.Make(Int)
 
 type feature = int
@@ -24,8 +23,6 @@ let labeled (features, label) =
 
 let features (features, label) =
     features
-
-let length = List.length
 
 let random_feature examples =
     let random_example_1 = features (Utils.choose_random examples) in

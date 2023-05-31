@@ -1,14 +1,6 @@
 module ISet = Set.Make(Int)
 
 
-let min_list = function
-    | [] -> failwith "Empty list"
-    | h :: t -> List.fold_left min h t
-
-let max_list = function
-    | [] -> failwith "Empty list"
-    | h :: t -> List.fold_left max h t
-
 let accuracy l1 l2 =
     assert (List.length l1 = List.length l2);
     let pairs = List.combine l1 l2 in
@@ -152,11 +144,11 @@ let uniq l =
         | h :: t -> if List.mem h u then aux u t else aux (h :: u) t
     in aux [] l
 
-let rec min_list = function
+let min_list = function
     | [] -> invalid_arg "empty list"
     | h :: t -> List.fold_left min h t
 
-let rec max_list = function
+let max_list = function
     | [] -> invalid_arg "empty list"
     | h :: t -> List.fold_left max h t
 

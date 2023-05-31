@@ -129,7 +129,7 @@ module LSHF =
     let forest = insert db.forest feats obj in
     { forest; length; frequencies }
 
-  let learn db (name, status) outcomes tac to_feats =
+  let learn db (_kn, _path, _status) outcomes tac to_feats =
     List.fold_left (fun db out -> add db out.before tac to_feats) db outcomes
 
   let predict db f to_feats remove_kind tfidf =
@@ -140,7 +140,7 @@ module LSHF =
           (fun (o, f) -> let x = tfidf db.length db.frequencies feats f in (x, o))
           candidates in
       let out = remove_dups_and_sort tdidfs in
-      let out = List.map (fun (a, c) -> { confidence = a; focus = 0; tactic = c }) out in
+      let out = List.mapi (fun i (a, c) -> { confidence = (-1.) -. float_of_int i; focus = 0; tactic = c }) out in
       IStream.of_list out
 
   let evaluate db _ _ = 1., db

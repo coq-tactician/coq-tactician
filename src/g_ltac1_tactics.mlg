@@ -5,7 +5,7 @@ DECLARE PLUGIN "tactician_ltac1_tactics_plugin"
 open Ltac_plugin
 open Tacarg
 
-let () = Tactician_ltac1_record_plugin.Tactic_learner_internal.disable_queue ()
+let () = Mltop.add_known_plugin Tactician_ltac1_record_plugin.Tactic_learner_internal.disable_queue __coq_plugin_name
 
 }
 
@@ -15,13 +15,32 @@ TACTIC EXTEND tacticianignore
 END
 
 TACTIC EXTEND synth
-| [ "ml_synth" ] ->   { Tactician_ltac1_record_plugin.Ltacrecord.userSearch }
+| [ "ml_synth" ] ->   { Tactician_ltac1_record_plugin.Ltacrecord.userSearch false }
+| [ "ml_debug_synth" ] ->   { Tactician_ltac1_record_plugin.Ltacrecord.userSearch true }
 END
 
 VERNAC COMMAND EXTEND TacticianSuggest CLASSIFIED AS QUERY STATE proof_query
 | [ "Suggest" ]
   -> { fun ~pstate -> let _ =
          Pfedit.solve (Goal_select.get_default_goal_selector ()) None
-           Tactician_ltac1_record_plugin.Ltacrecord.userPredict
+           (Tactician_ltac1_record_plugin.Ltacrecord.userPredict false)
            (Proof_global.get_proof pstate) in () }
+| [ "Debug" "Suggest" ]
+  -> { fun ~pstate -> let _ =
+         Pfedit.solve (Goal_select.get_default_goal_selector ()) None
+           (Tactician_ltac1_record_plugin.Ltacrecord.userPredict true)
+           (Proof_global.get_proof pstate) in () }
+END
+
+TACTIC EXTEND type_check
+| [ "type_check" tactic(t) ] -> {
+  Tactician_ltac1_record_plugin.Ltacrecord.type_check (Tacinterp.tactic_of_value ist t)
+    (fun err () ->
+       match err with
+       | `Type_error (env, sigma, err) -> Proofview.tclZERO (Type_errors.TypeError (env, err))
+       | `Pretype_error (env, sigma, err) -> Proofview.tclZERO (Pretype_errors.PretypeError (env, sigma, err))) }
+| [ "solved_check" tactic(t) ] -> {
+  Tactician_ltac1_record_plugin.Ltacrecord.solved_check (Tacinterp.tactic_of_value ist t)
+    (fun evs () -> Tacticals.New.tclZEROMSG @@ Pp.(str "The following goal-generated evars where not solved: " ++
+    prlist Evar.print (Evar.Set.elements evs))) }
 END

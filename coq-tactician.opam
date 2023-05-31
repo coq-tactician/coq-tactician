@@ -13,6 +13,7 @@ interactive, and intuitive experience together with strong, adaptive proof
 automation."""
 maintainer: ["Lasse Blaauwbroek <lasse@blaauwbroek.eu>"]
 authors: ["Lasse Blaauwbroek <lasse@blaauwbroek.eu>"]
+license: "MIT"
 homepage: "https://coq-tactician.github.io"
 bug-reports: "https://github.com/coq-tactician/coq-tactician/issues"
 depends: [
@@ -20,11 +21,11 @@ depends: [
   "dune" {>= "2.8"}
   "dune-site" {>= "2.9.1"}
   "opam-client" {>= "2.1.0"}
-  "cmdliner"
-  "coq" {>= "8.11" & < "8.12~"}
+  "cmdliner" {>= "1.1.0"}
+  "coq" {>= "8.11.0" & < "8.12~"}
   "conf-git"
   "bos" {>= "0.2.1"}
-  "coq-tactician-dummy" {= "dev" & with-test}
+  "coq-tactician-dummy" {= "8.6.dev" & with-test}
   "odoc" {with-doc}
 ]
 build: [

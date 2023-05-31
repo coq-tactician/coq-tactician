@@ -123,45 +123,52 @@ let remove_rcfile () =
     print_endline "\nFile patched! Run 'tactician enable' to reverse this command"
   ); `Ok ()
 
-let string_in str ls =
-  let filtered = List.filter (fun s -> String.equal s str) ls in
-  match filtered with
-  | [] -> false
-  | _ -> true
-
-let recompile_packages no_pkgs_msg pkgs_msg confirm_msg =
-  let packages = String.split_on_char '\n' (String.trim (syscall ("opam list -i --depends-on coq --short"))) in
-  let blacklist = ["coqide"; "coq-tactician"; "coq-tactician-dummy"; "coq-tactician-stdlib" ] in
-  let packages = List.filter (fun p -> not (string_in p blacklist)) packages in
-  if packages == [] then
-    print_endline no_pkgs_msg
-  else (
-    print_endline pkgs_msg;
-    print_endline (String.concat " " packages);
-    let ans = OpamConsole.confirm confirm_msg in
-    if ans then
-      ignore (Sys.command ("opam reinstall " ^ (String.concat " " packages)))
-  )
-
 let opam_init_no_lock f =
   OpamClientConfig.opam_init ();
   OpamGlobalState.with_ `Lock_none f
+
+let recompile_packages no_pkgs_msg pkgs_msg confirm_msg =
+  print_endline "Calculating relevant packages...";
+  opam_init_no_lock @@ fun gt ->
+  OpamSwitchState.with_ `Lock_none gt @@ fun st ->
+  let coq_packages = OpamListCommand.(filter ~base:st.packages st OpamFormula.(
+      And (
+        Atom Installed,
+        Atom (Depends_on ({ default_dependency_toggles with recursive = true },
+                          [OpamPackage.Name.of_string "coq", None]))))) in
+  let tactician_packages = OpamListCommand.(filter ~base:st.packages st OpamFormula.(
+      And (
+        Atom Installed,
+        Atom (Depends_on ({ default_dependency_toggles with recursive = true },
+                          [OpamPackage.Name.of_string "coq-tactician", None]))))) in
+  let blacklist = List.map OpamPackage.Name.of_string
+      ["coq"; "coq-core"; "coq-tactician-dummy"; "coqide"; "coqide-server"] in
+  let packages = OpamPackage.Set.diff coq_packages tactician_packages in
+  let packages = OpamPackage.Set.filter
+      (fun p -> not @@ List.exists (OpamPackage.Name.equal (OpamPackage.name p)) blacklist) packages in
+  if OpamPackage.Set.is_empty packages then
+    print_endline no_pkgs_msg
+  else (
+    print_endline pkgs_msg;
+    let packages = String.concat " " @@ List.map OpamPackage.to_string @@ OpamPackage.Set.elements packages in
+    print_endline packages;
+    let ans = OpamConsole.confirm confirm_msg in
+    if ans then
+      ignore (Sys.command ("opam reinstall " ^ packages))
+  )
+
 
 let config_add_remove gt ?st name value =
   let st = set_opt_switch gt ?st name (`Remove value) in
   set_opt_switch gt ?st name (`Add value)
 
-(* TODO: Remove old commands once enough time has elapsed *)
-let old_wrap_command = "[\"%{coq-tactician:lib}%/with-tactician\"] {coq-tactician:installed}"
-let old_pre_build_command = "[\"tactician-patch\" name version] {coq-tactician:installed}"
 let wrap_command = "[\"tactician\" \"exec\" \"--\"] {coq-tactician:installed}"
 let pre_build_command = "[\"%{coq-tactician:lib}%/tactician-patch\" name version] {coq-tactician:installed}"
 
 let inject () =
   opam_init_no_lock @@ fun gt ->
-  let st = set_opt_switch gt "wrap-build-commands" (`Remove old_wrap_command) in
-  let st = set_opt_switch gt ?st "pre-build-commands" (`Remove old_pre_build_command) in
-  let st = config_add_remove gt ?st "wrap-build-commands" wrap_command in
+  let st = config_add_remove gt "wrap-build-commands" wrap_command in
+  let st = config_add_remove gt ?st "wrap-install-commands" wrap_command in
   let _ = config_add_remove gt ?st "pre-build-commands" pre_build_command in
   print_endline "\nTactician will now instrument Coq packages installed through opam.";
   print_endline "Run tactician eject to reverse this command.";
@@ -173,9 +180,8 @@ let inject () =
 let eject () =
   OpamClientConfig.opam_init ();
   OpamGlobalState.with_ `Lock_none @@ fun gt ->
-  let st = set_opt_switch gt "wrap-build-commands" (`Remove old_wrap_command) in
-  let st = set_opt_switch gt ?st "pre-build-commands" (`Remove old_pre_build_command) in
-  let st = set_opt_switch gt ?st "wrap-build-commands" (`Remove wrap_command) in
+  let st = set_opt_switch gt "wrap-build-commands" (`Remove wrap_command) in
+  let st = set_opt_switch gt ?st "wrap-install-commands" (`Remove wrap_command) in
   let _ = set_opt_switch gt ?st "pre-build-commands" (`Remove pre_build_command) in
   print_endline "\nTactician will no longer instrument packages installed through opam.";
   print_endline "Run tactician inject to re-inject.";
@@ -216,10 +222,13 @@ let (/) = Filename.concat
    dune. Unfortunately dune currently does not seem to support the required infrastructure for this. *)
 let coqc = "%{bin}%"/"coqc"
 let coqtop = "%{bin}%"/"coqtop"
+let coqide = "%{bin}%"/"coqide"
 let tactician_lib = "%{coq-tactician:lib}%"
 let tactician_dir = "%{coq:lib}%"/"user-contrib"/"Tactician"
 let plugin_dir = "%{coq-tactician:share}%"/"plugins"
-let tactician_flags = ["-q"; "-I"; tactician_dir; "-R"; tactician_dir; "Tactician"; "-rifrom"; "Tactician"; "Ltac1.Record"]
+let tactician_flags = ["-I"; tactician_dir; "-R"; tactician_dir; "Tactician"; "-rifrom"; "Tactician"; "Ltac1.Record"]
+let coqc_tactician_flags = "-q"::tactician_flags
+let coqide_tactician_flags = ["-async-proofs"; "off"]@tactician_flags
 
 let read_args name =
   let ic = open_in name in
@@ -240,7 +249,9 @@ let retrieve_flags file =
   String.concat " " @@
   List.filter_map (fun d -> if Sys.file_exists (d/file) then Some (read_args (d/file)) else None) @@
   List.concat @@
-  List.map (fun d -> Array.to_list @@ Array.map (fun sd -> d/sd) @@ Sys.readdir d) plugins
+  (* TODO: We sort the items in the directory to get a deterministic order. In the future, the user should
+     probably choose the proper order. *)
+  List.map (fun d -> List.map (fun sd -> d/sd) @@ List.sort String.compare @@ Array.to_list @@ Sys.readdir d) plugins
 
 let tactician_extra_flags () = retrieve_flags "injection-flags"
 
@@ -260,15 +271,16 @@ let inject_bwrap cmd args =
     ec = 0 in
   let coqc_real = tactician_lib/"coqc.real" in
   let coqtop_real = tactician_lib/"coqtop.real" in
-  let wrapper_contents target =
-    let flags = String.concat " " tactician_flags ^ " " ^ tactician_extra_flags () in
+  let coqide_real = tactician_lib/"coqide.real" in
+  let wrapper_contents binary_flags target =
+    let flags = String.concat " " binary_flags ^ " " ^ tactician_extra_flags () in
     let wrappers = tactician_wrappers () in
     "#!/bin/sh\nexec " ^ wrappers ^ " " ^ target ^ " " ^ flags ^ " \"$@\"\n" in
   match perms_supported with
   | true ->
     (* Happy path for bwrap >= 0.5.0 *)
-    let wrap_binary source target =
-        let contents = wrapper_contents target in
+    let wrap_binary source binary_flags target =
+        let contents = wrapper_contents binary_flags target in
         let pin, pout = Unix.pipe () in
         let pout = Unix.out_channel_of_descr pout in
         let pin : int = Obj.magic pin in
@@ -276,17 +288,19 @@ let inject_bwrap cmd args =
         close_out pout;
         ["--bind"; source; target; "--perms"; "0755"; "--ro-bind-data"; string_of_int pin; source] in
     let bargs = ["bwrap"; "--dev-bind"; "/"; "/"] in
-    let bargs = bargs @ wrap_binary coqc coqc_real in
-    let bargs = bargs @ wrap_binary coqtop coqtop_real in
+    let bargs = bargs @ wrap_binary coqc coqc_tactician_flags coqc_real in
+    let bargs = bargs @ wrap_binary coqtop coqc_tactician_flags coqtop_real in
+    let bargs = bargs @
+                if Sys.file_exists coqide then wrap_binary coqide coqide_tactician_flags coqide_real else [] in
     let bargs = bargs @ cmd::args in
     Unix.execvp "bwrap" (Array.of_list bargs)
   | false ->
     (* Legacy path for bwrap < 0.5.0; to be removed when newer bwrap's are common enough *)
     let open Rresult in
     let open Bos in
-    let wrap_binary source target cont =
+    let wrap_binary source binary_flags target cont =
       Rresult.R.join @@ OS.File.with_tmp_oc ~mode:0o755 "tactician_shim_%s" (fun file oc cont ->
-          let contents = wrapper_contents target in
+          let contents = wrapper_contents binary_flags target in
           output_string oc contents;
           close_out oc;
           let flags = ["--bind"; source; target; "--bind"; Fpath.to_string file; source] in
@@ -294,12 +308,15 @@ let inject_bwrap cmd args =
         ) cont in
     let res =
       with_catch_break (fun () ->
-          wrap_binary coqc coqc_real (fun flags1 -> wrap_binary coqtop coqtop_real (fun flags2 ->
+          wrap_binary coqc coqc_tactician_flags coqc_real @@ fun flags1 ->
+          wrap_binary coqtop coqc_tactician_flags coqtop_real @@ fun flags2 ->
+          (if Sys.file_exists coqide then wrap_binary coqide coqide_tactician_flags coqide_real else (fun f -> f []))
+          @@ fun flags3 ->
               let bargs = ["bwrap"; "--dev-bind"; "/"; "/"] in
-              let bargs = bargs @ flags1 @ flags2 in
+              let bargs = bargs @ flags1 @ flags2 @ flags3 in
               let bargs = bargs @ cmd::args in
               let command = Bos.Cmd.of_list bargs in
-              OS.Cmd.run_status command))) () in
+              OS.Cmd.run_status command) () in
     let res = res >>| function
       (* NOTE: This exit has to occurs outside of `with_tmp` to ensure cleanup *)
     | `Signaled i when i <> 0 -> Stdlib.exit i
@@ -312,7 +329,6 @@ let inject_bwrap cmd args =
 
 (* TODO: Rewrite the rest of this file wit Bos *)
 let inject_path cmd args =
-  let flags = String.concat " " tactician_flags ^ " " ^ tactician_extra_flags () in
   let wrappers = tactician_wrappers () in
   let res =
     let open Rresult in
@@ -321,7 +337,8 @@ let inject_path cmd args =
       OS.Dir.current () >>= fun dir ->
       with_catch_break (fun () ->
           OS.Dir.with_tmp ~dir "tactician_path_%s" (fun tmp () ->
-              let mk_wrapper name =
+              let mk_wrapper name binary_flags =
+                let flags = String.concat " " binary_flags ^ " " ^ tactician_extra_flags () in
                 OS.File.write ~mode:0o755 Fpath.(tmp/name)
                   ("#!/bin/sh\nexec " ^ wrappers ^ " %{bin}%/" ^ name ^ " " ^ flags ^ " \"$@\"")
               in
@@ -330,13 +347,16 @@ let inject_path cmd args =
                 OS.Path.symlink ~target:Fpath.(bin/name) Fpath.(tmp/name) in
               link_binary "coqchk" >>= fun () ->
               link_binary "coqdep" >>= fun () ->
+              link_binary "ocamllibdep" >>= fun () ->
               link_binary "coqdoc" >>= fun () ->
               link_binary "coq_makefile" >>= fun () ->
               link_binary "coqpp" >>= fun () ->
               link_binary "coq-tex" >>= fun () ->
               link_binary "coqwc" >>= fun () ->
-              mk_wrapper "coqc" >>= fun () ->
-              mk_wrapper "coqtop" >>= fun () ->
+              mk_wrapper "coqc" coqc_tactician_flags >>= fun () ->
+              mk_wrapper "coqtop" coqc_tactician_flags >>= fun () ->
+              (if Sys.file_exists coqide then mk_wrapper "coqide" coqide_tactician_flags else Result.ok ())
+              >>= fun () ->
               OS.Env.current () >>= fun env ->
               let path = Astring.String.Map.get "PATH" env in
               OS.Env.set_var "PATH" (Some (Fpath.to_string tmp ^ ":" ^ path)) >>= fun () ->
@@ -381,8 +401,7 @@ let enable =
          tactics that do nothing except for 'search with cache ..', which simply executes the cached tactic. \
          This way, you can use the real Tactician while developing without needing a dependency on it."
     ] in
-  Term.(ret (const install_rcfile $ const ())),
-  Term.info "enable" ~doc ~man
+  Cmd.(v @@ info "enable" ~doc ~man) @@ Term.(ret (const install_rcfile $ const ()))
 
 let disable =
   let doc = "Remove the script that loads Tactician on Coq startup from your coqrc files." in
@@ -390,8 +409,7 @@ let disable =
     [ `P "This utility removes the following snippet from your 'coqrc' files, thereby disabling Tactician."
     ; `P coqrc_string
     ] in
-  Term.(ret (const remove_rcfile $ const ())),
-  Term.info "disable" ~doc ~man
+  Cmd.(v @@ info "disable" ~doc ~man) @@ Term.(ret (const remove_rcfile $ const ()))
 
 let inject =
   let doc = "Add hooks to Opam that allow Tactician to instrument the installation of Coq packages \
@@ -400,8 +418,7 @@ let inject =
     [ `P "This utility modifies Opam's configuration file with hooks that add Tactician support during \
          installation of Coq packages. This command can be reversed by running 'tactician eject'."
     ] in
-  Term.(ret (const inject $ (const ()))),
-  Term.info "inject" ~doc ~man
+  Cmd.(v @@ info "inject" ~doc ~man) @@ Term.(ret (const inject $ (const ())))
 
 let eject =
   let doc = "Remove hooks to Opam that allow Tactician to instrument the installation of Coq packages \
@@ -410,8 +427,7 @@ let eject =
                   'tactician inject'. After this, newly installed packages will no longer be instrumented \
                  by Tactician."
             ] in
-  Term.(ret (const eject $ const ())),
-  Term.info "eject" ~doc ~man
+  Cmd.(v @@ info "eject" ~doc ~man) @@ Term.(ret (const eject $ const ()))
 
 let recompile =
   let doc = "Find and recompile all installed Coq packages. This is mainly needed when you install or remove\
@@ -420,8 +436,7 @@ let recompile =
                   Tactician support. After that, all other packages also need to be reinstalled in order \
                   to be consistent with the new standard library. This utility will take care of that."
             ] in
-  Term.(ret (const stdlib $ const ())),
-  Term.info "recompile" ~doc ~man
+  Cmd.(v @@ info "recompile" ~doc ~man) @@ Term.(ret (const stdlib $ const ()))
 
 let command =
   let doc = "The command to execute" in
@@ -441,15 +456,14 @@ let exec =
             ; `Pre ("tactician exec make")
             ; `Pre ("tactician exec dune build")
             ] in
-  Term.(ret (const exec_command $ command $ args)),
-  Term.info "exec" ~doc ~man
+  Cmd.(v @@ info "exec" ~doc ~man) @@ Term.(ret (const exec_command $ command $ args))
 
-let default_cmd =
+let default_cmd, default_info =
   let doc = "Management utilities for the Tactician tactic learner and prover." in
   let sdocs = Manpage.s_common_options in
   let man_xrefs = [ `Cmd "enable"; `Cmd "disable"; `Cmd "inject"; `Cmd "eject"; `Cmd "recompile" ] in
   Term.(ret (const (`Help (`Pager, None)))),
-  Term.info "tactician" ~doc ~sdocs ~man_xrefs
+  Cmd.info "tactician" ~doc ~sdocs ~man_xrefs
 
 let cmds = [enable; disable; inject; eject; recompile; exec]
-let () = Term.(exit @@ eval_choice default_cmd cmds)
+let () = exit @@ Cmd.(eval@@ group ~default:default_cmd default_info cmds)

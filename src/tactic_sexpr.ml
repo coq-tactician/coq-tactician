@@ -1,7 +1,6 @@
 open Ltac_plugin
-open Tactician_util
+open Monad_util
 open Map_all_the_things
-open Genarg
 open Mapping_helpers
 open Tacexpr
 open Sexpr
@@ -13,7 +12,7 @@ let constr_pattern_name (pat : constr_pattern) = match pat with
   | PRef _ -> ["PRef"]
   | PVar _ -> ["PVar"]
   | PEvar (_, _) -> ["PEvar"]
-  | PRel _ -> ["PRel"]
+  | PRel i -> ["PRel"; string_of_int i]
   | PApp (_, _) -> ["PApp"]
   | PSoApp (_, _) -> ["PSoApp"]
   | PProj (_, _) -> ["PProj"]
@@ -152,13 +151,6 @@ module SexprDef = struct
   module M = WriterMonad
       (struct type w = sexpr list let id = [] let comb = List.append end)
   include MapDefTemplate (M)
-  let map_sort = "sexpr"
-  let warnProblem wit =
-    Feedback.msg_warning (Pp.(str "Tactician is having problems with " ++
-                              str "the following tactic. Please report. " ++
-                              pr_argument_type wit))
-  let default wit = { raw = (fun _ -> warnProblem (ArgumentType wit); id)
-                    ; glb = (fun _ -> warnProblem (ArgumentType wit); id)}
 end
 module SexprMapper = MakeMapper(SexprDef)
 open SexprDef
@@ -206,9 +198,10 @@ let mapper r =
   ; glob_constr_and_expr = (fun t g ->
       let name = "GC&E" in
       M.censor (fun ls -> [Node (s2s name :: ls)]) (g t))
-  ; glob_constr_pattern_and_expr = (fun t g ->
+  ; glob_constr_pattern_and_expr = (fun ((ids, _, _) as t) g ->
       let name = "GCP&E" in
-      M.censor (fun ls -> [Node (s2s name :: ls)]) (g t))
+      let ids = "(" ^ String.concat " " (List.map Names.Id.to_string (Names.Id.Set.elements ids)) ^ ")" in
+      M.censor (fun ls -> [Node (s2s name :: s2s ids :: ls)]) (g t))
   }
 
 (* TODO: For now, this function is only for debugging purposes. Many syntactic elements from the AST

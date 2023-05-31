@@ -12,7 +12,7 @@
  (package coq-tactician)
 )
 (install
- (files coqc.real coqtop.real) ; mount point for the real coq
+ (files coqc.real coqtop.real coqide.real) ; mount point for the real coq
  (section lib)
  (package coq-tactician)
 )
@@ -24,12 +24,18 @@
 (install
  (files
    coq-hott.patch
+   coq-hott.8.10.patch
    coq-hott.8.11.patch
+   coq-hott.8.12.patch
+   coq-hott.8.13.patch
+   coq-hott.8.14.patch
+   coq-hott.8.15.patch
  )
  (section share)
  (package coq-tactician)
 )
 (install
+ (package coq-tactician)
  (section share)
  (files (injection-flags as plugins/coq-tactician/injection-flags)))
 

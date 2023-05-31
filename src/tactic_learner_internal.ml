@@ -75,8 +75,8 @@ module TS = struct
 
   let proof_state_goal ps = snd ps
 
-  let proof_state_equal ps1 ps2 = false
-  let proof_state_independent ps = false
+  let proof_state_equal _ps1 _ps2 = false
+  let proof_state_independent _ps = false
 
   type tactic = glob_tactic_expr * int Lazy.t
   let tactic_sexpr (tac, _) = s2s (Pp.string_of_ppcmds (Sexpr.format_oneline (
@@ -84,9 +84,9 @@ module TS = struct
   let tactic_repr (tac, _) = tac
   let tactic_make tac = tactic_make tac
   let tactic_hash (_, hash) = Lazy.force hash
-  let tactic_local_variables (tac, _) = []
-  let tactic_substitute tac ls = tac
-  let tactic_globally_equal tac1 tac2 = false
+  let tactic_local_variables (_tac, _) = []
+  let tactic_substitute tac _ls = tac
+  let tactic_globally_equal _tac1 _tac2 = false
 
   (* Proof tree with sharing. Behaves as a Directed Acyclic Tree. *)
   type proof_dag =
@@ -112,6 +112,14 @@ module TS = struct
     ; tactic     : tactic }
 end
 
+let calculate_deps sigma acc e =
+  let rec aux e acc =
+    if Evar.Set.mem e acc then acc else
+      Evar.Set.fold aux
+        (Evd.evars_of_filtered_evar_info sigma @@ Evd.find_undefined sigma e)
+        (Evar.Set.add e acc)
+  in aux e acc
+
 let goal_to_proof_state ps =
   let map = Goal.sigma ps in
   let to_term t = EConstr.to_constr ~abort_on_undefined_evars:false map t in
@@ -125,7 +133,7 @@ type data_status =
   | Substituted of Libnames.full_path (* path of the substituted constant (does not exist) *)
   | Discharged of Libnames.full_path (* path of the substituted constant (does not exist) *)
 
-type origin = Libnames.full_path * data_status
+type origin = KerName.t * Libnames.full_path * data_status
 
 type data_in = { outcomes : TS.outcome list; tactic : TS.tactic ; name : Constant.t; status : data_status; path : Libnames.full_path }
 
@@ -151,12 +159,12 @@ module type TacticianOfflineLearnerType =
 
 type functional_learner =
   { learn : origin -> TS.outcome list -> TS.tactic -> functional_learner
-  ; predict : TS.situation list -> TS.prediction IStream.t
+  ; predict : unit -> TS.situation list -> TS.prediction IStream.t
   ; evaluate : TS.outcome -> TS.tactic -> functional_learner * float }
 
 type imperative_learner =
   { imp_learn : origin -> TS.outcome list -> TS.tactic -> unit
-  ; imp_predict : TS.situation list -> TS.prediction IStream.t
+  ; imp_predict : unit -> TS.situation list -> TS.prediction IStream.t
   ; imp_evaluate : TS.outcome -> TS.tactic -> float
   ; functional : unit -> functional_learner }
 
@@ -165,22 +173,23 @@ let new_learner name (module Learner : TacticianOnlineLearnerType) =
   let rec functional model =
     { learn = (fun origin exes tac ->
           functional @@ Learner.learn model origin exes tac)
-    ; predict = (fun t ->
-          Learner.predict model t)
+    ; predict = (fun () ->
+          let predictor = Learner.predict model in
+          fun t -> predictor t)
     ; evaluate = (fun outcome tac ->
           let f, model = Learner.evaluate model outcome tac in
           functional @@ model, f) } in
 
   (* Note: This is lazy to give people a chance to set GOptions before a learner gets initialized *)
   let model = Summary.ref
-                ~freeze:(fun ~marshallable x -> Lazy.from_val @@ Lazy.force x)
       ~name:("tactician-model-" ^ name)
       (lazy (Learner.empty ())) in
 
   { imp_learn = (fun origin exes tac ->
         model := Lazy.from_val @@ Learner.learn (Lazy.force !model) origin exes tac)
-  ; imp_predict = (fun t ->
-        Learner.predict (Lazy.force !model) t)
+  ; imp_predict = (fun () ->
+        let predict = Learner.predict (Lazy.force !model) in
+        fun t -> predict t)
   ; imp_evaluate = (fun outcome tac ->
         let f, m = Learner.evaluate (Lazy.force !model) outcome tac in
         model := Lazy.from_val m; f)
@@ -221,4 +230,4 @@ let disable_queue () =
 let register_online_learner name learner : unit =
   current_learner := new_learner name learner
 
-let register_offline_learner name learner : unit = ()
+let register_offline_learner _name _learner : unit = ()

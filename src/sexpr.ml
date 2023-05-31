@@ -26,8 +26,7 @@ let rec format_oneline t =
   | Ppcmd_box (bl, d') -> Ppcmd_box (bl, format_oneline d')
   | Ppcmd_tag (tag, d') -> Ppcmd_tag (tag, format_oneline d')
   | Ppcmd_comment _ -> assert false (* not expected *)
-  (* can happen but is problematic *)
-  | Ppcmd_string s -> if String.contains s '\n' then (print_endline s; assert false) else d
+  | Ppcmd_string s -> Ppcmd_string (String.concat "\\n" @@ String.split_on_char '\n' s)
   | _ -> d in
   h 0 (unrepr d')
 
@@ -64,7 +63,7 @@ let inductive2s i = global2s (GlobRef.IndRef i)
 let constructor2s c =
   [global2s (GlobRef.ConstructRef c); inductive2s (fst c)]
 
-let case_info2s {ci_ind; ci_npar; ci_cstr_ndecls; ci_cstr_nargs; ci_relevance; ci_pp_info} =
+let case_info2s {ci_ind; _} =
   inductive2s ci_ind (* TODO: More info? *)
 
 let constr_to_glob_constr t env sigma =

@@ -1,20 +1,11 @@
 open Map_all_the_things
-open Genarg
 open Names
-open Tactician_util
+open Monad_util
 
 module FreeVarsDef = struct
   module M = WriterMonad
       (struct type w = Id.t list let id = [] let comb = List.append end)
   include MapDefTemplate (M)
-  let map_sort = "freevars"
-  let warnProblem wit =
-    Feedback.msg_warning (Pp.(str "Tactician is having problems with " ++
-                              str "the following tactic. Please report. " ++
-                              pr_argument_type wit))
-  let default wit = { raw = (fun _ -> warnProblem (ArgumentType wit); id)
-                    ; glb = (fun _ -> warnProblem (ArgumentType wit); id)}
-
   let with_binders ids = M.censor (fun w -> List.filter (fun id -> not @@ List.exists (Id.equal id) ids) w)
 end
 module FreeVarsMapper = MakeMapper(FreeVarsDef)
@@ -33,14 +24,6 @@ let tactic_free_variables t : Id.t list =
 module SubstituteDef = struct
   module M = ReaderMonad(struct type r = Id.t list end)
   include MapDefTemplate (M)
-  let map_sort = "substitute"
-  let warnProblem wit =
-    Feedback.msg_warning (Pp.(str "Tactician is having problems with " ++
-                              str "the following tactic. Please report. " ++
-                              pr_argument_type wit))
-  let default wit = { raw = (fun _ -> warnProblem (ArgumentType wit); id)
-                    ; glb = (fun _ -> warnProblem (ArgumentType wit); id)}
-
   let with_binders ids = M.local (fun ids' -> (ids@ids'))
 end
 module SubstituteMapper = MakeMapper(SubstituteDef)
@@ -54,4 +37,4 @@ let mapper f = { SubstituteDef.default_mapper with
                             if List.exists (Id.equal id) ids then return id else return (f id)))
                }
 
-let tactic_substitute f t = M.run [] @@ SubstituteMapper.glob_tactic_expr_map (mapper f) t
+let tactic_substitute f t = M.run (SubstituteMapper.glob_tactic_expr_map (mapper f) t) []
