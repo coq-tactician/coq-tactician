@@ -19,8 +19,10 @@ let append file str =
 let open_permanently file =
   open_out_gen [Open_creat; Open_text; Open_trunc; Open_wronly] 0o640 file
 
-let global_record = Goptions.declare_bool_option_and_ref
-    ~stage:Summary.Stage.Interp ~depr:false ~key:["Tactician"; "Record"] ~value:true
+let global_record =
+  (Goptions.declare_bool_option_and_ref
+     ~key:["Tactician"; "Record"] ~value:true ())
+  .get
 
 let _ = Random.self_init ()
 
@@ -249,7 +251,7 @@ let load_plugins () =
 (* TODO: Hack: Option have the property that they are being read by Coq's stm (multiple times) on every
    vernac command. Hence, we can use it to execute arbitrary code. We use this to load extra plugins. *)
 let load_plugin_hack_option =
-  Goptions.{ optdepr = true
+  Goptions.{ optdepr = Some (Deprecation.make ~note:"this is a hack" ())
            ; optstage = Summary.Stage.Interp
            ; optkey = ["Tactician"; "Internal"; "LoadPluginHack"]
            ; optread = (fun () -> load_plugins (); false)
@@ -493,7 +495,7 @@ let empty_witness () =
 let timeout_option =
   let timeout = ref 10 in
   Goptions.declare_int_option
-    { optdepr = false
+    { optdepr = None
     ; optstage = Summary.Stage.Interp
     ; optkey = ["Tactician"; "Tactic"; "Timeout"]
     ; optread = (fun () -> Some !timeout)
