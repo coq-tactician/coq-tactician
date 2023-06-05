@@ -1,4 +1,5 @@
 open Tactic_learner
+open Ltac_plugin
 
 module NullLearner : TacticianOnlineLearnerType = functor (_ : TacticianStructures) -> struct
   type model = unit
@@ -6,6 +7,20 @@ module NullLearner : TacticianOnlineLearnerType = functor (_ : TacticianStructur
   let learn () _ _ _ = ()
   let predict () _ = IStream.empty
 let evaluate () _ _ = 0., ()
+end
+
+module SingletonLearner : TacticianOnlineLearnerType = functor (TS : TacticianStructures) -> struct
+  open TS
+  type model = unit
+  let empty () = ()
+  let learn () _ _ _ = ()
+  let predict () _ =
+    let env = Global.env () in
+    let tac = Tacintern.intern_pure_tactic (Genintern.empty_glob_sign env) @@
+      Pcoq.parse_string Pltac.tactic_eoi "solve [firstorder auto with *]" in
+    let tac = {confidence = 1.; focus = 0; tactic = tactic_make tac} in
+    IStream.cons tac IStream.empty
+  let evaluate () _ _ = 0., ()
 end
 
 module PrintLearner : TacticianOnlineLearnerType = functor (TS : TacticianStructures) -> struct
@@ -81,4 +96,4 @@ end
 let () = Feedback.msg_warning (Pp.str ("You have installed and enabled the coq-tactician-plugin-example " ^
                                        "package.\n This is only meant for demonstration purposes, and does " ^
                                        "not actually provide good predictions.")) *)
-(* let () = register_online_learner "ReverseAddedOrder" (module PrintLearner) *)
+let () = register_online_learner "ReverseAddedOrder" (module SingletonLearner)
