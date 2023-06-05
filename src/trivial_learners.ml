@@ -17,7 +17,7 @@ module SingletonLearner : TacticianOnlineLearnerType = functor (TS : TacticianSt
   let predict () _ =
     let env = Global.env () in
     let tac = Tacintern.intern_pure_tactic (Genintern.empty_glob_sign env) @@
-      Pcoq.parse_string Pltac.tactic_eoi "solve [firstorder auto with *]" in
+      Pcoq.parse_string Pltac.tactic_eoi "solve [firstorder auto 10 with *]" in
     let tac = {confidence = 1.; focus = 0; tactic = tactic_make tac} in
     IStream.cons tac IStream.empty
   let evaluate () _ _ = 0., ()
