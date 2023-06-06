@@ -24,8 +24,10 @@ type bench_response =
   | Skip
   | Bench of int
 
-let port = Goptions.declare_intopt_option_and_ref
-    ~stage:Summary.Stage.Interp ~depr:false ~key:["Tactician"; "Prebench"; "Port"]
+let port =
+  (Goptions.declare_intopt_option_and_ref
+     ~key:["Tactician"; "Prebench"; "Port"] ~value:None ())
+  .get
 
 let info =
   { exec = Sys.executable_name
@@ -62,7 +64,7 @@ let benchmarking = ref None
 let deterministic = ref false
 
 let benchoptions =
-  Goptions.{ optdepr = false
+  Goptions.{ optdepr = None
            ; optstage = Summary.Stage.Interp
            ; optkey = ["Tactician"; "Benchmark"]
            ; optread = (fun () -> Option.cata (fun _ -> true) false !benchmarking)
@@ -82,7 +84,7 @@ let benchoptions =
                    ignore (Tactic_learner_internal.learner_get ())) }
 
 let deterministicoptions =
-  Goptions.{optdepr = false;
+  Goptions.{optdepr = None;
             optstage = Summary.Stage.Interp;
             optkey = ["Tactician"; "Benchmark"; "Deterministic"];
             optread = (fun () -> !deterministic);
