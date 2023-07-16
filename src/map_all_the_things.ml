@@ -755,14 +755,16 @@ module MakeMapper (M: MapDef) = struct
       let+ pas = List.map cases_pattern_expr_map pas in
       let pas, bndrs = OList.split pas in
       CPatOr pas, OList.concat bndrs
-    | CPatNotation (ns, n, (cas1, cas2), cas3) ->
+    | CPatNotation (ns, n, (cas1, cas2, ps), cas3) ->
       let+ cas1 = List.map cases_pattern_expr_map cas1
       and+ cas2 = List.map (List.map cases_pattern_expr_map) cas2
+      and+ ps = List.map (kinded_cases_pattern_expr_map m r) ps
       and+ cas3 = List.map cases_pattern_expr_map cas3 in
       let cas1, bndrs1 = OList.split cas1 in
       let cas2, bndrs2 = OList.split (OList.map OList.split cas2) in
+      let ps, bndrs = OList.split ps in
       let cas3, bndrs3 = OList.split cas3 in
-      CPatNotation (ns, n, (cas1, cas2), cas3), OList.concat (bndrs1 @ OList.concat bndrs2 @ bndrs3)
+      CPatNotation (ns, n, (cas1, cas2, ps), cas3), OList.concat (bndrs1 @ OList.concat bndrs2 @  bndrs @ bndrs3)
     | CPatPrim _ -> return (case, [])
     | CPatRecord xs ->
       let+ xs = List.map (fun (qu, ca) ->
