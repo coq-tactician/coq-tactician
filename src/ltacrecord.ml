@@ -959,8 +959,8 @@ let vernac_solve g info tcom with_end_tac id =
          raise exn
        end else raise exn) in
   match already_executed id with
-  | Some result -> Vernacextend.vtdefault (fun () -> register_tactic_execution_data result)
-  | None -> Vernacextend.vtmodifyproof @@ fun ~pstate ->
+  | Some result -> Vernactypes.vtdefault (fun () -> register_tactic_execution_data result)
+  | None -> Vernactypes.vtmodifyproof @@ fun ~pstate ->
     let name = Declare.Proof.get_name pstate in
     let const = Names.Constant.make2 (Global.current_modpath ()) (Names.Label.of_id name) in
     let path = Lib.make_path name in
