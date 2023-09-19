@@ -232,7 +232,7 @@ module F (TS: TacticianStructures) = struct
         aux_reset_fold f [typ; body]
 
       (* The golden path *)
-      | Proj (proj, trm) ->
+      | Proj (proj, _, trm) ->
         aux (add_atom (TConst (Projection.constant proj)) f) trm
       | App (head, args) ->
         let interm', _ as f' = aux f head in
@@ -409,7 +409,7 @@ module F (TS: TacticianStructures) = struct
           end_structure(aux_reset_fold (start_structure features TLambda) cont depth)
 
         (* The golden path *)
-        | Proj (p, term) ->
+        | Proj (p, _, term) ->
           let p = Projection.constant p in
           let features' = start_structure (add_atom (TConst p) features) TProj
           in end_structure (aux features' term TProjTerm (depth + 1))

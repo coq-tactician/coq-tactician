@@ -42,11 +42,12 @@ let sorts2s = function
   | Type l -> [s2s "Type"; (* TODO: Printing is not optimal here *)
                s2s (Pp.string_of_ppcmds (format_oneline (Univ.Universe.raw_pr l)))]
   | QSort (v, l) -> [s2s "QSort";
-                     s2s (Pp.string_of_ppcmds (QVar.pr v));
+                     s2s (Pp.string_of_ppcmds (QVar.raw_pr v));
                      s2s (Pp.string_of_ppcmds (format_oneline (Univ.Universe.raw_pr l)))]
 
 let instance2s i =
-  let levels = Univ.Instance.to_array i in
+  let qs, levels = UVars.Instance.to_array i in
+  (* todo handle qualities *)
   Array.to_list (Array.map (fun l -> s2s (Univ.Level.to_string l)) levels)
 
 let cast_kind2s = function
@@ -57,7 +58,7 @@ let cast_kind2s = function
 let relevance2s = function
   | Relevant -> s2s "Relevant"
   | Irrelevant -> s2s "Irrelevant"
-  | RelevanceVar v -> Node [s2s "RelevanceVar"; s2s (Pp.string_of_ppcmds (QVar.pr v))]
+  | RelevanceVar v -> Node [s2s "RelevanceVar"; s2s (Pp.string_of_ppcmds (QVar.raw_pr v))]
 
 let constant2s c = global2s (GlobRef.ConstRef c)
 
@@ -112,7 +113,7 @@ let constr2s t =
            :: Array.to_list (Array.map (aux ls) bodies))
     | Fix (_, pd) -> Node (s2s "Fix" :: prec_declaration2s ls pd)
     | CoFix (_, pd) -> Node (s2s "CoFix" :: prec_declaration2s ls pd)
-    | Proj (proj, trm) -> Node [s2s "Proj"; constant2s (Projection.constant proj); aux ls trm] (* TODO: Improve *)
+    | Proj (proj, _, trm) -> Node [s2s "Proj"; constant2s (Projection.constant proj); aux ls trm] (* TODO: Improve *)
     | Int n -> Node [s2s "Int"; s2s (Uint63.to_string n)]
     | Float n -> Node [s2s "Float"; s2s (Float64.to_string n)]
     | Array (u, cs, c, ty) ->
