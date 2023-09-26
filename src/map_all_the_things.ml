@@ -1040,6 +1040,7 @@ module MakeMapper (M: MapDef) = struct
        and+ p1 = constr_pattern_map p1
        and+ p2 = constr_pattern_map p2 in
        PArray (ps, p1, p2)
+     | PUninstantiated _ -> .
 
   and glob_constr_and_expr_map m r (trm : g_trm) =
     m.glob_constr_and_expr trm @@ function (gc, ce) ->

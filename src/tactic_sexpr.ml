@@ -28,6 +28,7 @@ let constr_pattern_name (pat : constr_pattern) = match pat with
   | PInt _ -> ["PInt"]
   | PFloat _ -> ["PFloat"]
   | PArray (_, _, _) -> ["PArray"]
+  | PUninstantiated _ -> .
 
 let constr_expr_r_name (expr : constr_expr_r) = match expr with
   | CRef (_, _) -> ["CRef"]
