@@ -15,7 +15,6 @@ Tactician Record Extend Decompose.
 Tactician Record Thens Decompose.
 Tactician Record Thens3parts Decompose.
 Tactician Record First Keep.
-Tactician Record Complete Keep.
 Tactician Record Solve Keep.
 Tactician Record Or Keep.
 Tactician Record Once Keep.

@@ -1197,9 +1197,6 @@ module MakeMapper (M: MapDef) = struct
      | TacFirst ts ->
        let+ ts = List.map m.tactic_map ts in
        TacFirst ts
-     | TacComplete t ->
-       let+ t = m.tactic_map t in
-       TacComplete t
      | TacSolve ts ->
        let+ ts = List.map m.tactic_map ts in
        TacSolve ts

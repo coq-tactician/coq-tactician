@@ -266,7 +266,6 @@ and tactic_constr_map (f : EConstr.named_context) (tac : glob_tactic_expr) : glo
   | TacOrelse (t1, t2) -> TacOrelse (tactic_constr_map f t1, tactic_constr_map f t2)
   | TacFirst l -> TacFirst (List.map (tactic_constr_map f) l)
   | TacSolve l -> TacSolve (List.map (tactic_constr_map f) l)
-  | TacComplete tac -> TacComplete (tactic_constr_map f tac)
   | TacArg a -> TacArg (CAst.map (tacarg_map f (tactic_constr_map f)) a)
   | TacSelect (s, tac) -> TacSelect (s, tactic_constr_map f tac)
   | TacAlias x -> TacAlias (CAst.map (fun (id, args) -> (id, List.map (tacarg_map f (tactic_constr_map f)) args)) x)
