@@ -23,7 +23,6 @@ let pr_tac_ast = function
   | Thens -> str "Thens"
   | Thens3parts -> str "Thens3parts"
   | First -> str "First"
-  | Complete -> str "Complete"
   | Solve -> str "Solve"
   | Or -> str "Or"
   | Once -> str "Once"
@@ -134,7 +133,6 @@ PRINTED BY { pr_tac_ast }
 | [ "Thens" ] -> { Thens }
 | [ "Thens3parts" ] -> { Thens3parts }
 | [ "First" ] -> { First }
-| [ "Complete" ] -> { Complete }
 | [ "Solve" ] -> { Or }
 | [ "Or" ] -> { Or }
 | [ "Once" ] -> { Tactic_annotate.Once }

@@ -126,7 +126,6 @@ let gen_tactic_expr_r_name r (tac : 'a gen_tactic_expr_r) = match tac with
   | TacThens (_, _) -> [s2s "TacThens"]
   | TacThens3parts (_, _, _, _) -> [s2s "TacThens3parts"]
   | TacFirst _ -> [s2s "TacFirst"]
-  | TacComplete _ -> [s2s "TacComplete"]
   | TacSolve _ -> [s2s "TacSolve"]
   | TacTry _ -> [s2s "TacTry"]
   | TacOr (_, _) -> [s2s "TacOr"]

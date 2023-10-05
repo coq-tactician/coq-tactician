@@ -5,7 +5,7 @@ open CAst
 open Equality
 open Locus
 
-type tac_ast = Then | Dispatch | Extend | Thens | Thens3parts | First | Complete | Solve | Or
+type tac_ast = Then | Dispatch | Extend | Thens | Thens3parts | First | Solve | Or
              | Once | ExactlyOnce | IfThenCatch | Orelse | Do | Timeout | Repeat | Progress
              | Abstract | LetIn | Match | MatchGoal | Arg | Select | ML | Alias | Call
              | IntroPattern | Apply | Elim | Case | MutualFix | MutualCofix | Assert
@@ -160,7 +160,6 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr -> glob_ta
                                            rinner Thens3parts t2,
                                            Array.map (rinner Thens3parts) tl2))
     | TacFirst ts       ->                 router First (TacFirst (List.map (rinner First) ts))
-    | TacComplete t     ->                 router Complete (TacComplete (rinner Complete t))
     | TacSolve ts       ->                 router Solve (TacSolve (List.map (rinner Solve) ts))
     | TacTry t          ->                 CAst.make ?loc @@ TacTry (annotate t) (* No need to record try *)
     | TacOr (t1, t2)    ->                 router Or (TacOr (rinner Or t1, rinner Or t2))
