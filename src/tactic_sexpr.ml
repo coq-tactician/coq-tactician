@@ -53,7 +53,7 @@ let constr_expr_r_name (expr : constr_expr_r) = match expr with
   | CNotation (_, _, _) -> ["CNotation"]
   | CGeneralization (_, _) -> ["CGeneralization"]
   | CPrim _ -> ["CPrim"]
-  | CDelimiters (_, _) -> ["CDelimiters"]
+  | CDelimiters _ -> ["CDelimiters"]
   | CArray (_, _, _, _) -> ["CArray"]
 
 let glob_constr_r_name (expr : 'a glob_constr_r) = match expr with
