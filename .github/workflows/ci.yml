@@ -19,6 +19,8 @@ jobs:
             startGroup "Install dependencies"
               opam repo add coq-extra-dev https://coq.inria.fr/opam/extra-dev
               opam pin add -n -y -k path $PACKAGE $WORKDIR
+              opam remove coq-stdlib -y # Make sure we can build without stdlib
+              opam pin add dune 3.7.1 -y # Until ocaml/dune#8958 is fixed
               opam update -y
               opam install -y -j 2 -t $PACKAGE --deps-only
             endGroup
