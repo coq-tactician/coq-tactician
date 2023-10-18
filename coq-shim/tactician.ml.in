@@ -221,6 +221,7 @@ let (/) = Filename.concat
 let coqc = "%{bin}%"/"coqc"
 let coqtop = "%{bin}%"/"coqtop"
 let coqide = "%{bin}%"/"coqide"
+let coqidetop = "%{bin}%"/"coqidetop.opt"
 let tactician_lib = "%{coq-tactician:lib}%"
 let tactician_dir = "%{lib}%"/"coq"/"user-contrib"/"Tactician"
 let plugin_dir = "%{coq-tactician:share}%"/"plugins"
@@ -269,16 +270,17 @@ let inject_bwrap cmd args =
     ec = 0 in
   let coqc_real = tactician_lib/"coqc.real" in
   let coqtop_real = tactician_lib/"coqtop.real" in
+  let coqidetop_real = tactician_lib/"coqidetop.real" in
   let coqide_real = tactician_lib/"coqide.real" in
-  let wrapper_contents binary_flags target =
+  let wrapper_contents source binary_flags target =
     let flags = String.concat " " binary_flags ^ " " ^ tactician_extra_flags () in
     let wrappers = tactician_wrappers () in
-    "#!/bin/sh\nexec " ^ wrappers ^ " " ^ target ^ " " ^ flags ^ " \"$@\"\n" in
+    "#!/bin/sh\nexec -a " ^ source ^ " " ^ wrappers ^ " " ^ target ^ " " ^ flags ^ " \"$@\"\n" in
   match perms_supported with
   | true ->
     (* Happy path for bwrap >= 0.5.0 *)
     let wrap_binary source binary_flags target =
-        let contents = wrapper_contents binary_flags target in
+        let contents = wrapper_contents source binary_flags target in
         let pin, pout = Unix.pipe () in
         let pout = Unix.out_channel_of_descr pout in
         let pin : int = Obj.magic pin in
@@ -288,6 +290,7 @@ let inject_bwrap cmd args =
     let bargs = ["bwrap"; "--dev-bind"; "/"; "/"] in
     let bargs = bargs @ wrap_binary coqc coqc_tactician_flags coqc_real in
     let bargs = bargs @ wrap_binary coqtop coqc_tactician_flags coqtop_real in
+    let bargs = bargs @ wrap_binary coqidetop coqc_tactician_flags coqidetop_real in
     let bargs = bargs @
                 if Sys.file_exists coqide then wrap_binary coqide coqide_tactician_flags coqide_real else [] in
     let bargs = bargs @ cmd::args in
@@ -298,7 +301,7 @@ let inject_bwrap cmd args =
     let open Bos in
     let wrap_binary source binary_flags target cont =
       Rresult.R.join @@ OS.File.with_tmp_oc ~mode:0o755 "tactician_shim_%s" (fun file oc cont ->
-          let contents = wrapper_contents binary_flags target in
+          let contents = wrapper_contents source binary_flags target in
           output_string oc contents;
           close_out oc;
           let flags = ["--bind"; source; target; "--bind"; Fpath.to_string file; source] in
