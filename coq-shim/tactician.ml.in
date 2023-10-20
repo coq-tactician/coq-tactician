@@ -312,10 +312,13 @@ let inject_bwrap cmd args =
       with_catch_break (fun () ->
           wrap_binary coqc coqc_tactician_flags coqc_real @@ fun flags1 ->
           wrap_binary coqtop coqc_tactician_flags coqtop_real @@ fun flags2 ->
-          (if Sys.file_exists coqide then wrap_binary coqide coqide_tactician_flags coqide_real else (fun f -> f []))
-          @@ fun flags3 ->
+          (if Sys.file_exists coqidetop
+           then wrap_binary coqidetop coqc_tactician_flags coqidetop_real else (fun f -> f [])) @@ fun flags3 ->
+          (if Sys.file_exists coqide
+           then wrap_binary coqide coqide_tactician_flags coqide_real else (fun f -> f []))
+          @@ fun flags4 ->
               let bargs = ["bwrap"; "--dev-bind"; "/"; "/"] in
-              let bargs = bargs @ flags1 @ flags2 @ flags3 in
+              let bargs = bargs @ flags1 @ flags2 @ flags3 @ flags4 in
               let bargs = bargs @ cmd::args in
               let command = Bos.Cmd.of_list bargs in
               OS.Cmd.run_status command) () in
@@ -342,7 +345,8 @@ let inject_path cmd args =
               let mk_wrapper name binary_flags =
                 let flags = String.concat " " binary_flags ^ " " ^ tactician_extra_flags () in
                 OS.File.write ~mode:0o755 Fpath.(tmp/name)
-                  ("#!/bin/sh\nexec " ^ wrappers ^ " %{bin}%/" ^ name ^ " " ^ flags ^ " \"$@\"")
+                  ("#!/bin/sh\nexec -a %{bin}%/" ^ name ^ " " ^ wrappers ^
+                   " %{bin}%/" ^ name ^ " " ^ flags ^ " \"$@\"")
               in
               let link_binary name =
                 Fpath.of_string "%{bin}%" >>= fun bin ->
@@ -357,7 +361,10 @@ let inject_path cmd args =
               link_binary "coqwc" >>= fun () ->
               mk_wrapper "coqc" coqc_tactician_flags >>= fun () ->
               mk_wrapper "coqtop" coqc_tactician_flags >>= fun () ->
-              (if Sys.file_exists coqide then mk_wrapper "coqide" coqide_tactician_flags else Result.ok ())
+              (if Sys.file_exists coqidetop then
+                 mk_wrapper "coqidetop.opt" coqc_tactician_flags else Result.ok ()) >>= fun () ->
+              (if Sys.file_exists coqide then
+                 mk_wrapper "coqide" coqide_tactician_flags else Result.ok ())
               >>= fun () ->
               OS.Env.current () >>= fun env ->
               let path = Astring.String.Map.get "PATH" env in
@@ -381,7 +388,7 @@ let inject_path cmd args =
   | Error _ -> `Error (false, "internal error")
 
 let bwrap_test () =
-  let ec = Sys.command ("bwrap --dev-bind / / true > " ^ null_file ^ " 2>&1") in
+  let ec = Sys.command ("bwrap2 --dev-bind / / true > " ^ null_file ^ " 2>&1") in
   ec = 0
 
 let exec_command cmd args =
