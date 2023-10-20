@@ -290,7 +290,8 @@ let inject_bwrap cmd args =
     let bargs = ["bwrap"; "--dev-bind"; "/"; "/"] in
     let bargs = bargs @ wrap_binary coqc coqc_tactician_flags coqc_real in
     let bargs = bargs @ wrap_binary coqtop coqc_tactician_flags coqtop_real in
-    let bargs = bargs @ wrap_binary coqidetop coqc_tactician_flags coqidetop_real in
+    let bargs = bargs @
+                if Sys.file_exists coqidetop then wrap_binary coqidetop coqc_tactician_flags coqidetop_real else [] in
     let bargs = bargs @
                 if Sys.file_exists coqide then wrap_binary coqide coqide_tactician_flags coqide_real else [] in
     let bargs = bargs @ cmd::args in
