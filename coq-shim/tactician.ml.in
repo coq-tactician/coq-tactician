@@ -277,7 +277,7 @@ let inject_bwrap cmd args =
   let wrapper_contents source binary_flags target =
     let flags = String.concat " " binary_flags ^ " " ^ tactician_extra_flags () in
     let wrappers = tactician_wrappers () in
-    "#!/bin/sh\nexec -a " ^ source ^ " " ^ wrappers ^ " " ^ target ^ " " ^ flags ^ " \"$@\"\n" in
+    "#!/bin/bash\nexec -a " ^ source ^ " " ^ wrappers ^ " " ^ target ^ " " ^ flags ^ " \"$@\"\n" in
   match perms_supported with
   | true ->
     (* Happy path for bwrap >= 0.5.0 *)
@@ -347,7 +347,7 @@ let inject_path cmd args =
               let mk_wrapper name binary_flags =
                 let flags = String.concat " " binary_flags ^ " " ^ tactician_extra_flags () in
                 OS.File.write ~mode:0o755 Fpath.(tmp/name)
-                  ("#!/bin/sh\nexec -a %{bin}%/" ^ name ^ " " ^ wrappers ^
+                  ("#!/bin/bash\nexec -a %{bin}%/" ^ name ^ " " ^ wrappers ^
                    " %{bin}%/" ^ name ^ " " ^ flags ^ " \"$@\"")
               in
               let link_binary name =
