@@ -1,4 +1,4 @@
-# The Tactictician
+# The Tactician
 ## A Seamless, Interactive Tactic Learner and Prover for Coq
 
 ![Tactician landing image](assets/landing.png)
