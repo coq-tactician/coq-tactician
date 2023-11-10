@@ -778,9 +778,9 @@ module MakeMapper (M: MapDef) = struct
           (qu, ca), bndrs) xs in
       let xs, bndrs = OList.split xs in
       CPatRecord xs, OList.concat bndrs
-    | CPatDelimiters (d, c) ->
+    | CPatDelimiters (depth, d, c) ->
       let+ c, bndrs = cases_pattern_expr_map c in
-      CPatDelimiters (d, c), bndrs
+      CPatDelimiters (depth, d, c), bndrs
     | CPatCast (c1, c2) ->
       let+ c1,bndrs = cases_pattern_expr_map c1
       and+ c2 = constr_expr_map m r c2 in
@@ -921,9 +921,9 @@ module MakeMapper (M: MapDef) = struct
       let+ c = constr_expr_map c in
       CGeneralization (bk, c)
     | CPrim _ as c -> return c
-    | CDelimiters (str, c) ->
+    | CDelimiters (depth, str, c) ->
      let+ c = constr_expr_map c in
-     CDelimiters (str, c)
+     CDelimiters (depth, str, c)
     | CArray (ie, cs, c1, c2) ->
       let+ cs = array_map constr_expr_map cs
       and+ c1 = constr_expr_map c1
