@@ -69,7 +69,7 @@ let mapper = { OneVariableDef.default_mapper with
                  | GVar id ->
                    M.(ask >>= fun ids ->
                       if List.exists (Id.equal id) ids then
-                        tell ([TOther], false) >> return (GHole (Evar_kinds.GoalEvar, IntroAnonymous))
+                        tell ([TOther], false) >> return (GHole (Evar_kinds.GInternalHole))
                       else
                         tell ([TVar id], true) >> return c)
                  | _ ->
@@ -79,7 +79,7 @@ let mapper = { OneVariableDef.default_mapper with
                    match v with
                    | TRef c -> GRef (c, None)
                    | TVar id -> GVar id
-                   | TOther -> GHole (Evar_kinds.GoalEvar, IntroAnonymous)
+                   | TOther -> GHole (Evar_kinds.GInternalHole)
                )
              ; constr_expr = (fun c cont ->
                  (* The assumption is that our tactic is strict, so we are not interested in this *)
@@ -146,12 +146,12 @@ let mapper =
       )
   ; glob_constr_and_expr = (fun c cont ->
       match DAst.get (fst c) with
-      | GHole (Evar_kinds.NamedHole id, _) when Id.equal id marker ->
+      | GHole (Evar_kinds.GNamedHole (false, id)) when Id.equal id marker ->
         (let* var = retrieve_variable in
          match var with
          | TRef c -> return (DAst.make (GRef (c, None)), None)
          | TVar id -> return (DAst.make (GVar id), None)
-         | TOther -> return (DAst.make (GHole (Evar_kinds.GoalEvar, IntroAnonymous)), None))
+         | TOther -> return (DAst.make (GHole (Evar_kinds.GInternalHole)), None))
       | _ -> return c)
   ; glob_constr_pattern_and_expr = (fun c cont ->
       let+ (_, (c, _), _) = cont c in
@@ -180,7 +180,7 @@ let mapper = { StripDef.default_mapper with
              ; constr_pattern = (fun _ _ -> return @@ Pattern.PMeta None)
              ; constr_expr = (fun c _ -> return c)
              ; glob_constr = (fun _ _ ->
-                 return @@ Glob_term.GHole (Evar_kinds.NamedHole marker, IntroAnonymous))
+                 return @@ Glob_term.GHole (Evar_kinds.GNamedHole (false, marker)))
              }
 
 let tactic_strip t = StripMapper.glob_tactic_expr_map mapper t

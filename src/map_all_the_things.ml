@@ -390,6 +390,12 @@ module MakeMapper (M: MapDef) = struct
       IntroIdentifier id
     | IntroAnonymous as x -> return x
 
+  let glob_evar_kind_map m = function
+  | Evar_kinds.GNamedHole (_, id) ->
+    let+ id = m.variable id in
+    GNamedHole (false, id)
+  | k -> return k
+
   let rec intro_pattern_expr_map m f = function
     | IntroNaming n ->
       let+ n = intro_pattern_naming_expr_map m n in
@@ -699,10 +705,10 @@ module MakeMapper (M: MapDef) = struct
            (array_combine terms bindrs_array) in
        GRec (fk, ids, decls, typs, terms)
      | GSort _ as c -> return c
-     | GHole (k, intr) ->
+     | GHole k ->
        (* TODO: Sometime we have to deal with some of these evar kinds *)
-       let+ intr = intro_pattern_naming_expr_map m intr in
-       GHole (k, intr)
+       let+ k = glob_evar_kind_map m k in
+       GHole k
      | GGenarg gen ->
        let+ gen = generic_glob_map (r m) gen in
        GGenarg gen
@@ -882,10 +888,10 @@ module MakeMapper (M: MapDef) = struct
       and+ c3 = constr_expr_map c3
       and+ c4 = constr_expr_map c4 in
       CIf (c1, (l, c2), c3, c4)
-    | CHole (k, intr) ->
+    | CHole k ->
       (* TODO: At some point we have to deal with some of these evar kinds *)
-      let+ intr = intro_pattern_naming_expr_map m intr in
-      CHole (k, intr)
+      let+ k = option_map (fun k -> glob_evar_kind_map m k) k in
+      CHole k
     | CGenarg gen ->
       let+ gen = generic_raw_map (r m) gen in
       CGenarg gen
