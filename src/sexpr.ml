@@ -102,7 +102,7 @@ let constr2s t =
     | Ind (i, u) -> Node (s2s "Ind" :: inductive2s i :: instance2s u)
     | Construct (c, u) -> Node (s2s "Construct" :: constructor2s c @ instance2s u)
     | Case (a, b, c, d, e, f, g) ->
-      let (info, t1, inv, t2, bodies) = (* TODO: Use inv *)
+      let (info, (t1,_), inv, t2, bodies) = (* TODO: Use inv *)
         (* We assume here that the current environment is an extension of the environment where
            the term was defined. *)
         (* TODO: This crashes when the inducive was defined in a section that is now closed.
