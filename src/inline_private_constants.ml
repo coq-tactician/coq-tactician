@@ -69,23 +69,14 @@ let inline env sideff t =
   let open Context.Named.Declaration in
   let open Names in
   if sideff = Safe_typing.empty_private_constants then t else
-    let doc = Stm.get_doc 0 in
-    let should_inline = Option.cata (fun CAst.{ loc; v } ->
-        let open Vernacexpr in
-        match v.expr with
-        | VernacSynPure (VernacEndProof (Proved (Opaque, _))) -> true
-        | VernacSynPure (VernacEndProof (Vernacexpr.Proved (Transparent, _))) -> false
-        | _ -> CErrors.anomaly Pp.(str "Unexpected vernac ast during Tactician side-effect inlining")) true @@
-      Stm.(get_ast ~doc (get_current_state ~doc)) in
-    if not should_inline then t else
-      let consts, senv = Safe_typing.export_private_constants sideff (Global.safe_env ()) in
-      let extra_ctx = List.map (fun (c, _) ->
-          let id = Context.annotR @@ Label.to_id @@ Constant.label c in
-          let { const_body; const_type; _ } = Environ.lookup_constant c @@ Safe_typing.env_of_safe_env senv in
-          match const_body with
-          | Primitive _ | Undef _ ->
-            CErrors.anomaly Pp.(str "Unexpected constant body encountered during Tactician side-effect inlining")
-          | Def body -> LocalDef (id, body, const_type)
-          | OpaqueDef _ -> LocalAssum (id, const_type)
-        ) consts in
-      List.map (inline env extra_ctx consts) t
+    let consts, senv = Safe_typing.export_private_constants sideff (Global.safe_env ()) in
+    let extra_ctx = List.map (fun (c, _) ->
+        let id = Context.annotR @@ Label.to_id @@ Constant.label c in
+        let { const_body; const_type; _ } = Environ.lookup_constant c @@ Safe_typing.env_of_safe_env senv in
+        match const_body with
+        | Primitive _ | Undef _ ->
+          CErrors.anomaly Pp.(str "Unexpected constant body encountered during Tactician side-effect inlining")
+        | Def body -> LocalDef (id, body, const_type)
+        | OpaqueDef _ -> LocalAssum (id, const_type)
+      ) consts in
+    List.map (inline env extra_ctx consts) t
