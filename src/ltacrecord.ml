@@ -910,6 +910,10 @@ let hide_interp_t (global, t, rtac, const, path) =
 
 let ComTactic.Interpreter hide_interp_t = ComTactic.register_tactic_interpreter "tactician-ltac1" hide_interp_t
 
+type aborted_or_should_inline =
+  | Aborted
+  | NotAborted of { should_inline : bool }
+
 let vernac_solve g info tcom with_end_tac id =
   load_plugins (); (* TODO: Is this required here? *)
   (* Returns none if the tactic has not been executed, some otherwise, with data about what was executed *)
@@ -923,16 +927,28 @@ let vernac_solve g info tcom with_end_tac id =
       None in
   let register_tactic_execution_data (db, exn, sideff) =
     let env = Global.env () in
-    let aborted =
+    let aborted_or_should_inline =
       let open Vernacexpr in
       let doc = Stm.get_doc 0 in
-      Option.cata (fun CAst.{ v = { expr; _ }; _ } ->
-          match expr with
-          | VernacSynPure (VernacAbort | VernacEndProof Admitted) -> true
-          | _ -> false) true
-        Stm.(get_ast ~doc (get_current_state ~doc)) in
-    (if not aborted then
-       let db = Inline_private_constants.inline env sideff db in
+      let ast = Stm.(get_ast ~doc (get_current_state ~doc)) in
+      match ast with
+      | None -> Aborted
+      | Some { CAst.v = { expr; _ }; _ } ->
+        match expr with
+        | VernacSynPure (VernacAbort | VernacEndProof Admitted) -> Aborted
+        | VernacSynPure (VernacEndProof (Proved (opacity, _))) ->
+          let should_inline = match opacity with
+            | Opaque -> true
+            | Transparent -> false
+          in
+          NotAborted { should_inline }
+        | _ ->
+          CErrors.anomaly Pp.(str "Unexpected vernac ast during Tactician register_tactic_execution_data.")
+    in
+    (match aborted_or_should_inline with
+     | Aborted -> ()
+     | NotAborted { should_inline } ->
+       let db = if should_inline then Inline_private_constants.inline env sideff db else db in
        List.iter add_to_db @@ List.rev db);
     Hashtbl.remove int64_to_knn id;
     (match exn with
