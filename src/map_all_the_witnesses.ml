@@ -20,7 +20,6 @@ open Loc
 open Tactypes
 open Tactics
 open Tacexpr
-open Tacred
 
 module OList = List
 
@@ -348,12 +347,15 @@ let _ = register_generic_map wit_rewstrategy (module struct
         and+ n = m.short_name_map n in
         (x, n)
       let evaluable_global_reference_map m = function
-        | EvalConstRef c ->
+        | Evaluable.EvalConstRef c ->
           let+ c = m.constant_map c in
-          EvalConstRef c
-        | EvalVarRef id ->
+          Evaluable.EvalConstRef c
+        | Evaluable.EvalVarRef id ->
           let+ id = m.variable_map id in
-          EvalVarRef id
+          Evaluable.EvalVarRef id
+        | Evaluable.EvalProjectionRef p ->
+          let+ p = m.projection_map p in
+          Evaluable.EvalProjectionRef p
       let raw_map m = strategy_map m.constr_expr_map
           (m.red_expr_gen_map m.constr_expr_map
              (m.cast_map (or_by_notation_r_map m.qualid_map))

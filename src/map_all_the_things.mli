@@ -29,6 +29,7 @@ module type MapDef = sig
     ; raw_tactic_arg : raw_tactic_arg transformer
     ; cast : 'a. 'a CAst.t t -> 'a CAst.t t
     ; constant : Constant.t map
+    ; projection : Projection.Repr.t map
     ; mutind : MutInd.t map
     ; short_name : Id.t CAst.t option map
     ; located : 'a. (Loc.t option * 'a) t -> (Loc.t option * 'a) t
@@ -47,6 +48,7 @@ module type MapDef = sig
     ; or_var_map : 'a. 'a map -> 'a or_var map
     ; cast_map : 'a. 'a map -> 'a CAst.t map
     ; constant_map : Constant.t map
+    ; projection_map : Projection.Repr.t map
     ; mutind_map : MutInd.t map
     ; short_name_map : Id.t CAst.t option map
     ; located_map : 'a. 'a map -> 'a located map
@@ -88,6 +90,7 @@ module MapDefTemplate (M: Monad.Def) : sig
     ; raw_tactic_arg : raw_tactic_arg transformer
     ; cast : 'a. 'a CAst.t t -> 'a CAst.t t
     ; constant : Constant.t map
+    ; projection : Projection.Repr.t map
     ; mutind : MutInd.t map
     ; short_name : Id.t CAst.t option map
     ; located : 'a. (Loc.t option * 'a) t -> (Loc.t option * 'a) t
@@ -105,6 +108,7 @@ module MapDefTemplate (M: Monad.Def) : sig
     ; or_var_map : 'a. 'a map -> 'a or_var map
     ; cast_map : 'a. 'a map -> 'a CAst.t map
     ; constant_map : Constant.t map
+    ; projection_map : Projection.Repr.t map
     ; mutind_map : MutInd.t map
     ; short_name_map : Id.t CAst.t option map
     ; located_map : 'a. 'a map -> 'a located map
