@@ -645,19 +645,19 @@ module MakeMapper (M: MapDef) = struct
        let+ c = glob_constr_map c
        and+ cs = List.map glob_constr_map cs in
        GApp (c, cs)
-     | GLambda (id, bk, typ, term) ->
+     | GLambda (id, r, bk, typ, term) ->
        let+ typ = glob_constr_map typ
        and+ term = with_binders (filter_placeholders [id]) @@ glob_constr_map term in
-       GLambda (id, bk, typ, term)
-     | GProd (id, bk, typ, term) ->
+       GLambda (id, r, bk, typ, term)
+     | GProd (id, r, bk, typ, term) ->
        let+ typ = glob_constr_map typ
        and+ term = with_binders (filter_placeholders [id]) @@ glob_constr_map term in
-       GProd (id, bk, typ, term)
-     | GLetIn (id, b, typ, term) ->
+       GProd (id, r, bk, typ, term)
+     | GLetIn (id, r, b, typ, term) ->
        let+ b = glob_constr_map b
        and+ typ = option_map glob_constr_map typ
        and+ term = with_binders (filter_placeholders [id]) @@ glob_constr_map term in
-       GLetIn (id, b, typ, term)
+       GLetIn (id, r, b, typ, term)
      | GCases (cs, c, tt, cc) ->
        let bndrs = OList.concat @@ OList.map (fun (_, (id, pp)) ->
            let bndrs = Option.cata (fun CAst.{v=(_, bndrs); _} -> bndrs) [] pp in
@@ -694,12 +694,12 @@ module MakeMapper (M: MapDef) = struct
      | GRec (fk, ids, decls, typs, terms) ->
        let bndrs = Array.to_list ids in
        let bindrs_array = Array.map (fun x ->
-           let bndrs' = filter_placeholders @@ OList.map (fun (id, _, _ ,_) -> id) x in
+           let bndrs' = filter_placeholders @@ OList.map (fun (id, _, _, _ ,_) -> id) x in
            bndrs'@bndrs) decls in
-       let+ decls = array_map (List.map (fun (id, bk, c1, c2) ->
+       let+ decls = array_map (List.map (fun (id, r, bk, c1, c2) ->
            let+ c1 = option_map glob_constr_map c1
            and+ c2 = glob_constr_map c2 in
-           (id, bk, c1, c2))) decls
+           (id, r, bk, c1, c2))) decls
        and+ typs = array_map glob_constr_map typs
        and+ terms = array_map (fun (t, bndrs) -> with_binders bndrs @@ glob_constr_map t)
            (array_combine terms bindrs_array) in
@@ -804,12 +804,12 @@ module MakeMapper (M: MapDef) = struct
       let+ qu = qualid_map m qu in
       CRef (qu, i)
     | CFix (li, fix) -> (* li represents the final choice of the cofixpoints, and is not a binder *)
-      let bnds = OList.map (fun (id, _, _, _, _) -> CAst.(id.v)) fix in
+      let bnds = OList.map (fun (id, _, _, _, _, _) -> CAst.(id.v)) fix in
       let+ li = m.cast @@ return li
       and+ fix = List.map (fix_expr_map bnds m r) fix in
       CFix (li, fix)
     | CCoFix (li, cofix) -> (* li represents the final choice of the cofixpoints, and is not a binder *)
-      let bnds = OList.map (fun (id, _, _, _) -> CAst.(id.v)) cofix in
+      let bnds = OList.map (fun (id, _, _, _, _) -> CAst.(id.v)) cofix in
      let+ li = m.cast @@ return li
      and+ cofix = List.map (cofix_expr_map bnds m r) cofix in
      CCoFix (li, cofix)
@@ -935,31 +935,31 @@ module MakeMapper (M: MapDef) = struct
       and+ c1 = constr_expr_map c1
       and+ c2 = constr_expr_map c2 in
       CArray (ie, cs, c1, c2)
-  and fix_expr_map bnds m r (li, ord, bi, typ, term) =
+  and fix_expr_map bnds m r (li, relevance, ord, bi, typ, term) =
     let* li = m.cast @@ return li
     and+ ord = option_map (recursion_order_expr m r) ord
     and+ bi = List.map (local_binder_expr_map m r) bi in
     let bi,bnds' = OList.split bi in
     let+ typ = constr_expr_map m r typ
     and+ term = with_binders (OList.concat bnds' @ bnds) @@ constr_expr_map m r term in
-    (li, ord, bi, typ, term)
-  and cofix_expr_map bnds m r (li, bi, typ, term) =
+    (li, relevance, ord, bi, typ, term)
+  and cofix_expr_map bnds m r (li, relevance, bi, typ, term) =
     let* li = m.cast @@ return li
     and+ bi = List.map (local_binder_expr_map m r) bi in
     let bi,bnds' = OList.split bi in
     let+ typ = constr_expr_map m r typ
     and+ term = with_binders (OList.concat bnds' @ bnds) @@ constr_expr_map m r term in
-    (li, bi, typ, term)
+    (li, relevance, bi, typ, term)
   and local_binder_expr_map m r : local_binder_expr -> (local_binder_expr * Id.t list) t = function
-    | CLocalAssum (lis, bk, c) ->
+    | CLocalAssum (lis, relevance, bk, c) ->
       let+ lis = List.map (fun x -> m.cast @@ return x) lis
       and+ c = constr_expr_map m r c in
-      CLocalAssum (lis, bk, c), filter_lnames lis
-    | CLocalDef (li, c1, c2) ->
+      CLocalAssum (lis, relevance, bk, c), filter_lnames lis
+    | CLocalDef (li, relevance, c1, c2) ->
       let+ li = m.cast @@ return li
       and+ c1 = constr_expr_map m r c1
       and+ c2 = option_map (constr_expr_map m r) c2 in
-      CLocalDef (li, c1, c2), filter_lnames [li]
+      CLocalDef (li, relevance, c1, c2), filter_lnames [li]
     | CLocalPattern ca ->
       let+ ca,bndrs = cases_pattern_expr_map m r ca in
       CLocalPattern ca, filter_lnames bndrs
