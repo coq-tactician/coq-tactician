@@ -308,17 +308,17 @@ let _ = register_generic_map wit_rewstrategy (module struct
       open Rewrite
       open M
       open Monad.Make(M)
-      let rec strategy_map f g = function
+      let rec strategy_map f g h = function
         | StratId | StratFail | StratRefl as s -> return s
         | StratUnary (s, str) ->
-          let+ str = strategy_map f g str in
+          let+ str = strategy_map f g h str in
           StratUnary (s, str)
         | StratBinary (s, str, str') ->
-          let+ str = strategy_map f g str
-          and+ str' = strategy_map f g str' in
+          let+ str = strategy_map f g h str
+          and+ str' = strategy_map f g h str' in
           StratBinary (s, str, str')
         | StratNAry (s, strs) ->
-          let+ strs = List.map (strategy_map f g) strs in
+          let+ strs = List.map (strategy_map f g h) strs in
           StratNAry (s, strs)
         | StratConstr (c, b) ->
           let+ c = f c in
@@ -333,6 +333,13 @@ let _ = register_generic_map wit_rewstrategy (module struct
         | StratFold c ->
           let+ c = f c in
           StratFold c
+        | StratVar v ->
+          let+ v = h v in
+          StratVar v
+        | StratFix (x, str) ->
+          let+ x = h x
+          and+ str = strategy_map f g h str in
+          StratFix (x, str)
       let or_by_notation_r_map f = function
         | AN x -> let+ x = f x in AN x
         | ByNotation x -> return (ByNotation x)
@@ -351,10 +358,12 @@ let _ = register_generic_map wit_rewstrategy (module struct
           (m.red_expr_gen_map m.constr_expr_map
              (m.cast_map (or_by_notation_r_map m.qualid_map))
              m.constr_expr_map)
+          (m.cast_map m.variable_map)
       let glob_map m = strategy_map m.glob_constr_and_expr_map
           (m.red_expr_gen_map m.glob_constr_and_expr_map
              (m.or_var_map (and_short_name_map m (evaluable_global_reference_map m)))
              m.glob_constr_pattern_and_expr_map)
+          m.variable_map
     end
   end)
 
