@@ -232,8 +232,12 @@ let () = Goptions.declare_bool_option load_plugin_hack_option
 let in_db : data_in -> Libobject.obj =
   Libobject.(declare_object { (default_object "LTACRECORD") with
                               cache_function = (fun ((path, kn),({ outcomes; tactic; name=_; status; path=_ } : data_in)) ->
-                                  learner_learn (kn, path, status) outcomes tactic)
+                                  if Names.DirPath.equal (Names.ModPath.dp (Names.KerName.modpath kn))
+                                      (Global.current_dirpath ()) then () else
+                                    learner_learn (kn, path, status) outcomes tactic)
                             ; load_function = (fun _ ((path, kn), { outcomes; tactic; name; status; path=_ }) ->
+                                  if Names.DirPath.equal (Names.ModPath.dp (Names.KerName.modpath kn))
+                                      (Global.current_dirpath ()) then () else
                                   if Names.KerName.equal (Names.Constant.canonical name) (Names.Constant.user name) then
                                     if !global_record then learner_learn (kn, path, status) outcomes tactic else ())
                             ; open_function = (fun _ (_, _) -> ())
