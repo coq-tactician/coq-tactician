@@ -12,6 +12,8 @@ open Tacarg
 open Vernacextend
 open Pp
 
+open LtacX_common_plugin.G_ltacX_common
+
 let tactician_mode = Entry.make "vernac:tactician_ltac1_mode"
 
 let classic_proof_mode = Pvernac.register_proof_mode "Tactician Ltac1" tactician_mode
