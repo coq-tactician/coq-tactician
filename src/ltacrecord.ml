@@ -235,7 +235,6 @@ let allowed = Names.Id.Set.of_list @@ List.map Names.Id.of_string
 
 let is_allowed kn =
   let var = List.last @@ Names.DirPath.repr @@ Names.ModPath.dp @@ Names.KerName.modpath kn in
-  Feedback.msg_notice Pp.(str "root var: " ++ Names.Id.print var);
   Names.Id.Set.mem var allowed
 
 let in_db : data_in -> Libobject.obj =
