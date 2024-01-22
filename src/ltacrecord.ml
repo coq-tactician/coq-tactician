@@ -229,15 +229,22 @@ let load_plugin_hack_option =
            ; optwrite = (fun _ -> ()) }
 let () = Goptions.declare_bool_option load_plugin_hack_option
 
+
+let allowed = Names.Id.Set.of_list @@ List.map Names.Id.of_string
+    [ "iris"; "deriving"; "MenhirLib"; "Buchberger"; "compcert"; "SsrMultinomials"; "AlmostFull"; "Coqtail"; "SimpleIO"; "AAC_tactics"; "mathcomp"; "Extract"; "Michocott"; "QArithSternBrocot"; "iris_string_ident"; "ListString"; "GenericEnvironments"; "Rewriter"; "ITreeIO"; "LibHyps"; "CUnit"; "HighSchoolGeometry"; "Paco"; "Bignums"; "Coqoban"; "TypeInfer"; "smpl"; "Coq"; "GeometricAlgebra"; "RecordUpdate"; "ErrorHandlers"; "RegLang"; "Extraction"; "functional_algebra"; "extructures"; "Param"; "JML"; "Huffman"; "Moment"; "ExtLib"; "FlocqQuickChick"; "ATBR"; "stdpp"; "Io"; "Autosubst"; "Antivalence"; "CoLoR"; "Gappa"; "Michocoq"; "Coquelicot"; "ChickBlog"; "Chapar"; "Iterable"; "ReductionEffect"; "ITree"; "Coqprime"; "Semantics"; "Goedel"; "Giskard"; "RegexpBrzozowski"; "RSA"; "gaia"; "Bertrand"; "Pocklington"; "Hammer"; "DocumentationCheck"; "hydras"; "Stalmarck"; "VST"; "fourcolor"; "MathClasses"; "ALEA"; "JsAst"; "ListPlus"; "dpdgraph"; "coqutil"; "Flocq"; "FunctionNinjas"; "CoqEAL"; "Ott"; "ZornsLemma"; "Ltac2"; "QuickChickInterface"; "HelloWorld"; "Abel"; "HoareTut"; "Equations"; "MetaCoq"; "LtacIter"; "QuickChick"; "RelationAlgebra"; "Dijkstra"]
+
+let is_allowed kn =
+  let var = List.last @@ Names.DirPath.repr @@ Names.ModPath.dp @@ Names.KerName.modpath kn in
+  Feedback.msg_notice Pp.(str "root var: " ++ Names.Id.print var);
+  Names.Id.Set.mem var allowed
+
 let in_db : data_in -> Libobject.obj =
   Libobject.(declare_object { (default_object "LTACRECORD") with
                               cache_function = (fun ((path, kn),({ outcomes; tactic; name=_; status; path=_ } : data_in)) ->
-                                  if Names.DirPath.equal (Names.ModPath.dp (Names.KerName.modpath kn))
-                                      (Global.current_dirpath ()) then () else
+                                  if not (is_allowed kn) then () else
                                     learner_learn (kn, path, status) outcomes tactic)
                             ; load_function = (fun _ ((path, kn), { outcomes; tactic; name; status; path=_ }) ->
-                                  if Names.DirPath.equal (Names.ModPath.dp (Names.KerName.modpath kn))
-                                      (Global.current_dirpath ()) then () else
+                                  if not (is_allowed kn) then () else
                                   if Names.KerName.equal (Names.Constant.canonical name) (Names.Constant.user name) then
                                     if !global_record then learner_learn (kn, path, status) outcomes tactic else ())
                             ; open_function = (fun _ (_, _) -> ())
