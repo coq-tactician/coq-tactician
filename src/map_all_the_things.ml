@@ -15,7 +15,6 @@ open Loc
 open Names
 open Goal_select
 open Namegen
-open Tacred
 
 module type MapDef = sig
   include MonadNotations
@@ -33,6 +32,7 @@ module type MapDef = sig
     ; raw_tactic_arg : raw_tactic_arg transformer
     ; cast : 'a. 'a CAst.t t -> 'a CAst.t t
     ; constant : Constant.t map
+    ; projection : Projection.Repr.t map
     ; mutind : MutInd.t map
     ; short_name : Id.t CAst.t option map
     ; located : 'a. (Loc.t option * 'a) t -> (Loc.t option * 'a) t
@@ -51,6 +51,7 @@ module type MapDef = sig
     ; or_var_map : 'a. 'a map -> 'a or_var map
     ; cast_map : 'a. 'a map -> 'a CAst.t map
     ; constant_map : Constant.t map
+    ; projection_map : Projection.Repr.t map
     ; mutind_map : MutInd.t map
     ; short_name_map : Id.t CAst.t option map
     ; located_map : 'a. 'a map -> 'a located map
@@ -95,6 +96,7 @@ module MapDefTemplate (M: Monad.Def) = struct
     ; raw_tactic_arg : raw_tactic_arg transformer
     ; cast : 'a. 'a CAst.t t -> 'a CAst.t t
     ; constant : Constant.t map
+    ; projection : Projection.Repr.t map
     ; mutind : MutInd.t map
     ; short_name : Id.t CAst.t option map
     ; located : 'a. (Loc.t option * 'a) t -> (Loc.t option * 'a) t
@@ -117,6 +119,7 @@ module MapDefTemplate (M: Monad.Def) = struct
     ; raw_tactic_arg = none_transformer
     ; cast = (fun x -> x)
     ; constant = id
+    ; projection = id
     ; mutind = id
     ; short_name = id
     ; located = (fun x -> x)
@@ -133,6 +136,7 @@ module MapDefTemplate (M: Monad.Def) = struct
     ; or_var_map : 'a. 'a map -> 'a or_var map
     ; cast_map : 'a. 'a map -> 'a CAst.t map
     ; constant_map : Constant.t map
+    ; projection_map : Projection.Repr.t map
     ; mutind_map : MutInd.t map
     ; short_name_map : Id.t CAst.t option map
     ; located_map : 'a. 'a map -> 'a located map
@@ -544,12 +548,15 @@ module MakeMapper (M: MapDef) = struct
       ConstrTypeOf t
 
   let evaluable_global_reference_map m = function
-    | EvalConstRef c ->
+    | Evaluable.EvalConstRef c ->
       let+ c = m.constant c in
-      EvalConstRef c
-    | EvalVarRef id ->
+      Evaluable.EvalConstRef c
+    | Evaluable.EvalVarRef id ->
       let+ id = m.variable id in
-      EvalVarRef id
+      Evaluable.EvalVarRef id
+    | Evaluable.EvalProjectionRef p ->
+      let+ p = m.projection p in
+      Evaluable.EvalProjectionRef p
 
   let glob_sort_name_map m = function
     | GLocalUniv li ->
@@ -1299,6 +1306,7 @@ module MakeMapper (M: MapDef) = struct
     { option_map = option_map
     ; cast_map = (fun f -> mcast m f)
     ; constant_map = m.constant
+    ; projection_map = m.projection
     ; mutind_map = m.mutind
     ; short_name_map = (fun f -> m.short_name f)
     ; or_var_map = (fun f -> or_var_map m f)
