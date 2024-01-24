@@ -286,12 +286,12 @@ type goal_stack = Proofview.Goal.t list list
 type tactic_trace = glob_tactic_expr list
 type state_id_stack = int list
 
-let record_field : bool Evd.Store.field = Evd.Store.field ()
-let name_field : (Names.Constant.t * Libnames.full_path) Evd.Store.field = Evd.Store.field ()
-let localdb_field : localdb Evd.Store.field = Evd.Store.field ()
-let goal_stack_field : goal_stack Evd.Store.field = Evd.Store.field ()
-let tactic_trace_field : tactic_trace Proofview_monad.StateStore.field = Proofview_monad.StateStore.field ()
-let state_id_stack_field : state_id_stack Proofview_monad.StateStore.field = Proofview_monad.StateStore.field ()
+let record_field : bool Evd.Store.field = Evd.Store.field "tactician_record"
+let name_field : (Names.Constant.t * Libnames.full_path) Evd.Store.field = Evd.Store.field "tactician_name"
+let localdb_field : localdb Evd.Store.field = Evd.Store.field "tactician_localdb"
+let goal_stack_field : goal_stack Evd.Store.field = Evd.Store.field "tactician_goal_stack"
+let tactic_trace_field : tactic_trace Proofview_monad.StateStore.field = Proofview_monad.StateStore.field "tactician_trace_field"
+let state_id_stack_field : state_id_stack Proofview_monad.StateStore.field = Proofview_monad.StateStore.field "tactician_state_id_stack"
 
 let modify_field fi g d =
   let open Proofview in
@@ -482,7 +482,7 @@ let synthesize_trace tccs =
   List.map (fun { prediction_index; _ } -> prediction_index) @@
   List.concat tccs
 
-let search_witness_field : witness_elem list list Evd.Store.field = Evd.Store.field ()
+let search_witness_field : witness_elem list list Evd.Store.field = Evd.Store.field "tactician_search_witness"
 let push_witness w =
   modify_field search_witness_field (function s::ss -> (w::s)::ss, () | _ -> assert false) (fun () -> [])
 let new_witness () =
@@ -582,7 +582,7 @@ let contains s1 s2 =
         try ignore (Str.search_forward re s1 0); true
         with Not_found -> false
 
-let search_recursion_depth_field : int Evd.Store.field = Evd.Store.field ()
+let search_recursion_depth_field : int Evd.Store.field = Evd.Store.field "tactician_search_recursion_depth"
 let max_recursion_depth = 2
 let inc_search_recursion_depth () =
   modify_field search_recursion_depth_field (fun n -> 1+n, n) (fun () -> 0)
@@ -723,7 +723,7 @@ let type_check t fail =
   | Pretype_errors.PretypeError (env, map, err) ->
     fail (`Pretype_error (env, map, err)) res
 
-let benchmarked_field : bool Evd.Store.field = Evd.Store.field ()
+let benchmarked_field : bool Evd.Store.field = Evd.Store.field "tactician_benchmarked"
 let get_benchmarked () =
   modify_field benchmarked_field (fun b -> b, b) (fun () -> false)
 let set_benchmarked () =
@@ -773,7 +773,7 @@ let benchmarkSearch name time deterministic : unit Proofview.tactic =
         report None stats; tclZERO ~info e
       | _ -> assert false)
 
-let nested_search_solutions_field : witness_elem list list list Evd.Store.field = Evd.Store.field ()
+let nested_search_solutions_field : witness_elem list list list Evd.Store.field = Evd.Store.field "tactician_nested_search_solutions"
 let push_nested_search_solutions tcs =
   modify_field nested_search_solutions_field (fun acc -> tcs :: acc, ()) (fun () -> [])
 let empty_nested_search_solutions () =
