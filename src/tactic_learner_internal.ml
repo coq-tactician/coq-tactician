@@ -9,12 +9,6 @@ open Names
 
 type id = Id.t
 
-module IdMap = Map.Make(struct
-    type t = Id.t
-    let compare = Names.Id.compare
-  end)
-type id_map = Id.t IdMap.t
-
 let tactic_make tac = tac, Lazy.from_val (Hashtbl.hash_param 255 255 (tactic_normalize tac))
 
 module type TacticianStructures = sig
@@ -35,7 +29,7 @@ module type TacticianStructures = sig
   val tactic_make            : glob_tactic_expr -> tactic
   val tactic_hash            : tactic -> int
   val tactic_local_variables : tactic -> id list
-  val tactic_substitute      : tactic -> id_map -> tactic
+  val tactic_substitute      : tactic -> id Id.Map.t -> tactic
   val tactic_globally_equal  : tactic -> tactic -> bool
 
   (* Proof tree with sharing. Behaves as a Directed Acyclic Tree. *)
