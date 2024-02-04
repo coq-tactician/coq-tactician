@@ -156,12 +156,6 @@ type functional_learner =
   ; predict : unit -> TS.situation list -> TS.prediction IStream.t
   ; evaluate : TS.outcome -> TS.tactic -> functional_learner * float }
 
-type imperative_learner =
-  { imp_learn : origin -> TS.outcome list -> TS.tactic -> unit
-  ; imp_predict : unit -> TS.situation list -> TS.prediction IStream.t
-  ; imp_evaluate : TS.outcome -> TS.tactic -> float
-  ; functional : unit -> functional_learner }
-
 let new_learner (module Learner : TacticianOnlineLearnerType) =
   let module Learner = Learner(TS) in
   let rec functional model =
