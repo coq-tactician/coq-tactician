@@ -38,7 +38,7 @@ let tclFoldPredictions max_reached tacs cont max_dfs { f } =
         let n_max_dfs = max_dfs - i in
         if n_max_dfs <= 0 then tclZERO DepthEnd else
         if confidence = Float.neg_infinity then tclZERO PredictionsEnd else (* TODO: Hack *)
-        let tac = f tactic >>= fun _ -> cont (n_max_dfs - 1) in
+        let tac = tactic >>= fun _ -> cont (n_max_dfs - 1) in
         tclOR tac
           (fun e ->
              if max_reached () then tclZERO PredictionsEnd else
