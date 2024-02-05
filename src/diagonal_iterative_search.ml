@@ -28,7 +28,7 @@ let tclUntilIndependent t =
   in
   aux @@ withIsIndependent t
 
-let tclFoldPredictions max_reached tacs cont max_dfs =
+let tclFoldPredictions max_reached tacs cont max_dfs { f } =
   let rec aux i tacs depth =
       let open Proofview in
       match IStream.peek tacs with
@@ -38,7 +38,7 @@ let tclFoldPredictions max_reached tacs cont max_dfs =
         let n_max_dfs = max_dfs - i in
         if n_max_dfs <= 0 then tclZERO DepthEnd else
         if confidence = Float.neg_infinity then tclZERO PredictionsEnd else (* TODO: Hack *)
-        let tac = tactic >>= fun _ -> cont (n_max_dfs - 1) in
+        let tac = f tactic >>= fun _ -> cont (n_max_dfs - 1) in
         tclOR tac
           (fun e ->
              if max_reached () then tclZERO PredictionsEnd else
@@ -49,7 +49,7 @@ let tclFoldPredictions max_reached tacs cont max_dfs =
   aux 0 tacs false
 
 (* TODO: max_reached is a hack, remove *)
-let tclSearchDiagonalDFS max_reached predict max_dfs =
+let tclSearchDiagonalDFS max_reached predict max_dfs with_update_learner =
   let rec aux (max_dfs : int) : int tactic =
     if max_reached () then tclZERO PredictionsEnd else
       Goal.goals >>= function
@@ -57,18 +57,18 @@ let tclSearchDiagonalDFS max_reached predict max_dfs =
       | _ ->
         let independent =
           predict >>= fun predictions ->
-          tclFoldPredictions max_reached predictions aux max_dfs in
-        tclFOCUS 1 1 @@ tclUntilIndependent independent >>= aux in
+          tclFoldPredictions max_reached predictions aux max_dfs with_update_learner in
+        tclFOCUS 1 1 @@ with_update_learner.f @@ tclUntilIndependent independent >>= aux in
   let rec cont max_dfs =
     aux max_dfs >>= fun max_dfs -> tclUNIT (Cont (cont max_dfs)) in
   cont max_dfs
 
-let tclSearchDiagonalIterative d max_reached predict : cont_tactic =
+let tclSearchDiagonalIterative d max_reached predict with_update_learner : cont_tactic =
   let rec aux d =
     (* (tclLIFT (NonLogical.print_info (Pp.str ("Iterative depth: " ^ string_of_int d)))) <*> *)
     if max_reached () then Tacticals.New.tclZEROMSG (Pp.str "No more executions") else
       tclOR
-        (tclSearchDiagonalDFS max_reached predict d)
+        (tclSearchDiagonalDFS max_reached predict d with_update_learner)
         (function
           | (PredictionsEnd, _) ->
             Tacticals.New.tclZEROMSG (Pp.str "Tactician failed: there are no more tactics left")
