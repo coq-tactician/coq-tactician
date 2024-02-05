@@ -74,7 +74,7 @@ let inline env sideff t =
         let id = Context.annotR @@ Label.to_id @@ Constant.label c in
         let { const_body; const_type; _ } = Environ.lookup_constant c @@ Safe_typing.env_of_safe_env senv in
         match const_body with
-        | Primitive _ | Undef _ ->
+        | Primitive _ | Symbol _ | Undef _ ->
           CErrors.anomaly Pp.(str "Unexpected constant body encountered during Tactician side-effect inlining")
         | Def body -> LocalDef (id, body, const_type)
         | OpaqueDef _ -> LocalAssum (id, const_type)
