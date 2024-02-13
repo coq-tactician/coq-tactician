@@ -52,7 +52,7 @@ let mapper = { NormalizeDef.default_mapper with
                      (* This is a dummy inserted for non-strict tactics. Therefore, we have to convert it. *)
                      let _, pat =
                        Tactician_util.with_flag "-cast-in-pattern"
-                         (fun () -> Patternops.pattern_of_glob_constr c) in
+                         (fun () -> Patternops.pattern_of_glob_constr (Global.env ()) c) in
                      let bound = Glob_ops.bound_glob_vars c in
                      bound, (c, None), pat
                    | _ -> bound, (c, None), pat

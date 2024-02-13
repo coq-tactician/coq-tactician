@@ -91,7 +91,7 @@ let mapper = { OneVariableDef.default_mapper with
                  let+ (_, (c, _), _) = cont c in
                  let _, pat =
                    Tactician_util.with_flag "-cast-in-pattern"
-                     (fun () -> Patternops.pattern_of_glob_constr c) in
+                     (fun () -> Patternops.pattern_of_glob_constr (Global.env ()) c) in
                  let bound = Glob_ops.bound_glob_vars c in
                  bound, (c, None), pat)
              }
@@ -155,7 +155,7 @@ let mapper =
       | _ -> return c)
   ; glob_constr_pattern_and_expr = (fun c cont ->
       let+ (_, (c, _), _) = cont c in
-      let _, pat = Patternops.pattern_of_glob_constr c in
+      let _, pat = Patternops.pattern_of_glob_constr (Global.env ()) c in
       let bound = Glob_ops.bound_glob_vars c in
       bound, (c, None), pat)
   }
