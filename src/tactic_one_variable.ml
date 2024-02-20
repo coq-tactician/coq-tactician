@@ -45,7 +45,7 @@ let find_variable ls =
 let curtail c =
     M.censor (fun (ls, exact) -> let x, exact' = find_variable ls in [x], exact && exact') @@ c
 
-let mapper = { OneVariableDef.default_mapper with
+let mapper env = { OneVariableDef.default_mapper with
                variable = (fun id ->
                    M.(ask >>= fun ids ->
                       if List.exists (Id.equal id) ids then
@@ -91,13 +91,13 @@ let mapper = { OneVariableDef.default_mapper with
                  let+ (_, (c, _), _) = cont c in
                  let _, pat =
                    Tactician_util.with_flag "-cast-in-pattern"
-                     (fun () -> Patternops.pattern_of_glob_constr (Global.env ()) c) in
+                     (fun () -> Patternops.pattern_of_glob_constr env c) in
                  let bound = Glob_ops.bound_glob_vars c in
                  bound, (c, None), pat)
              }
 
-let tactic_one_variable t =
-  M.run (OneVariableMapper.glob_tactic_expr_map mapper t) []
+let tactic_one_variable env t =
+  M.run (OneVariableMapper.glob_tactic_expr_map (mapper env) t) []
 
 let marker = Names.Id.of_string_soft "__argument_marker__"
 let placeholder () = match Coqlib.lib_ref "tactician.private_constant_placeholder" with

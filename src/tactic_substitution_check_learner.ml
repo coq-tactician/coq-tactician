@@ -12,8 +12,9 @@ module SubstitutionChecker = functor (TS : TacticianStructures) -> struct
 
   let learn () _status outcomes tac =
     let orig = tac in
-    let strict = Tactic_normalize.tactic_strict @@ Tactic_normalize.tactic_normalize @@ tactic_repr tac in
-    let (args, exact), interm = Tactic_one_variable.tactic_one_variable strict in
+    let strict = Tactic_normalize.tactic_strict (Global.env ()) @@
+      Tactic_normalize.tactic_normalize @@ tactic_repr tac in
+    let (args, exact), interm = Tactic_one_variable.tactic_one_variable (Global.env ()) strict in
     let stripped = Tactic_one_variable.tactic_strip strict in
     let reconstructed = Tactic_one_variable.tactic_substitute args stripped in
     match reconstructed with
