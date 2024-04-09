@@ -69,7 +69,8 @@ module type MapDef = sig
     ; qualid_map : Libnames.qualid map
     ; globref_map : GlobRef.t map
     ; quantified_hypothesis_map : quantified_hypothesis map
-    ; red_expr_gen_map : 'a 'b 'c. 'a map -> 'b map -> 'c map -> ('a, 'b, 'c) red_expr_gen map
+    ; red_expr_gen_map : 'a 'b 'c 'occvar. 'a map -> 'b map -> 'c map -> 'occvar map ->
+        ('a, 'b, 'c, 'occvar) red_expr_gen map
     }
 
   type ('raw, 'glb) gen_map =
@@ -154,7 +155,8 @@ module MapDefTemplate (M: Monad.Def) = struct
     ; qualid_map : Libnames.qualid map
     ; globref_map : GlobRef.t map
     ; quantified_hypothesis_map : quantified_hypothesis map
-    ; red_expr_gen_map : 'a 'b 'c. 'a map -> 'b map -> 'c map -> ('a, 'b, 'c) red_expr_gen map
+    ; red_expr_gen_map : 'a 'b 'c 'occvar. 'a map -> 'b map -> 'c map -> 'occvar map ->
+        ('a, 'b, 'c, 'occvar) red_expr_gen map
     }
   type ('raw, 'glb) gen_map =
     { raw : recursor -> 'raw map
@@ -367,13 +369,15 @@ module MakeMapper (M: MapDef) = struct
     let+ b = with_bindings_map m f b in
     (flg, b)
   let occurrences_gen_map f = function
+    | AllOccurrences -> return AllOccurrences
+    | AtLeastOneOccurrence -> return AtLeastOneOccurrence
     | AllOccurrencesBut ls ->
       let+ ls = List.map f ls in
       AllOccurrencesBut ls
+    | NoOccurrences -> return NoOccurrences
     | OnlyOccurrences ls ->
       let+ ls = List.map f ls in
       OnlyOccurrences ls
-    | x -> return x
   let occurrences_expr_map m = occurrences_gen_map (or_var_map m id)
   let clause_expr_map m f {onhyps; concl_occs} =
     let+ onhyps = option_map (List.map (fun ((og, x), flg) ->
@@ -494,48 +498,64 @@ module MakeMapper (M: MapDef) = struct
     | Inl x -> let+ x = f x in Inl x
     | Inr x -> let+ x = g x in Inr x
 
-  let red_expr_gen_map m f g h = function
+  let red_context_map f g h =
+    option_map (fun (occ, un) ->
+        let+ occ = occurrences_gen_map h occ
+        and+ un = union_map f g un in
+        occ, un)
+
+  let red_expr_gen0_map f g h i j = function
+    | Red -> return Red
+    | Hnf -> return Hnf
     | Simpl (flg, x) ->
-      let+ x = option_map (fun (oc, x) ->
-          let+ oc = occurrences_expr_map m oc
-          and+ x = union_map g h x in
-          (oc, x)) x in
+      let+ flg = j flg
+      and+ x = red_context_map g h i x in
       Simpl (flg, x)
+    | Cbv flg ->
+      let+ flg = j flg in
+      Cbv flg
+    | Cbn flg ->
+      let+ flg = j flg in
+      Cbn flg
+    | Lazy flg ->
+      let+ flg = j flg in
+      Lazy flg
+    | Unfold x ->
+      let+ x = List.map (fun (x, y) ->
+          let+ x = occurrences_gen_map i x
+          and+ y = g y in
+          x, y) x in
+      Unfold x
     | Fold t ->
       let+ t = List.map f t in
       Fold t
     | Pattern x ->
       let+ x = List.map (fun (x, y) ->
-          let+ x = occurrences_expr_map m x
+          let+ x = occurrences_gen_map i x
           and+ y = f y in
-          (x, y)) x in
+          x, y) x in
       Pattern x
+    | ExtraRedExpr str ->
+      return (ExtraRedExpr str)
     | CbvVm x ->
-      let+ x = option_map (fun (oc, x) ->
-          let+ oc = occurrences_expr_map m oc
-          and+ x = union_map g h x in
-          (oc, x)) x in
+      let+ x = red_context_map g h i x in
       CbvVm x
     | CbvNative x ->
-      let+ x = option_map (fun (oc, x) ->
-          let+ oc = occurrences_expr_map m oc
-          and+ x = union_map g h x in
-          (oc, x)) x in
+      let+ x = red_context_map g h i x in
       CbvNative x
-    | Unfold x ->
-      let+ x = List.map (fun (x, y) ->
-          let+ x = occurrences_expr_map m x
-          and+ y = g y in
-          (x, y)) x in
-      Unfold x
-    | x -> return x
 
-  let may_eval_map m f g h = function
+  let glob_red_flag_map f ({ rConst; _ } as flg) =
+    let+ rConst = List.map f rConst in
+    { flg with rConst}
+
+  let red_expr_gen_map f g h i = red_expr_gen0_map f g h i (glob_red_flag_map g)
+
+  let may_eval_map m f g h i = function
     | ConstrTerm t ->
       let+ t = f t in
       ConstrTerm t
     | ConstrEval (red, t) ->
-      let+ red = red_expr_gen_map m f g h red
+      let+ red = red_expr_gen_map f g h i red
       and+ t = f t in
       ConstrEval (red, t)
     | ConstrContext (id, t) ->
@@ -604,23 +624,27 @@ module MakeMapper (M: MapDef) = struct
     generic_map  : 'lev generic_argument map;
     trm_map      : 'trm map;
     pat_map      : 'pat map;
+    red_pat_map  : 'rpat map;
     ref_map      : 'ref map;
     cst_map      : 'cst map;
     nam_map      : 'nam map;
+    occvar_map   : 'occvar map;
     tactic       : 'a gen_tactic_expr_r transformer;
     atomic_tactic : 'a gen_atomic_tactic_expr transformer;
     tactic_arg   : 'a gen_tactic_arg transformer;
     u            : mapper
   }
     constraint 'a = <
-      term      :'trm;
-      dterm     :'dtrm;
-      pattern   :'pat;
-      constant  :'cst;
-      reference :'ref;
-      name      :'nam;
-      tacexpr   :'tacexpr;
-      level     :'lev
+      term        :'trm;
+      dterm       :'dtrm;
+      pattern     :'pat;
+      constant    :'cst;
+      reference   :'ref;
+      name        :'nam;
+      tacexpr     :'tacexpr;
+      level       :'lev;
+      occvar      :'occvar;
+      red_pattern :'rpat
     >
 
   let rec glob_constr_r_map m r c' =
@@ -1078,7 +1102,7 @@ module MakeMapper (M: MapDef) = struct
        let+ genarg = m.generic_map genarg in
        TacGeneric (str, genarg)
      | ConstrMayEval x ->
-       let+ x = may_eval_map m.u m.trm_map m.cst_map m.pat_map x in
+       let+ x = may_eval_map m.u m.trm_map m.cst_map m.red_pat_map m.occvar_map x in
        ConstrMayEval x
      | Reference r ->
        let+ r = m.ref_map r in
@@ -1166,11 +1190,11 @@ module MakeMapper (M: MapDef) = struct
        and+ c = option_map (with_bindings_map m.u m.trm_map) c in
        TacInductionDestruct (flg1, flg2, (indc, c))
      | TacReduce (rede, cl) ->
-       let+ rede = red_expr_gen_map m.u m.trm_map m.cst_map m.pat_map rede
+       let+ rede = red_expr_gen_map m.trm_map m.cst_map m.red_pat_map m.occvar_map rede
        and+ cl = clause_expr_map m.u (mcast m.u m.u.variable) cl in
        TacReduce (rede, cl)
      | TacChange (flg, pat, c, cl) ->
-       let+ pat = option_map m.pat_map pat
+       let+ pat = option_map m.red_pat_map pat
        and+ c = m.trm_map c
        and+ cl = clause_expr_map m.u (mcast m.u m.u.variable) cl in
        TacChange (flg, pat, c, cl)
@@ -1325,15 +1349,17 @@ module MakeMapper (M: MapDef) = struct
     ; qualid_map = qualid_map m
     ; globref_map = globref_map m
     ; quantified_hypothesis_map = quantified_hypothesis_map m
-    ; red_expr_gen_map = (fun f g h -> red_expr_gen_map m f g h)
+    ; red_expr_gen_map = (fun f g h i -> red_expr_gen_map f g h i)
     }
   and raw_tactic_mapper m = {
     tactic_map   = raw_tactic_expr_map m;
     trm_map      = constr_expr_map m recursor;
     pat_map      = constr_expr_map m recursor;
+    red_pat_map  = constr_expr_map m recursor;
     ref_map      = qualid_map m;
     nam_map      = mcast m m.variable;
     cst_map      = or_by_notation_map m (fun x -> m.cast @@ return x);
+    occvar_map   = or_var_map m (fun x ->  return x);
     generic_map  = generic_raw_map (recursor m);
     u            = m;
     tactic       = m.raw_tactic;
@@ -1346,9 +1372,11 @@ module MakeMapper (M: MapDef) = struct
     tactic_map   = glob_tactic_expr_map m;
     trm_map      = glob_constr_and_expr_map m recursor;
     pat_map      = g_pat_map m recursor;
+    red_pat_map  = glob_constr_and_expr_map m recursor;
     ref_map      = or_var_map m (fun x -> m.located @@ return x);
     nam_map      = mcast m m.variable;
     cst_map      = or_var_map m (and_short_name_map m (evaluable_global_reference_map m));
+    occvar_map   = or_var_map m (fun x ->  return x);
     generic_map  = generic_glob_map (recursor m);
     u            = m;
     tactic       = m.glob_tactic;

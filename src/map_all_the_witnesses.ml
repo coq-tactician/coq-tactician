@@ -359,12 +359,14 @@ let _ = register_generic_map wit_rewstrategy (module struct
       let raw_map m = strategy_map m.constr_expr_map
           (m.red_expr_gen_map m.constr_expr_map
              (m.cast_map (or_by_notation_r_map m.qualid_map))
-             m.constr_expr_map)
+             m.constr_expr_map
+             (m.or_var_map (fun x -> return x)))
           (m.cast_map m.variable_map)
       let glob_map m = strategy_map m.glob_constr_and_expr_map
           (m.red_expr_gen_map m.glob_constr_and_expr_map
              (m.or_var_map (and_short_name_map m (evaluable_global_reference_map m)))
-             m.glob_constr_pattern_and_expr_map)
+             m.glob_constr_and_expr_map
+             (m.or_var_map (fun x -> return x)))
           m.variable_map
     end
   end)
