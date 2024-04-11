@@ -1,4 +1,4 @@
-(lang dune 3.5)
+(lang dune 3.13)
 (name coq-tactician)
 (using coq 0.6)
 (using dune_site 0.1)
@@ -25,7 +25,6 @@ automation.")
   (license MIT)
   (depends
     (ocaml (>= 4.08))
-    (dune (< 3.8~))
     (dune-site (>= 2.9.1))
     (opam-client (>= 2.1.0))
     (cmdliner (>= 1.1.0))
