@@ -390,7 +390,7 @@ let inject_path cmd args =
   | Error _ -> `Error (false, "internal error")
 
 let bwrap_test () =
-  let ec = Sys.command ("bwrap2 --dev-bind / / true > " ^ null_file ^ " 2>&1") in
+  let ec = Sys.command ("bwrap --dev-bind / / true > " ^ null_file ^ " 2>&1") in
   ec = 0
 
 let exec_command cmd args =
