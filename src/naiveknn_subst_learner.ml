@@ -12,7 +12,7 @@ module NaiveKnnSubst (SF : sig type second_feat end) = functor (TS : TacticianSt
 
     type db_entry =
       { features : feature list;
-        context  : (second_feat list, second_feat list) Context.Named.pt;
+        context  : (second_feat list, second_feat list, TS.relevance) Context.Named.pt;
         obj      : tactic;
         substituted_hash : int
       }

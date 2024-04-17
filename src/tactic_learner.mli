@@ -12,7 +12,8 @@ type sexpr = Sexpr.sexpr = Node of sexpr list | Leaf of string
 
 module type TacticianStructures = sig
   type term
-  type named_context = (term, term) Context.Named.pt
+  type relevance
+  type named_context = (term, term, relevance) Context.Named.pt
   val term_sexpr : term -> sexpr
   val term_repr  : term -> constr
 
