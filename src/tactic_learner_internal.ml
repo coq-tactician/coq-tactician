@@ -19,7 +19,8 @@ let tactic_make tac = tac, Lazy.from_val (Hashtbl.hash_param 255 255 (tactic_nor
 
 module type TacticianStructures = sig
   type term
-  type named_context = (term, term) Named.pt
+  type relevance
+  type named_context = (term, term, relevance) Named.pt
   val term_sexpr : term -> sexpr
   val term_repr  : term -> constr
 
@@ -65,6 +66,7 @@ end
 module TS = struct
 
   type term = constr
+  type relevance = Sorts.relevance
   type named_context = Constr.named_context
   let term_sexpr t = constr2s t
   let term_repr t = t

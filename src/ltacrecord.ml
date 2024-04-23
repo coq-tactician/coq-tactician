@@ -759,7 +759,7 @@ let benchmarkSearch name time deterministic : unit Proofview.tactic =
      let tstring = synthesize_tactic env witness in
      let err = match err with
        | `Type_error (env, sigma, err) ->
-         Himsg.explain_type_error env sigma @@ Type_errors.map_ptype_error EConstr.of_constr err
+         Himsg.explain_type_error env sigma @@ Pretype_errors.of_type_error err
        | `Pretype_error (env, sigma, err) -> Himsg.explain_pretype_error env sigma err in
      let msg = Pp.(str "Typing failure of the following tactic:" ++ fnl () ++
                    tstring ++ fnl () ++ str "Typing error:" ++ fnl () ++ err) in
