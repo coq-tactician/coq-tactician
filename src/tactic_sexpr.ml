@@ -27,6 +27,7 @@ let constr_pattern_name (pat : constr_pattern) = match pat with
   | PCoFix (_, _) -> ["PCoFix"]
   | PInt _ -> ["PInt"]
   | PFloat _ -> ["PFloat"]
+  | PString _ -> ["PString"]
   | PArray (_, _, _) -> ["PArray"]
   | PUninstantiated _ -> .
 
@@ -77,6 +78,7 @@ let glob_constr_r_name (expr : 'a glob_constr_r) = match expr with
   | GCast (_, _, _) -> ["GCast"]
   | GInt _ -> ["GInt"]
   | GFloat _ -> ["GFloat"]
+  | GString _ -> ["GString"]
   | GArray (_, _, _, _) -> ["GArray"]
 
 let gen_tactic_arg_name (arg : 'a gen_tactic_arg) = match arg with

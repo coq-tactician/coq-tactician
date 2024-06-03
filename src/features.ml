@@ -29,6 +29,7 @@ type semantic_token =
   | TConst of Constant.t
   | TInt of Uint63.t
   | TFloat of Float64.t
+  | TString of Pstring.t
 type role_token =
   | TRoot
   | TLetVarBody
@@ -80,6 +81,7 @@ let semantic_token_to_string = function
   | TConst c -> constant2s c
   | TInt n -> "i" ^ Uint63.to_string n
   | TFloat n -> "f" ^ Float64.to_string n
+  | TString s -> Printf.sprintf "s%S" (Pstring.to_string s)
 let role_token_to_string = function
   | TRoot -> "Root"
   | TLetVarBody -> "LetVarBody"
@@ -135,6 +137,7 @@ let semantic_token_to_int =
   | TConst c -> Constant.CanOrd.hash c
   | TInt n -> Uint63.hash n
   | TFloat n -> Float64.hash n
+  | TString s -> Hashtbl.hash s
 let role_token_to_int = function
   | TRoot -> Int.hash 1003
   | TLetVarBody -> Int.hash 1004
@@ -212,6 +215,7 @@ module F (TS: TacticianStructures) = struct
       | Const (c, _u) -> add_atom (TConst c) f
       | Int n -> add_atom (TInt n) f
       | Float n -> add_atom (TFloat n) f
+      | String s -> add_atom (TString s) f
 
       (* Uninteresting leafs *)
       | Sort _
@@ -375,6 +379,7 @@ module F (TS: TacticianStructures) = struct
         | Const (c, _u) -> process_atom (TConst c)
         | Int n -> process_atom (TInt n)
         | Float n -> process_atom (TFloat n)
+        | String s -> process_atom (TString s)
 
         (* Uninteresting leafs *)
         | Sort _

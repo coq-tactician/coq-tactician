@@ -754,6 +754,7 @@ module MakeMapper (M: MapDef) = struct
        GProj ((co, le), cs, c)
      | GInt _ as c -> return c
      | GFloat _ as c -> return c
+     | GString _ as c -> return c
      | GArray (gl, cs, c1, c2) ->
        let+ cs = array_map glob_constr_map cs
        and+ c1 = glob_constr_map c1
@@ -1077,6 +1078,7 @@ module MakeMapper (M: MapDef) = struct
        PCoFix (i, (ids, typs, terms))
      | PInt _ as pat -> return pat
      | PFloat _ as pat -> return pat
+     | PString _ as pat -> return pat
      | PArray (ps, p1, p2) ->
        let+ ps = array_map constr_pattern_map ps
        and+ p1 = constr_pattern_map p1

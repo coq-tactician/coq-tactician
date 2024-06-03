@@ -116,6 +116,7 @@ let constr2s t =
     | Proj (proj, _, trm) -> Node [s2s "Proj"; constant2s (Projection.constant proj); aux ls trm] (* TODO: Improve *)
     | Int n -> Node [s2s "Int"; s2s (Uint63.to_string n)]
     | Float n -> Node [s2s "Float"; s2s (Float64.to_string n)]
+    | String s -> Node [s2s "String"; s2s (Pstring.to_string s)]
     | Array (u, cs, c, ty) ->
       Node [s2s "Array"; aux ls c; Node (Array.to_list (Array.map (aux ls) cs)); aux ls ty; Node (instance2s u)]
   and prec_declaration2s ls (ns, typs, trms) =
