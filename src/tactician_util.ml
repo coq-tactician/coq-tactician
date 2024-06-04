@@ -84,7 +84,7 @@ let select_v_file ~warn loadpath base =
     with Not_found -> None in
   match find ".v" with
   | None ->
-    Error LibNotFound
+    Error Error.LibNotFound
   | Some res ->
     Ok res
 
@@ -108,12 +108,12 @@ let filter_path f =
   in
   aux (get_load_paths ())
 
-let locate_absolute_library dir : CUnix.physical_path locate_result =
+let locate_absolute_library dir : (CUnix.physical_path, _) Result.t =
   (* Search in loadpath *)
   let pref, base = Libnames.split_dirpath dir in
   let loadpath = filter_path (fun dir -> Names.DirPath.equal dir pref) in
   match loadpath with
-  | [] -> Error LibUnmappedDir
+  | [] -> Error Error.LibUnmappedDir
   | _ ->
     match select_v_file ~warn:false loadpath base with
     | Ok (_, file) -> Ok file
@@ -122,7 +122,7 @@ let locate_absolute_library dir : CUnix.physical_path locate_result =
 let try_locate_absolute_library dir =
   match locate_absolute_library dir with
   | Ok res -> Some res
-  | Error LibUnmappedDir ->
+  | Error Error. LibUnmappedDir ->
     None
   | Error LibNotFound ->
     None
