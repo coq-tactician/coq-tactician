@@ -970,7 +970,7 @@ let vernac_solve g info tcom with_end_tac id =
                    ; out_spaces = (fun _ -> reset ())
                    ; out_indent = (fun _ -> reset ())
                    }) in
-       if not !Flags.quiet || !Synterp.test_mode then begin
+       if not !Flags.quiet || !Flags.test_mode then begin
          Topfmt.std_ft := ignore_one_formatter !Topfmt.std_ft;
          raise exn
        end else raise exn) in
