@@ -3,6 +3,7 @@ Definition private_constant_placeholder (x : Type) := x.
 Register private_constant_placeholder as tactician.private_constant_placeholder.
 
 Declare ML Module "ltac_plugin:coq-core.plugins.ltac".
+Declare ML Module "firstorder_core_plugin:coq-core.plugins.firstorder_core".
 Declare ML Module "firstorder_plugin:coq-core.plugins.firstorder".
 Declare ML Module "extraction_plugin:coq-core.plugins.extraction".
 Declare ML Module "funind_plugin:coq-core.plugins.funind".
