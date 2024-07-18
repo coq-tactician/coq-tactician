@@ -943,7 +943,8 @@ let vernac_solve g info tcom with_end_tac id =
           in
           NotAborted { should_inline }
         | _ ->
-          CErrors.anomaly Pp.(str "Unexpected vernac ast during Tactician register_tactic_execution_data.")
+          NotAborted { should_inline = false }
+          (* CErrors.anomaly Pp.(str "Unexpected vernac ast during Tactician register_tactic_execution_data.") *)
     in
     (match aborted_or_should_inline with
      | Aborted -> ()
