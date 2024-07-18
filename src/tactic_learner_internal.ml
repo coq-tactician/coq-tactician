@@ -9,12 +9,6 @@ open Names
 
 type id = Id.t
 
-module IdMap = Map.Make(struct
-    type t = Id.t
-    let compare = Names.Id.compare
-  end)
-type id_map = Id.t IdMap.t
-
 let tactic_make tac = tac, Lazy.from_val (Hashtbl.hash_param 255 255 (tactic_normalize tac))
 
 module type TacticianStructures = sig
@@ -36,7 +30,7 @@ module type TacticianStructures = sig
   val tactic_make            : glob_tactic_expr -> tactic
   val tactic_hash            : tactic -> int
   val tactic_local_variables : tactic -> id list
-  val tactic_substitute      : tactic -> id_map -> tactic
+  val tactic_substitute      : tactic -> id Id.Map.t -> tactic
   val tactic_globally_equal  : tactic -> tactic -> bool
 
   (* Proof tree with sharing. Behaves as a Directed Acyclic Tree. *)
@@ -164,13 +158,7 @@ type functional_learner =
   ; predict : unit -> TS.situation list -> TS.prediction IStream.t
   ; evaluate : TS.outcome -> TS.tactic -> functional_learner * float }
 
-type imperative_learner =
-  { imp_learn : origin -> TS.outcome list -> TS.tactic -> unit
-  ; imp_predict : unit -> TS.situation list -> TS.prediction IStream.t
-  ; imp_evaluate : TS.outcome -> TS.tactic -> float
-  ; functional : unit -> functional_learner }
-
-let new_learner name (module Learner : TacticianOnlineLearnerType) =
+let new_learner (module Learner : TacticianOnlineLearnerType) =
   let module Learner = Learner(TS) in
   let rec functional model =
     { learn = (fun origin exes tac ->
@@ -181,21 +169,7 @@ let new_learner name (module Learner : TacticianOnlineLearnerType) =
     ; evaluate = (fun outcome tac ->
           let f, model = Learner.evaluate model outcome tac in
           functional @@ model, f) } in
-
-  (* Note: This is lazy to give people a chance to set GOptions before a learner gets initialized *)
-  let model = Summary.ref
-      ~name:("tactician-model-" ^ name)
-      (lazy (Learner.empty ())) in
-
-  { imp_learn = (fun origin exes tac ->
-        model := Lazy.from_val @@ Learner.learn (Lazy.force !model) origin exes tac)
-  ; imp_predict = (fun () ->
-        let predict = Learner.predict (Lazy.force !model) in
-        fun t -> predict t)
-  ; imp_evaluate = (fun outcome tac ->
-        let f, m = Learner.evaluate (Lazy.force !model) outcome tac in
-        model := Lazy.from_val m; f)
-  ; functional = (fun () -> functional (Lazy.force !model)) }
+  functional (Learner.empty ())
 
 module NullLearner : TacticianOnlineLearnerType = functor (_ : TacticianStructures) -> struct
   type model = unit
@@ -205,20 +179,21 @@ module NullLearner : TacticianOnlineLearnerType = functor (_ : TacticianStructur
   let evaluate () _ _ = 0., ()
 end
 
-let current_learner = ref (new_learner "null-learner" (module NullLearner : TacticianOnlineLearnerType))
+let current_learner = Summary.ref ~name:"tactician-model"
+    (lazy (new_learner (module NullLearner : TacticianOnlineLearnerType)))
 
 let queue_enabled = Summary.ref ~name: "tactician-queue-enabled" true
 let queue = Summary.ref ~name:"tactician-queue" []
 
 let learner_learn status outcomes tactic =
-  !current_learner.imp_learn status outcomes tactic
+  current_learner := Lazy.from_val ((Lazy.force !current_learner).learn status outcomes tactic)
 
 let process_queue () =
   List.iter (fun (s, o, t) -> learner_learn s o t) (List.rev !queue); queue := []
 
 let learner_get () =
   process_queue ();
-  !current_learner.functional ()
+  Lazy.force !current_learner
 
 let learner_learn s o t =
   if !queue_enabled then
@@ -230,6 +205,6 @@ let disable_queue () =
   process_queue (); queue_enabled := false
 
 let register_online_learner name learner : unit =
-  current_learner := new_learner name learner
+  current_learner := lazy (new_learner learner)
 
 let register_offline_learner _name _learner : unit = ()
