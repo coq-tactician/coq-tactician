@@ -1,7 +1,6 @@
 type id = Tactic_learner_internal.id
 
-module IdMap = Tactic_learner_internal.IdMap
-type id_map = Tactic_learner_internal.id_map
+type id_map = id Names.Id.Map.t
 
 type sexpr = Sexpr.sexpr = Node of sexpr list | Leaf of string
 
