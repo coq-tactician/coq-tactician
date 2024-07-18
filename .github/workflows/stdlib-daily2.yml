@@ -21,7 +21,7 @@ jobs:
             coq_version: 8.19
             ocaml_version: 4.13-flambda
           - branch: coq8.20
-            coq_version: 8.20
+            coq_version: '8.20'
             ocaml_version: 4.13-flambda
           - branch: coqdev
             coq_version: dev
