@@ -798,16 +798,12 @@ module MakeMapper (M: MapDef) = struct
       let+ pas = List.map cases_pattern_expr_map pas in
       let pas, bndrs = OList.split pas in
       CPatOr pas, OList.concat bndrs
-    | CPatNotation (ns, n, (cas1, cas2, ps), cas3) ->
-      let+ cas1 = List.map cases_pattern_expr_map cas1
-      and+ cas2 = List.map (List.map cases_pattern_expr_map) cas2
-      and+ ps = List.map (kinded_cases_pattern_expr_map m r) ps
+    | CPatNotation (ns, n, subst, cas3) ->
+      let+ subst = List.map (notation_arg_type_map m r) subst
       and+ cas3 = List.map cases_pattern_expr_map cas3 in
-      let cas1, bndrs1 = OList.split cas1 in
-      let cas2, bndrs2 = OList.split (OList.map OList.split cas2) in
-      let ps, bndrs = OList.split ps in
+      let subst, bndrs = OList.split subst in
       let cas3, bndrs3 = OList.split cas3 in
-      CPatNotation (ns, n, (cas1, cas2, ps), cas3), OList.concat (bndrs1 @ OList.concat bndrs2 @  bndrs @ bndrs3)
+      CPatNotation (ns, n, subst, cas3), OList.concat (bndrs @ bndrs3)
     | CPatPrim _ -> return (case, [])
     | CPatRecord xs ->
       let+ xs = List.map (fun (qu, ca) ->
@@ -946,15 +942,11 @@ module MakeMapper (M: MapDef) = struct
       let+ c = constr_expr_map c
       and+ c2 = constr_expr_map c2 in
       CCast (c, k, c2)
-    | CNotation (ns, n, (cs1, cs2, ps, bs)) ->
+    | CNotation (ns, n, subst) ->
       (* TODO: Having the binders in the right location here seems very complicated *)
-      let+ cs1 = List.map constr_expr_map cs1
-      and+ cs2 = List.map (List.map constr_expr_map) cs2
-      and+ ps = List.map (kinded_cases_pattern_expr_map m r) ps
-      and+ bs = List.map (List.map (local_binder_expr_map m r)) bs in
-      let ps, _ = OList.split ps in
-      let bs, _ = OList.split (OList.map OList.split bs) in
-      CNotation (ns, n, (cs1, cs2, ps, bs))
+      let+ subst = List.map (notation_arg_type_map m r) subst in
+      let subst, _ = OList.split subst in
+      CNotation (ns, n, subst)
     | CGeneralization (bk, c) ->
       let+ c = constr_expr_map c in
       CGeneralization (bk, c)
@@ -1011,6 +1003,23 @@ module MakeMapper (M: MapDef) = struct
   and recursion_order_expr m r x = mcast m (recursion_order_expr_r m r) x
   and constr_expr_map (m : mapper) r c : constr_expr t =
     mcast m (constr_expr_r_map m r) c
+  and notation_arg_kind_map m r = function
+    | NtnTypeArgConstr a -> let+ a = constr_expr_map m r a in NtnTypeArgConstr a, []
+    | NtnTypeArgPattern pat -> let+ pat, bndrs = kinded_cases_pattern_expr_map m r pat in NtnTypeArgPattern pat, bndrs
+    | NtnTypeArgBinders binders ->
+      let+ binders = List.map (local_binder_expr_map m r) binders in
+      let binders, _ = OList.split binders in
+      NtnTypeArgBinders binders, []
+  and notation_arg_type_map m r = function
+    | NtnTypeArg a -> let+ a, bndrs = notation_arg_kind_map m r a in NtnTypeArg a, bndrs
+    | NtnTypeArgList l ->
+      let+ l = List.map (notation_arg_type_map m r) l in
+      let l, bndrs = OList.split l in
+      NtnTypeArgList l, OList.concat bndrs
+    | NtnTypeArgTuple l ->
+      let+ l = List.map (notation_arg_type_map m r) l in
+      let l, bndrs = OList.split l in
+      NtnTypeArgTuple l, OList.concat bndrs
 
   and constr_pattern_map m pat' =
     let constr_pattern_map = constr_pattern_map m in
