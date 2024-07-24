@@ -379,7 +379,8 @@ let inject_path cmd args =
               >>= fun () ->
               OS.Env.current () >>= fun env ->
               let path = Astring.String.Map.get "PATH" env in
-              OS.Env.set_var "PATH" (Some (Fpath.to_string tmp ^ ":" ^ path)) >>= fun () ->
+              let sep = if Sys.win32 then ";" else ":" in
+              OS.Env.set_var "PATH" (Some (Fpath.to_string tmp ^ sep ^ path)) >>= fun () ->
               (* We add a trailing slash because some scripts assume it *)
               OS.Env.set_var "COQBIN" (Some (Fpath.(to_string (tmp / "")))) >>= fun () ->
               OS.Cmd.run_status cmd
