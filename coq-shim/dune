@@ -1,10 +1,18 @@
 (rule
- (targets tactician-patch tactician.ml)
+ (targets tactician-patch-src tactician.ml)
  ; When installed through opam, we perform substitutions through the 'substs' directive in the opam file.
  ; It also works using this rule, but running opam during an installation can be risky due to sandboxing issues.
  (mode fallback)
- (deps tactician-patch.in tactician.ml.in)
+ (deps tactician-patch-src.in tactician.ml.in)
  (action (run opam config subst %{targets})))
+
+(rule ; Extra step on Windows: Remove carriage returns that are introduced by 'opam config subst'
+ (target tactician-patch)
+ (deps tactician-patch-src)
+ (action
+  (with-stdout-to tactician-patch
+   (with-stdin-from tactician-patch-src
+    (run tr -d '\r')))))
 
 (install
  (files tactician-patch)
