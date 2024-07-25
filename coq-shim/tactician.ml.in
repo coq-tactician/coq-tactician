@@ -349,6 +349,7 @@ let inject_path cmd args =
   let res =
     let open Rresult in
     let open Bos in
+    let args = Array.of_list args in
     let run cmd =
       OS.Dir.current () >>= fun dir ->
       with_catch_break (fun () ->
@@ -382,18 +383,31 @@ let inject_path cmd args =
               let sep = if Sys.win32 then ";" else ":" in
               OS.Env.set_var "PATH" (Some (Fpath.to_string tmp ^ sep ^ path)) >>= fun () ->
               (* We add a trailing slash because some scripts assume it *)
-              OS.Env.set_var "COQBIN" (Some (Fpath.(to_string (tmp / "")))) >>= fun () ->
-              OS.Cmd.run_status cmd
+              OS.Env.set_var "COQBIN" (Some (Fpath.(to_string (tmp / "")))) >>| fun () ->
+
+              OpamProcess.create_process_env cmd args (OpamStd.Env.raw_env ())
+                Unix.stdin Unix.stdout Unix.stderr
+              |> Unix.waitpid []
+
+             (* OS.Cmd.run_status cmd *)
             ) () >>= (fun x -> x) >>| function
             (* NOTE: This exit has to occurs outside of `with_tmp` to ensure cleanup *)
-          | `Signaled i when i <> 0 -> Stdlib.exit i
-          | `Exited i when i <> 0 -> Stdlib.exit i
-          | _ -> ()) ()
+
+          | _, Unix.WEXITED n -> Stdlib.exit n
+          | _, (Unix.WSIGNALED n | Unix.WSTOPPED n) -> Stdlib.exit (128 - n)
+        ) ()
+          (* | `Signaled i when i <> 0 -> Stdlib.exit i *)
+          (* | `Exited i when i <> 0 -> Stdlib.exit i *)
+          (* | _ -> ()) () *)
     in
-    let command = Bos.Cmd.of_list (cmd::args) in
-    Bos.OS.Cmd.exists command >>= fun _exists ->
+    let command =
+      match OpamProcess.resolve_command cmd with
+      | None -> (print_endline "Command does not exist!"; Stdlib.exit 1)
+      | Some cmd -> cmd in
+    (* let command = Bos.Cmd.of_list (cmd::args) in *)
+    (* Bos.OS.Cmd.exists command >>= fun _exists -> *)
     run command
-    (* if exists then run command else (print_endline "Command does not exist!"; Stdlib.exit 1) *)
+    (* if exists then run command else  *)
   in
   match res with
   | Ok _ -> `Ok ()
