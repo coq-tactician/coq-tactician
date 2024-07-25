@@ -349,7 +349,7 @@ let inject_path cmd args =
   let res =
     let open Rresult in
     let open Bos in
-    let args = Array.of_list args in
+    let args = Array.of_list (cmd::args) in
     let run cmd =
       OS.Dir.current () >>= fun dir ->
       with_catch_break (fun () ->
