@@ -401,7 +401,7 @@ let inject_path cmd args =
           (* | _ -> ()) () *)
     in
     let command =
-      match OpamProcess.resolve_command cmd with
+      match OpamSystem.resolve_command ~env:(Unix.environment ()) cmd with
       | None -> (print_endline "Command does not exist!"; Stdlib.exit 1)
       | Some cmd -> cmd in
     (* let command = Bos.Cmd.of_list (cmd::args) in *)
