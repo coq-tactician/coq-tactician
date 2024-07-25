@@ -391,8 +391,9 @@ let inject_path cmd args =
           | _ -> ()) ()
     in
     let command = Bos.Cmd.of_list (cmd::args) in
-    Bos.OS.Cmd.exists command >>= fun exists ->
-    if exists then run command else (print_endline "Command does not exist!"; Stdlib.exit 1)
+    Bos.OS.Cmd.exists command >>= fun _exists ->
+    run command
+    (* if exists then run command else (print_endline "Command does not exist!"; Stdlib.exit 1) *)
   in
   match res with
   | Ok _ -> `Ok ()
