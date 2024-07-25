@@ -385,7 +385,7 @@ let inject_path cmd args =
               (* We add a trailing slash because some scripts assume it *)
               OS.Env.set_var "COQBIN" (Some (Fpath.(to_string (tmp / "")))) >>| fun () ->
 
-              OpamProcess.create_process_env cmd args (OpamStd.Env.raw_env ())
+              OpamProcess.create_process_env cmd args (Unix.environment ())
                 Unix.stdin Unix.stdout Unix.stderr
               |> Unix.waitpid []
 
