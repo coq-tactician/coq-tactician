@@ -71,7 +71,7 @@ let case_info2s {ci_ind; _} =
   inductive2s ci_ind (* TODO: More info? *)
 
 let constr_to_glob_constr t env sigma =
-  Detyping.detype Detyping.Later Id.Set.empty env sigma t
+  Detyping.detype Detyping.Later env sigma t
 
 (* Note: De Bruijn calculations may be different from Coq's calculations *)
 let rec debruijn_to_id n ls = if (n - 1) > 0 then debruijn_to_id (n - 1) (List.tl ls) else if ls == [] then (print_endline (string_of_int n); Names.Name.mk_name (Names.Id.of_string "kAK")) else List.hd ls
