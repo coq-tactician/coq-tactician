@@ -4,7 +4,6 @@ open Map_all_the_things
 open Stdarg
 open Extraargs
 open Tacarg
-open Taccoerce
 open G_auto
 open Firstorder_plugin
 open G_ground
@@ -31,9 +30,6 @@ let _ = [
 
   (* Extraargs *)
   at wit_orient; at wit_natural; at wit_test_lpar_id_colon;
-
-  (* Taccoerce *)
-  at wit_constr_context; at wit_constr_under_binders;
 
   (* G_auto *)
   at wit_hintbases;
