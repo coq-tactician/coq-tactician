@@ -327,6 +327,17 @@ let inject_bwrap cmd args =
     (* TODO: Fix *)
     | Error _ -> `Error (false, "internal error")
 
+let with_tmp dir f v =
+  let dir = Fpath.(dir/"tactician_path_4tla95lxw") in
+  let open Bos in
+  Result.bind (OS.Dir.create dir) @@ fun _ ->
+  let clean () = ignore (OS.Dir.delete ~recurse:true dir) in
+  try
+    let ret = f dir v in
+    clean ();
+    Ok ret
+  with e -> clean (); raise e
+
 (* TODO: Rewrite the rest of this file wit Bos *)
 let inject_path cmd args =
   let wrappers = tactician_wrappers () in
@@ -336,7 +347,7 @@ let inject_path cmd args =
     let run cmd =
       OS.Dir.current () >>= fun dir ->
       with_catch_break (fun () ->
-          OS.Dir.with_tmp ~dir "tactician_path_%s" (fun tmp () ->
+          with_tmp dir (fun tmp () ->
               let mk_wrapper name binary_flags =
                 let flags = String.concat " " binary_flags ^ " " ^ tactician_extra_flags () in
                 OS.File.write ~mode:0o755 Fpath.(tmp/name)

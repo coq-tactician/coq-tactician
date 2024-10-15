@@ -4,9 +4,7 @@ open Constr
 open Names
 
 type id = Id.t
-
-module IdMap : Map.S with type key = Id.t
-type id_map = Id.t IdMap.t
+type id_map = id Id.Map.t
 
 type sexpr = Sexpr.sexpr = Node of sexpr list | Leaf of string
 
