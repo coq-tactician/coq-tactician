@@ -6,7 +6,7 @@ open Ltac_plugin
 open Ltacrecord
 open Tactic_annotate
 
-open Pcoq
+open Procq
 open G_ltac
 open Tacarg
 open Vernacextend
