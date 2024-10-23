@@ -1009,7 +1009,7 @@ let vernac_solve g info tcom with_end_tac id =
         try (* This is purely for parsing bug detection and could be removed for performance reasons *)
           let s = string_tac tac in
           try
-            let _ = Pcoq.parse_string Pltac.tactic_eoi s in ()
+            let _ = Procq.parse_string Pltac.tactic_eoi s in ()
           with e when CErrors.noncritical e -> msg "printing/parsing" s
         with
         (* Intentionally catching assert failure coming from constrextern.ml l629 in 8.11 and 8.12 *)
