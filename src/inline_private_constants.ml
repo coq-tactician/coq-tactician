@@ -32,7 +32,7 @@ let inline_tactic env t =
                      c t)
                ; constant = (fun const ->
                      if Environ.mem_constant const env then const else
-                       (match Coqlib.lib_ref "tactician.private_constant_placeholder" with
+                       (match Rocqlib.lib_ref "tactician.private_constant_placeholder" with
                         | Names.GlobRef.ConstRef const -> const
                         | _ -> assert false)
                    )

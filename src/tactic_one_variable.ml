@@ -100,7 +100,7 @@ let tactic_one_variable env t =
   M.run (OneVariableMapper.glob_tactic_expr_map (mapper env) t) []
 
 let marker = Names.Id.of_string_soft "__argument_marker__"
-let placeholder () = match Coqlib.lib_ref "tactician.private_constant_placeholder" with
+let placeholder () = match Rocqlib.lib_ref "tactician.private_constant_placeholder" with
   | Names.GlobRef.ConstRef const -> const
   | _ -> assert false
 

@@ -9,7 +9,7 @@ module NormalizeMapper = MakeMapper(NormalizeDef)
 open NormalizeDef
 open Helpers(NormalizeDef)
 
-let placeholder () = match Coqlib.lib_ref "tactician.private_constant_placeholder" with
+let placeholder () = match Rocqlib.lib_ref "tactician.private_constant_placeholder" with
   | Names.GlobRef.ConstRef const -> const
   | _ -> assert false
 
