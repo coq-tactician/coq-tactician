@@ -47,7 +47,7 @@ module OfflineEvaluationSimulatorLearner : TacticianOnlineLearnerType = functor 
 
   let cache_type name =
     let dirp = Global.current_dirpath () in
-    if Libnames.is_dirpath_prefix_of dirp (Libnames.dirpath name) then `File else `Dependency
+    if Libnames.is_dirpath_prefix_of dirp (fst @@ Libnames.repr_path name) then `File else `Dependency
 
   let calculate_k learner outcome tac =
     (* TODO: Fill in parents and other info *)
