@@ -26,7 +26,7 @@ let at wit = register_generic_map_identity wit
 let _ = [
   (* Stdarg *)
   at wit_unit; at wit_bool; at wit_int; at wit_string; at wit_pre_ident;
-  at wit_sort_family;
+  at wit_sort_quality_or_set;
 
   (* Extraargs *)
   at wit_orient; at wit_natural; at wit_test_lpar_id_colon;
