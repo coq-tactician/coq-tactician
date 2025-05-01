@@ -607,9 +607,9 @@ module MakeMapper (M: MapDef) = struct
       ConstructRef ((c, i), j)
 
   let goal_select_map m = function
-    | SelectId id ->
+    | SelectList [IdSelector id] ->
       let+ id = m.variable id in
-      SelectId id
+      SelectList [IdSelector id]
     | x -> return x
 
   let message_token_map f = function
