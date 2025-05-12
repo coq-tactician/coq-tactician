@@ -26,7 +26,7 @@ jobs:
             make -j6 check &&
             make install
           CIBW_TEST_COMMAND: pytact-check --help
-          CIBW_SKIP: "*-musllinux* cp312-* pp*"
+          CIBW_SKIP: "*-musllinux* cp312-* cp313-* pp*"
 
       - uses: actions/upload-artifact@v4
         with:
