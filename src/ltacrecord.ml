@@ -27,6 +27,18 @@ let recordoptions = Goptions.{optdepr = false;
                               optwrite = (fun b -> global_record := b)}
 let _ = Goptions.declare_bool_option recordoptions
 
+let record_terms = ref true
+
+let record_terms_options = Goptions.{
+  optdepr = false;
+  optname = "Tactician RecordProofTerms";
+  optkey = ["Tactician"; "RecordProofTerms"];
+  optread = (fun () -> !record_terms);
+  optwrite = (fun b -> record_terms := b)
+}
+
+let _ = Goptions.declare_bool_option record_terms_options
+
 let _ = Random.self_init ()
 
 (* TODO: In interactive mode this is a memory leak, but it seems difficult to properly clean this table *)
@@ -50,7 +62,8 @@ let subst_outcomes (s, { outcomes; tactic; name; status=_; path; sec_vars }) =
       ) in
   let subst_single_pf { hyps; goal; evar; hyps_origin } =
     { hyps = subst_named_context hyps; goal = Mod_subst.subst_mps s goal; evar; hyps_origin } in
-  let subst_pf (sigma, ustate, ps) = Evar.Map.map subst_single_pf sigma, ustate, subst_single_pf ps in
+  (* let subst_pf (sigma, ustate, ps) = Evar.Map.map subst_single_pf sigma, ustate, subst_single_pf ps in *)
+  let subst_pf (sigma, ustate, ps) = if !record_terms then Evar.Map.map subst_single_pf sigma, ustate, subst_single_pf ps else sigma, ustate, subst_single_pf ps in
   let rec subst_pd = function
     | End -> End
     | Step ps -> Step (subst_ps ps)
@@ -491,10 +504,11 @@ let update_hyps_origin () =
 
 let mk_outcome (st, term, sigma, sts) =
   (* let mem = (List.map TS.tactic_make (get_tactic_trace st)) in *)
+  let term = if !record_terms then term else EConstr.mkCast (EConstr.mkVar (Names.Id.of_string "__not_recording_term__"), Constr.VMcast, EConstr.mkProp) in
   { parents = [] (* List.map (fun tac -> (st (\* TODO: Fix *\), { executions = []; tactic = tac })) mem *)
   ; siblings = End
   ; before = goal_to_proof_state st
-  ; result = make_result st term sigma sts }
+  ; result = if !record_terms then make_result st term sigma sts else make_result_dummy st term sigma sts }
 
 let mk_data_in outcomes tactic name path =
   let tactic = TS.tactic_make tactic in
@@ -959,7 +973,8 @@ let record_tac (tac2 : glob_tactic_expr) : unit Proofview.tactic =
   tclEVARMAP >>= fun sigma ->
   let collect_states before_gls after_gls =
     List.map (fun gl_before ->
-        let term = term_from_goal sigma gl_before in
+        (* let term = term_from_goal sigma gl_before in *)
+        let term = if !record_terms then term_from_goal sigma gl_before else EConstr.mkVar (Names.Id.of_string "__not_recording_term__") in
         let i = get_state_id_goal_top gl_before in
         (gl_before, term, sigma, List.filter_map (fun (j, gl_after) ->
              if i = j then Some gl_after else None) after_gls)) before_gls in
