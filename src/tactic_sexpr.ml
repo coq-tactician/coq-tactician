@@ -8,7 +8,7 @@ open Constrexpr
 open Glob_term
 open Pattern
 
-let constr_pattern_name (pat : constr_pattern) = match pat with
+let constr_pattern_name (pat : _ constr_pattern_r) = match pat with
   | PRef _ -> ["PRef"]
   | PVar _ -> ["PVar"]
   | PEvar (_, _) -> ["PEvar"]
@@ -29,7 +29,7 @@ let constr_pattern_name (pat : constr_pattern) = match pat with
   | PFloat _ -> ["PFloat"]
   | PString _ -> ["PString"]
   | PArray (_, _, _) -> ["PArray"]
-  | PUninstantiated _ -> .
+  | PExtra _ -> ["PExtra"]
 
 let constr_expr_r_name (expr : constr_expr_r) = match expr with
   | CRef (_, _) -> ["CRef"]

@@ -39,7 +39,7 @@ module type MapDef = sig
     ; variable : Id.t map
     ; qualid : (DirPath.t * Id.t) map
     (* Guaranteed not be at least partially qualified (otherwise variable is called) *)
-    ; constr_pattern : constr_pattern transformer
+    ; constr_pattern : uninstantiated_pattern transformer
     ; constr_expr : constr_expr_r transformer
     ; glob_constr : ([ `any ] glob_constr_r) transformer
     ; glob_constr_and_expr : Genintern.glob_constr_and_expr transformer
@@ -104,7 +104,7 @@ module MapDefTemplate (M: Monad.Def) = struct
     ; variable : Id.t map
     ; qualid : (DirPath.t * Id.t) map
     (* Guaranteed not be at least partially qualified (otherwise variable is called) *)
-    ; constr_pattern : constr_pattern transformer
+    ; constr_pattern : uninstantiated_pattern transformer
     ; constr_expr : constr_expr_r transformer
     ; glob_constr : ([ `any ] glob_constr_r) transformer
     ; glob_constr_and_expr : Genintern.glob_constr_and_expr transformer
@@ -1084,7 +1084,7 @@ module MakeMapper (M: MapDef) = struct
        and+ p1 = constr_pattern_map p1
        and+ p2 = constr_pattern_map p2 in
        PArray (ps, p1, p2)
-     | PUninstantiated _ -> .
+     | PExtra g -> failwith "not yet implemented: mapping on quotation in constr pattern"
 
   and glob_constr_and_expr_map m r (trm : g_trm) =
     m.glob_constr_and_expr trm @@ function (gc, ce) ->
