@@ -14,10 +14,10 @@ jobs:
       - name: Checkout tree
         uses: actions/checkout@v4
 
-      - name: Set-up OCaml (4.12.1)
+      - name: Set-up OCaml (4.11)
         uses: ocaml/setup-ocaml@v3
         with:
-          ocaml-compiler: 4.12.1
+          ocaml-compiler: 4.11
 
       - name: Add Coq OPAM repositories
         run: |
