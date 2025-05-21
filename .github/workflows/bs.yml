@@ -34,7 +34,6 @@ jobs:
       - name: Dune
         run: |
           eval $(opam env)
-          tactician enable
           dune build
           dune install
 
