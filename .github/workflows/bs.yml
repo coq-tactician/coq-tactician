@@ -30,3 +30,8 @@ jobs:
 
       - name: Now try to install from the repo
         run: opam install . --deps-only --with-test
+
+      - name: Dune
+        run: |
+          dune build
+          dune install
