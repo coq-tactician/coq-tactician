@@ -19,6 +19,7 @@ jobs:
             startGroup "Install dependencies"
               echo "PACKAGE=$PACKAGE"
               echo "WORKDIR=$WORKDIR"
+              bwrap --dev-bind / / echo "bubblewrap is working!"
               opam repo add coq-extra-dev https://coq.inria.fr/opam/extra-dev
               opam pin add -n -y -k path $PACKAGE $WORKDIR
               opam update -y
