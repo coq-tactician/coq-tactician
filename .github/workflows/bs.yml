@@ -34,5 +34,9 @@ jobs:
       - name: Dune
         run: |
           eval $(opam env)
+          tactician enable
           dune build
           dune install
+
+      - name: stdlib installation
+        run: opam install coq-tactician-stdlib
