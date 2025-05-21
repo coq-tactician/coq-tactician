@@ -14,21 +14,16 @@ jobs:
       - name: Checkout tree
         uses: actions/checkout@v4
 
-      - name: Set-up OCaml
+      - name: Set-up OCaml (4.14.1)
         uses: ocaml/setup-ocaml@v3
         with:
-          ocaml-compiler: 5
+          ocaml-compiler: 4.14.1
 
-      - run: opam repo add coq-released https://coq.inria.fr/opam/released
-      
-      - run: opam repo add coq-core-dev https://coq.inria.fr/opam/core-dev
+      - name: Add Coq OPAM repositories
+        run: |
+          opam repo add coq-released https://coq.inria.fr/opam/released
+          opam repo add coq-core-dev https://coq.inria.fr/opam/core-dev
+          opam repo add coq-extra-dev https://coq.inria.fr/opam/extra-dev
 
-      - run: opam repo add coq-extra-dev https://coq.inria.fr/opam/extra-dev
-
-      - run: opam install -y -j 2 -t coq.8.16.1
-
-    #   - run: opam install . --deps-only --with-test
-
-    #   - run: dune build
-
-    #   - run: dune install
+      - name: Install Coq 8.16.1 with test dependencies
+        run: opam install -y -j 2 -t coq.8.16.1
