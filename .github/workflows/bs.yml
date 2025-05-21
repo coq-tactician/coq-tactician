@@ -33,5 +33,6 @@ jobs:
 
       - name: Dune
         run: |
+          eval $(opam env)
           dune build
           dune install
