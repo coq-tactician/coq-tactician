@@ -1,0 +1,32 @@
+name: Builds, tests & co
+
+on:
+  - push
+  - pull_request
+
+permissions: read-all
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout tree
+        uses: actions/checkout@v4
+
+      - name: Set-up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: 5
+
+      - run: opam repo add coq-released https://coq.inria.fr/opam/released
+      
+      - run: opam repo add coq-core-dev https://coq.inria.fr/opam/core-dev
+
+      - run: opam repo add coq-extra-dev https://coq.inria.fr/opam/extra-dev
+
+      - run: opam install . --deps-only --with-test
+
+      - run: dune build
+
+      - run: dune install
