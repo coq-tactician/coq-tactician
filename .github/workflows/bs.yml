@@ -27,3 +27,6 @@ jobs:
 
       - name: Install Coq 8.16.1 with test dependencies
         run: opam install -y -j 2 -t coq.8.16.1
+
+      - name: Now try to install from the repo
+        run: opam install . --deps-only --with-test
