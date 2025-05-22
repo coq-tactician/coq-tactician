@@ -2,7 +2,7 @@
  (name TacticianApi)
  (package coq-tactician-api)
  (flags -q -noinit)
- (modules TmpEmpty)
+ (modules TmpEmpty); TmpEmpty needed due to https://github.com/ocaml/dune/issues/11836
  (libraries
    coq-tactician-api.plugin
 ))
