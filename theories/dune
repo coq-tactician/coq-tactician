@@ -1,11 +1,11 @@
-; (coq.theory
-;  (name TacticianApi)
-;  (package coq-tactician-api)
-;  (flags -q -noinit)
-;  (modules )
-;  (libraries
-;    coq-tactician-api.plugin
-; ))
+(coq.theory
+ (name TacticianApi)
+ (package coq-tactician-api)
+ (flags -q -noinit)
+ (modules TmpEmpty)
+ (libraries
+   coq-tactician-api.plugin
+))
 
 (include_subdirs qualified)
 
