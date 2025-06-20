@@ -1054,7 +1054,8 @@ let vernac_solve ~pstate n info tcom b id =
                     (set_benchmarked () <*>
                      hide_interp_t global tcom with_end_tac
                        rtac_wrapper const path) p in
-                if is_safe_decompose !extracted_tactic then pstate2, status2 else 
+                (* if is_safe_decompose !extracted_tactic then pstate2, status2 else  *)
+                if false then pstate2, status2 else 
                   let (pstate1,status1) =
                     Pfedit.solve n info
                       (set_benchmarked () <*>
