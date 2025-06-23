@@ -1,5 +1,5 @@
 open Tactic_learner
-(* open Monad_util *)
+open Monad_util
 open Ltac_plugin
 
 let data_file =
@@ -12,7 +12,7 @@ let data_file =
        k
      | Some f -> f)
 
-(* module Cata = Coq_ast_cata.Cata(IdentityMonad) *)
+module Cata = Coq_ast_cata.Cata(IdentityMonad)
 
 module DecompositionLearner : TacticianOnlineLearnerType = functor (TS : TacticianStructures) -> struct
   module LH = Learner_helper.L(TS)
