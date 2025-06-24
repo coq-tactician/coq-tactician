@@ -20,7 +20,7 @@ jobs:
       - uses: coq-community/docker-coq-action@v1.2.3
         with:
           opam_file: 'coq-tactician.opam'
-          coq_version: '8.11'
+          coq_version: '8.11.dev'
           ocaml_version: '4.11-flambda'
           install: |
             startGroup "Install dependencies"
@@ -29,7 +29,7 @@ jobs:
               opam repo add custom-archive https://github.com/LasseBlaauwbroek/custom-archive.git
               opam pin add -n -y -k path coq-tactician coq-tactician/
               opam update -y
-              # opam reinstall -y -j 2 coq.8.11.2
+              opam reinstall -y -j 2 coq.8.11.dev
               opam install -y -j 2 coq-tactician
             endGroup
           script: |
