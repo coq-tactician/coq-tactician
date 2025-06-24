@@ -548,19 +548,27 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr option -> 
         else ts in
       router MatchGoal (TacMatchGoal (flg, d, ts))
     | TacFun (args, t) -> TacFun (args, annotate t) (* Probably not outer-recordable *)
-    | TacArg x ->
-      let x', r2 = if inner_record Arg then annotate_arg x.v else x.v, r in
-      let res = r2 (Some tac) @@ TacArg (CAst.make ?loc:x.loc x') in
-      if outer_record Arg then r (Some tac) res else res
+    | TacArg x -> 
+                  (match ast_setting_lookup Arg with
+                  | Decompose -> let x', r = annotate_arg x.v in
+                                 r (Some tac) @@ TacArg (CAst.make ?loc:x.loc x')
+                  | Keep -> r (Some tac) tac
+                  | Discard -> tac
+                  | Both -> CErrors.user_err (Pp.str "Setting 'Tactician Record Arg Both' is currently not supported"))
     | TacSelect (i, t)       ->            router Select (TacSelect (i, rinner Select t))
     | TacML CAst.{loc; v=(e, args)} ->
       let args = if inner_record ML then List.map (fun a -> fst (annotate_arg a)) args else args in
       router ML (TacML (CAst.make ?loc (e, args))) (* TODO: Decompose interesting known tactics (such as ssreflect) *)
-    | TacAlias CAst.{loc; v=(e, args)} ->
+    | TacAlias CAst.{loc; v=(e, args)} -> 
       (* TODO: Get rid of this hack*)
       let tactician_cache = CString.is_prefix "Tactician.Ltac1.Tactics.synth_with_cache" 
           (Names.KerName.to_string e) in
       let al = Tacenv.interp_alias e in
+      let args = if inner_record Alias || tactician_cache then
+          List.map (fun a -> fst (annotate_arg a)) args else args in
+      let t = TacAlias (CAst.make ?loc (e, args)) in
+      let default () = t in
+      if outer_record Alias && not tactician_cache then r (Some tac) t else
       match ast_alias_setting_lookup e with
       | Decompose | Both ->
         let args = List.map (fun a -> fst (annotate_arg a)) args in
@@ -568,11 +576,6 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr option -> 
             (CAst.make (Names.Name.Name x)), y) al.Tacenv.alias_args args,
                   annotate al.Tacenv.alias_body)
       | Keep | Discard ->
-        let default () =
-          let args = if inner_record Alias || tactician_cache then
-              List.map (fun a -> fst (annotate_arg a)) args else args in
-          let t = TacAlias (CAst.make ?loc (e, args)) in
-          if outer_record Alias && not tactician_cache then r (Some tac) t else t in
         try
           match e, args with
           | e, [TacGeneric term; TacGeneric pat] when Names.KerName.equal e @@ internal_tactics_ref_lookup "injection_x_as" ->
@@ -605,3 +608,93 @@ let decompose_annotate (tac : glob_tactic_expr) (r : glob_tactic_expr option -> 
           | _ -> default ()
         with Not_found -> default ()
     in annotate tac
+
+let is_safe_by_profile ast : bool = match ast_setting_lookup ast with
+  | Keep | Discard -> true
+  | Decompose | Both -> false
+
+let rec is_safe_decompose (tac : glob_tactic_expr) : bool =
+  match tac with
+  | TacAtom a         -> is_safe_decompose_atomic a
+  | TacThen (t1, t2)  -> if is_safe_by_profile Then then true else 
+                         is_safe_decompose t1 && is_safe_decompose t2
+  | TacDispatch tl    -> if is_safe_by_profile Dispatch then true else 
+                         List.for_all (fun x -> x) (List.map is_safe_decompose tl)
+  | TacExtendTac (tl1, t, tl2) -> if is_safe_by_profile Extend then true else 
+                                  let btl1 = Array.for_all (fun x -> x) (Array.map is_safe_decompose tl1) in 
+                                  let btl2 = Array.for_all (fun x -> x) (Array.map is_safe_decompose tl2) in
+                                  let bt = is_safe_decompose t in 
+                                  btl1 && btl2 && bt
+  | TacThens (t1, tl) -> if is_safe_by_profile Thens then true else 
+                         let btl = List.for_all (fun x -> x) (List.map is_safe_decompose tl) in
+                         let bt1 = is_safe_decompose t1 in 
+                         btl && bt1 
+  | TacThens3parts (t1, tl1, t2, tl2) -> if is_safe_by_profile Thens3parts then true else 
+                                         let btl1 = Array.for_all (fun x -> x) (Array.map is_safe_decompose tl1) in 
+                                         let btl2 = Array.for_all (fun x -> x) (Array.map is_safe_decompose tl2) in
+                                         let bt1 = is_safe_decompose t1 in 
+                                         let bt2 = is_safe_decompose t2 in 
+                                         btl1 && btl2 && bt1 && bt2
+  | TacFirst ts       -> if is_safe_by_profile First then true else List.for_all (fun x -> x) (List.map is_safe_decompose ts)
+  | TacComplete t     -> if is_safe_by_profile Complete then true else is_safe_decompose t
+  | TacSolve ts       -> if is_safe_by_profile Solve then true else List.for_all (fun x -> x) (List.map is_safe_decompose ts)
+  | TacTry t          -> is_safe_decompose t
+  | TacOr (t1, t2)    -> if is_safe_by_profile Or then true else is_safe_decompose t1 && is_safe_decompose t2
+  | TacOnce t         -> if is_safe_by_profile Once then true else is_safe_decompose t
+  | TacExactlyOnce t  -> if is_safe_by_profile ExactlyOnce then true else is_safe_decompose t
+  | TacIfThenCatch (t1, t2, t3) -> if is_safe_by_profile IfThenCatch then true else is_safe_decompose t1 && is_safe_decompose t2 && is_safe_decompose t3
+  | TacOrelse (t1, t2) -> if is_safe_by_profile Orelse then true else is_safe_decompose t1 && is_safe_decompose t2
+  | TacDo (n, t) -> if is_safe_by_profile Do then true else is_safe_decompose t
+  | TacTimeout (n, t)      -> if is_safe_by_profile Timeout then true else is_safe_decompose t
+  | TacTime (s, t)         -> is_safe_decompose t
+  | TacRepeat t       -> if is_safe_by_profile Repeat then true else is_safe_decompose t
+  | TacProgress t     -> if is_safe_by_profile Progress then true else is_safe_decompose t
+  | TacShowHyps t     -> is_safe_decompose t
+  | TacAbstract (t, id) -> if is_safe_by_profile Abstract then true else is_safe_decompose t
+  | TacId _           -> true
+  | TacFail _         -> true
+  | TacInfo t         -> is_safe_decompose t
+  | TacLetIn (false, args, t) -> is_safe_by_profile LetIn
+  | TacLetIn (true, args, t) -> if is_safe_by_profile LetIn then true else is_safe_decompose t
+  | TacMatch (flg, t, ts) -> if is_safe_by_profile Match then true else is_safe_decompose t
+  | TacMatchGoal (flg, d, ts) -> is_safe_by_profile MatchGoal
+  | TacFun (args, t) -> is_safe_decompose t
+  | TacArg x -> if is_safe_by_profile Arg then true else is_safe_decompose_arg x.v
+  | TacSelect (i, t)       -> if is_safe_by_profile Select then true else is_safe_decompose t
+  | TacML CAst.{loc; v=(e, args)} -> if is_safe_by_profile ML then true else
+                                     List.for_all (fun x -> x) (List.map is_safe_decompose_arg args)
+  | TacAlias CAst.{loc; v=(e, args)} -> is_safe_by_profile Alias
+and is_safe_decompose_atomic a : bool =
+  match a.v with
+  | TacIntroPattern (eflg, ls) -> is_safe_by_profile IntroPattern
+  | TacApply (aflg, eflg, ls, intro) -> is_safe_by_profile Apply
+  | TacElim _ -> true
+  | TacCase _ -> true
+  | TacMutualFix _ -> true
+  | TacMutualCofix _ -> true
+  | TacAssert (eflg, b, by, pat, term) -> is_safe_by_profile Assert
+  | TacGeneralize gs -> true
+  | TacLetTac _ -> true
+  | TacInductionDestruct (_, _, (_, Some _)) -> true
+  | TacInductionDestruct (false, eflg, (ts, None)) -> is_safe_by_profile InductionDestruct
+  | TacInductionDestruct (true, eflg, ([t], None)) -> is_safe_by_profile InductionDestruct
+  | TacInductionDestruct (true, _, _) -> true
+  | TacReduce (expr, occ) -> is_safe_by_profile Reduce
+  | TacChange _ -> true
+  | TacRewrite (flg1, ts, i, d) -> true
+  | TacInversion _ -> true
+and is_safe_decompose_arg a : bool = 
+  match a with
+  | TacGeneric _ -> true
+  | ConstrMayEval _ -> true
+  | Reference k ->
+    (match k with
+      | ArgArg _ -> true
+      | ArgVar _ -> true)
+  | TacCall c -> let (a, b) = c.v in
+                 let mapped_b = List.map (fun a -> is_safe_decompose_arg a) b in
+                 List.for_all (fun x -> x) mapped_b
+  | TacFreshId _ -> true
+  | Tacexp t -> is_safe_decompose t
+  | TacPretype _ -> true
+  | TacNumgoals -> true

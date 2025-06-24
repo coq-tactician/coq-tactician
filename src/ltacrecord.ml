@@ -1047,6 +1047,11 @@ let vernac_solve ~pstate n info tcom b id =
             with _ -> false in
             if seff1 <> seff2 || is_synth then
               pstate1, status1 else
+              let extracted_tactic : glob_tactic_expr ref = ref (TacId []) in
+              let rtac_wrapper t = 
+                extracted_tactic := t;
+                decompose_annotate t record_tac_complete
+              in
               try
                 let (pstate2,status2) =
                   (* TODO: Another dirty trick: We need to suppress any output generated during the
@@ -1066,14 +1071,39 @@ let vernac_solve ~pstate n info tcom b id =
                   Pfedit.solve n info
                     (set_benchmarked () <*>
                      hide_interp_t global tcom with_end_tac
-                       (fun t -> decompose_annotate t record_tac_complete) const path) p in
-                if Proof_equality.pstate_equal ~pstate1 ~pstate2 then
-                  pstate2, status2
-                else
-                  (print_error ~pstate:p ~pstate1 ~pstate2;
-                   pstate1, status1)
+                       rtac_wrapper const path) p in
+                (* if is_safe_decompose !extracted_tactic then pstate2, status2 else 
+                (* if false then pstate2, status2 else  *)
+                  let (pstate1,status1) =
+                    Pfedit.solve n info
+                      (set_benchmarked () <*>
+                      hide_interp_t global tcom with_end_tac
+                        (fun t -> record_tac_complete (Some t) t) const path) p in
+                  let seff1 = (Evd.eval_side_effects (Proof.data p).sigma).seff_private in
+                  let seff2 = (Evd.eval_side_effects (Proof.data pstate1).sigma).seff_private in
+                  (* TODO: Temporary hack to prevent synth from being executed twice and producing output twice *)
+                  let is_synth =
+                    try
+                      let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic (Global.env ()) t) in
+                      let ist = Genintern.empty_glob_sign (Global.env ()) in
+                      let tcom = Tacintern.intern_pure_tactic ist tcom in
+                      let s = Pp.string_of_ppcmds (tac_pp tcom) in
+                    String.equal s "debug synth" || String.equal s "synth"
+                    with _ -> false in
+                  if seff1 <> seff2 || is_synth then
+                    pstate1, status1 else *)
+                  if Proof_equality.pstate_equal ~pstate1 ~pstate2 then
+                    pstate2, status2
+                  else
+                    (print_error ~pstate:p ~pstate1 ~pstate2;
+                    pstate1, status1)
               with
               | e when CErrors.noncritical e ->
+                let (pstate1,status1) =
+                  Pfedit.solve n info
+                    (set_benchmarked () <*>
+                    hide_interp_t global tcom with_end_tac
+                      (fun t -> record_tac_complete (Some t) t) const path) p in
                 let msg = Pp.(str "Tactician's tactical decomposition crashed. Please report.") in
                 Feedback.msg_warning msg;
                 pstate1, status1
