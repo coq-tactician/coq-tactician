@@ -28,8 +28,11 @@ jobs:
               opam repo add archive git+https://github.com/ocaml/opam-repository-archive
               opam repo add custom-archive https://github.com/LasseBlaauwbroek/custom-archive.git
               opam pin add -n -y -k path coq-tactician coq-tactician/
+              opam unpin coq
+              opam remove coq
               opam update -y
-              opam reinstall -y -j 2 coq.8.11.dev
+              opam install -y -j 2 coq.8.11.dev
+              # opam reinstall -y -j 2 coq.8.11.dev
               opam install -y -j 2 coq-tactician
             endGroup
           script: |
