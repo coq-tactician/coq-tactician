@@ -18,6 +18,7 @@ jobs:
           install: |
             startGroup "Install dependencies"
               opam repo add coq-extra-dev https://coq.inria.fr/opam/extra-dev
+              opam repo add archive git+https://github.com/ocaml/opam-repository-archive
               opam pin add -n -y -k path $PACKAGE $WORKDIR
               opam update -y
               opam install -y -j 2 -t $PACKAGE --deps-only
