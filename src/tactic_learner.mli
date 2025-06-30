@@ -17,6 +17,9 @@ module type TacticianStructures = sig
   type proof_state
   val proof_state_hypotheses  : proof_state -> named_context
   val proof_state_goal        : proof_state -> term
+  val proof_state_evar        : proof_state -> Evar.t
+  val proof_state_sigma       : proof_state -> Evd.evar_map
+  val proof_state_dependent   : proof_state -> Evar.t -> proof_state
   val proof_state_equal       : proof_state -> proof_state -> bool
   val proof_state_independent : proof_state -> bool
 
@@ -28,6 +31,12 @@ module type TacticianStructures = sig
   val tactic_local_variables : tactic -> id list (* TODO: Add global variables *)
   val tactic_substitute      : tactic -> id_map -> tactic
   val tactic_globally_equal  : tactic -> tactic -> bool
+
+  type tactic_result
+  val tactic_result_term      : tactic_result -> term
+  val tactic_result_sigma     : tactic_result -> Evd.evar_map
+  val tactic_result_dependent : tactic_result -> Evar.t -> proof_state
+  val tactic_result_states    : tactic_result -> proof_state list
 
   (* Proof tree with sharing. Behaves as a Directed Acyclic Tree. *)
   type proof_dag =
@@ -45,7 +54,7 @@ module type TacticianStructures = sig
     { parents  : (proof_state * proof_step) list
     ; siblings : proof_dag
     ; before   : proof_state
-    ; after    : proof_state list }
+    ; result   : tactic_result }
 
   type prediction =
     { confidence : float

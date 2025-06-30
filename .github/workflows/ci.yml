@@ -17,6 +17,8 @@ jobs:
           ocaml_version: '4.11-flambda'
           install: |
             startGroup "Install dependencies"
+              echo "PACKAGE=$PACKAGE"
+              echo "WORKDIR=$WORKDIR"
               opam repo add coq-extra-dev https://coq.inria.fr/opam/extra-dev
               opam pin add -n -y -k path $PACKAGE $WORKDIR
               opam update -y

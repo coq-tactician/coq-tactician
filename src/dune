@@ -28,6 +28,7 @@
    tactic_one_variable
    tactic_annotate
    cook_tacexpr
+   discharge_tacexpr
    mapping_helpers
    map_all_the_witnesses
    map_all_the_things
