@@ -90,6 +90,9 @@ for f in $files; do
 done
 IFS="$OIFS"
 
+# Corner case: A file .bin file that is unrelated to our dataset files
+rm -f "$datasetname/dataset/0install-solver.2.18/src/tests/data/dpkg/pkgcache.bin"
+
 echo "Deleting empty directories"
 find $datasetname/dataset -type d -empty -delete
 
@@ -131,6 +134,9 @@ mksquashfs "$datasetname/dataset/" "$datasetname/dataset.squ" -comp lz4 -Xhc
 
 echo "Deleting contents of dataset/"
 rm -rf "$datasetname"/dataset/*
+
+echo "Checking dataset"
+pytact-check "$datasetname/dataset.squ"
 
 echo "Creating final archive"
 tar cf - "$datasetname/" | xz --best -T0 -v -z - > "$datasetname.tar.xz"
