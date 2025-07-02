@@ -90,7 +90,7 @@ let rec with_let_prefix ltac_defs tac =
     | [] -> acc
     | ltacset::rem ->
       let set_occurs = List.fold_right (fun (id, _) b ->
-          b || Names.KNset.mem id ids) ltacset false in
+          b || Names.KerName.Set.mem id ids) ltacset false in
       if set_occurs then
         prefix (ltac_to_let rem ltacset acc) rem else
         prefix acc rem in

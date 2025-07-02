@@ -13,20 +13,20 @@ module TacticFinderMapper = MakeMapper(TacticFinderDef)
 open TacticFinderDef
 
 let contains_ml_tactic ml t =
-  let seen = ref KNset.empty in
+  let seen = ref KerName.Set.empty in
   let rec contains_ml_tactic_ltac k =
-    if KNset.mem k !seen then
+    if KerName.Set.mem k !seen then
       return ()
     else
       let tac = Tacenv.interp_ltac k in
-      seen := KNset.add k !seen;
+      seen := KerName.Set.add k !seen;
       map (fun _ -> ()) @@ TacticFinderMapper.glob_tactic_expr_map mapper tac
   and contains_ml_tactic_alias k =
-    if KNset.mem k !seen then
+    if KerName.Set.mem k !seen then
       return ()
     else
       let tac = Tacenv.interp_alias k in
-      seen := KNset.add k !seen;
+      seen := KerName.Set.add k !seen;
       map (fun _ -> ()) @@ TacticFinderMapper.glob_tactic_expr_map mapper tac.alias_body
   and mapper = { TacticFinderDef.default_mapper with
                  glob_tactic_arg = (fun a c -> (match a with

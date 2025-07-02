@@ -7,7 +7,7 @@ open Map_all_the_things
 
 module CookTacticDef = struct
   module M = WriterMonad
-      (struct type w = KNset.t let id = KNset.empty let comb = KNset.union end)
+      (struct type w = KerName.Set.t let id = KerName.Set.empty let comb = KerName.Set.union end)
   include MapDefTemplate (M)
 end
 module CookTacticMapper = MakeMapper(CookTacticDef)
@@ -18,7 +18,7 @@ let correct_kername id =
     let _ = Tacenv.interp_ltac id in return (ArgArg (None, id))
   with Not_found ->
     let kername_tolname id = CAst.make (Label.to_id (KerName.label id)) in
-    let+ () = M.tell (KNset.singleton id) in
+    let+ () = M.tell (KerName.Set.singleton id) in
     ArgVar (kername_tolname id)
 
 let mapper = { CookTacticDef.default_mapper with
@@ -40,7 +40,7 @@ let mapper = { CookTacticDef.default_mapper with
                      | TacAlias (id, args) ->
                        if Tacenv.check_alias id then return t else
                          let lid = CAst.make (Label.to_id (KerName.label id)) in
-                         let+ () = M.tell (KNset.singleton id) in
+                         let+ () = M.tell (KerName.Set.singleton id) in
                          TacArg (TacCall (CAst.make (ArgVar lid, args)))
                      | _ -> return t) }
 let rebuild t =
