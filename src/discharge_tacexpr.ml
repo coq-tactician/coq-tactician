@@ -19,7 +19,9 @@ module CookTacticDef = struct
                               pr_argument_type wit))
   let default wit = { raw = (fun _ -> warnProblem (ArgumentType wit); id)
                     ; glb = (fun _ -> warnProblem (ArgumentType wit); id)}
-  let with_binders ids' = M.local (fun ids -> List.fold_left (fun ids id -> Id.Set.add id ids) ids ids')
+  let with_binders ids' a cont =
+    map (fun x -> (fun x -> x), x) @@
+    M.local (fun ids -> List.fold_left (fun ids id -> Id.Set.add id ids) ids ids') @@ cont a
 end
 module CookTacticMapper = MakeMapper(CookTacticDef)
 open CookTacticDef
