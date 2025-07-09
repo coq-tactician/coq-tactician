@@ -1,4 +1,4 @@
-# The Tactictician
+# The Tactician
 ## A Seamless, Interactive Tactic Learner and Prover for Coq
 
 ![Tactician landing image](assets/landing.png)
@@ -72,9 +72,10 @@ that manifests itself in specific versions of Coq.
 Whenever a new Coq release candidate `8.xx` gets branched off upstream, a new branch `coq8.xx`
 will also be branched off from `coqdev` in Tactician.
 
-Tactician is currently not yet part of the test-suite of Coq, meaning that we don't get overlays
-when an API is changed upstream. Instead, a daily CI test is run to compile Tactician against
-the latest upstream `master` branch.
+The `coqdev` branch is part of Coq's test-suite, meaning that we get fixes when
+an API is changed upstream. Only a basic compilation test is run there.
+Additionally, a daily CI test is run in this repo to compile all Tactician
+branches against upstream Coq.
 
 In order to ensure some stability to develop Tactician, it's default branch does not move
 every time a new Coq version is released. However, we may still move the default branch once
