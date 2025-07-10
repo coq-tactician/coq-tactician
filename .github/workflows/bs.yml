@@ -25,8 +25,8 @@ jobs:
           opam repo add coq-core-dev https://coq.inria.fr/opam/core-dev
           opam repo add coq-extra-dev https://coq.inria.fr/opam/extra-dev
 
-      - name: Install Coq 8.11.2 with test dependencies
-        run: opam install -y -j 2 -t coq.8.11.2
+      # - name: Install Coq 8.11.2 with test dependencies
+      #   run: opam install -y -j 2 -t coq.8.11.2
 
       - name: Now try to install from the repo
         run: opam install . --deps-only --with-test
