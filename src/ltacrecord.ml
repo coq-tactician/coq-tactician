@@ -241,6 +241,7 @@ let section_notation_helper prods _e =
 (* TODO: Determining where we have to call this exactly is tricky business *)
 let load_plugins () =
   let open Mltop in
+  let module_is_known p = Findlib.is_recorded_package p in
   let plugins = [("coq-core.plugins.ssreflect", "coq-tactician.ssreflect-plugin")] in
   let load (dep, target) =
     if module_is_known dep && not (module_is_known target) then
