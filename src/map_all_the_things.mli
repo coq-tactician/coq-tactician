@@ -36,7 +36,7 @@ module type MapDef = sig
     ; variable : Id.t map
     ; qualid : (DirPath.t * Id.t) map
     (* Guaranteed not be at least partially qualified (otherwise variable is called) *)
-    ; constr_pattern : constr_pattern transformer
+    ; constr_pattern : uninstantiated_pattern transformer
     ; constr_expr : constr_expr_r transformer
     ; glob_constr : ([ `any ] glob_constr_r) transformer
     ; glob_constr_and_expr : Genintern.glob_constr_and_expr transformer
@@ -98,7 +98,7 @@ module MapDefTemplate (M: Monad.Def) : sig
     ; variable : Id.t map
     ; qualid : (DirPath.t * Id.t) map
     (* Guaranteed not be at least partially qualified (otherwise variable is called) *)
-    ; constr_pattern : constr_pattern transformer
+    ; constr_pattern : uninstantiated_pattern transformer
     ; constr_expr : constr_expr_r transformer
     ; glob_constr : ([ `any ] glob_constr_r) transformer
     ; glob_constr_and_expr : Genintern.glob_constr_and_expr transformer
@@ -156,7 +156,7 @@ module MakeMapper : functor (M : MapDef) -> sig
   open M
   val glob_constr_map : mapper -> glob_constr map
   val constr_expr_map : mapper -> constr_expr map
-  val constr_pattern_map : mapper -> constr_pattern map
+  val constr_pattern_map : mapper -> uninstantiated_pattern map
   val raw_tactic_expr_map : mapper -> raw_tactic_expr map
   val raw_tactic_arg_map : mapper -> raw_tactic_arg map
   val raw_atomic_tactic_map : mapper -> raw_atomic_tactic_expr map
