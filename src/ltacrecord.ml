@@ -245,7 +245,9 @@ let load_plugins () =
   let plugins = [("coq-core.plugins.ssreflect", "coq-tactician.ssreflect-plugin")] in
   let load (dep, target) =
     if module_is_known dep && not (module_is_known target) then
-      declare_ml_modules false [target] in
+      let interp = declare_ml_modules false [target] in
+      run_interp_fun interp
+  in
   if module_is_known "coq-tactician.record-plugin" then
     List.iter load plugins
 
