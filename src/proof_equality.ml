@@ -35,13 +35,13 @@ let compare_head_gen_leq_with ~goal_spine kind1 kind2 eq_evar leq_universes leq_
     eq_evar e1 e2 && CArray.equal (eq 0) (Array.of_list l1) (Array.of_list l2)
   | Const (c1,u1), Const (c2,u2) ->
     (* The args length currently isn't used but may as well pass it. *)
-    Constant.CanOrd.equal c1 c2 && leq_universes (GlobRef.ConstRef c1) nargs u1 u2
+    Constant.CanOrd.equal c1 c2 && leq_universes (Some (GlobRef.ConstRef c1, nargs)) u1 u2
   | Ind (c1,u1), Ind (c2,u2) ->
-    Ind.CanOrd.equal c1 c2 && leq_universes (GlobRef.IndRef c1) nargs u1 u2
+    Ind.CanOrd.equal c1 c2 && leq_universes (Some (GlobRef.IndRef c1, nargs)) u1 u2
   | Construct (c1,u1), Construct (c2,u2) ->
-    Construct.CanOrd.equal c1 c2 && leq_universes (GlobRef.ConstructRef c1) nargs u1 u2
-  | Case (_,p1,civ1,c1,bl1), Case (_,p2,civ2,c2,bl2) ->
-    eq 0 p1 p2 && eq 0 c1 c2 && CArray.equal (eq 0) bl1 bl2
+    Construct.CanOrd.equal c1 c2 && leq_universes (Some (GlobRef.ConstructRef c1, nargs)) u1 u2
+  | Case (_,p1,iv1,c1,bl1), Case (_,p2,iv2,c2,bl2) ->
+    eq 0 p1 p2 && eq_invert (eq 0) (leq_universes None) iv1 iv2 && eq 0 c1 c2 && CArray.equal (eq 0) bl1 bl2
   | Fix ((ln1, i1),(_,tl1,bl1)), Fix ((ln2, i2),(ids2,tl2,bl2)) ->
     Int.equal i1 i2 && CArray.equal Int.equal ln1 ln2
     && CArray.equal_norefl (eq 0) tl1 tl2 && CArray.equal_norefl (eq 0) bl1 bl2
@@ -69,7 +69,7 @@ let evars_equal evd1 evd2 (equal : (Evar.t * Evar.t) list) =
   let rec eq_constr_univs_test ~goal_spine t1 t2 =
     let t1 = EConstr.Unsafe.to_constr t1
     and t2 = EConstr.Unsafe.to_constr t2 in
-    let eq_universes _ _ u1 u2 =
+    let eq_universes _ u1 u2 =
       let u1 = normalize_universe_instance !evd_common u1 in
       let u2 = normalize_universe_instance !evd_common u2 in
       try evd_common := add_universe_constraints !evd_common
