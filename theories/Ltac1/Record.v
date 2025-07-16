@@ -74,7 +74,7 @@ Tactician Record Progress Keep.
     Note that setting this to 'Decompose' will not keep Tactician from using 'abstract' ever, because it could be
     part of a more complex expression (or inside of an ltac definition). This is better than nothing though.
  *)
-(* Tactician Record Abstract Keep.
+Tactician Record Abstract Keep.
 Tactician Record LetIn Keep.
 Tactician Record Match Keep.
 Tactician Record MatchGoal Decompose.
@@ -98,10 +98,10 @@ Tactician Record Reduce Decompose.
 Tactician Record Change Keep.
 Tactician Record Rewrite Decompose.
 Tactician Record RewriteMulti Decompose.
-Tactician Record Inversion Keep. *)
+Tactician Record Inversion Keep.
 
 
-Tactician Record Then Decompose.
+(* Tactician Record Then Decompose.
 Tactician Record Dispatch Decompose.
 Tactician Record Extend Decompose.
 Tactician Record Thens Decompose.
@@ -155,7 +155,7 @@ Tactician Record Reduce Keep.
 Tactician Record Change Keep.
 Tactician Record Rewrite Keep.
 Tactician Record RewriteMulti Keep.
-Tactician Record Inversion Keep.
+Tactician Record Inversion Keep. *)
 
 Export Unset Tactician RecordProofTerms.
 
