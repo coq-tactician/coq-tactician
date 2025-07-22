@@ -44,7 +44,7 @@ Tactician Register Tactic "intropattern_subst_r" intropattern subst <- X.
 
 Export Set Default Proof Mode "Tactician Ltac1".
 
-(* Tactician Record Then Decompose.
+Tactician Record Then Decompose.
 Tactician Record Dispatch Decompose.
 Tactician Record Extend Decompose.
 Tactician Record Thens Decompose.
@@ -98,10 +98,10 @@ Tactician Record Reduce Decompose.
 Tactician Record Change Keep.
 Tactician Record Rewrite Decompose.
 Tactician Record RewriteMulti Decompose.
-Tactician Record Inversion Keep. *)
+Tactician Record Inversion Keep.
 
 
-Tactician Record Then Decompose.
+(* Tactician Record Then Decompose.
 Tactician Record Dispatch Decompose.
 Tactician Record Extend Decompose.
 Tactician Record Thens Decompose.
@@ -155,7 +155,7 @@ Tactician Record Reduce Keep.
 Tactician Record Change Keep.
 Tactician Record Rewrite Keep.
 Tactician Record RewriteMulti Keep.
-Tactician Record Inversion Keep.
+Tactician Record Inversion Keep. *)
 
 Export Set Tactician RecordProofTerms.
 
