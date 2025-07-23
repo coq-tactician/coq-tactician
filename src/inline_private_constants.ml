@@ -39,30 +39,57 @@ let inline_tactic env t =
                } in
   TacticFinderMapper.glob_tactic_expr_map mapper t
 
-let inline env extra_ctx consts { outcomes; tactic; name; status; path } =
-  let rec inline_constr c = match Constr.kind c with
+let inline env extra_ctx extra_deps { outcomes; tactic; name; status; path; sec_vars } =
+  let rec inline_constr extra_substs_map c = match Constr.kind c with
     | Const (const, _u) ->
       if Environ.mem_constant const env then c else
         Constr.mkVar (Names.Label.to_id @@ Names.Constant.label const)
-    | _ -> Constr.map inline_constr c in
-  let inline_proof_state (ctx, goal) =
-    let ctx = List.map (Context.Named.Declaration.map_constr inline_constr) (ctx @ List.rev extra_ctx) in
-    let goal = inline_constr goal in
-    (ctx, goal) in
+    | Evar (ev, substs) ->
+      let extra_substs = Evar.Map.find ev extra_substs_map in
+      Constr.mkEvar (ev, List.append extra_substs substs)
+    | _ -> Constr.map (inline_constr extra_substs_map) c in
+  let single_proof_state_calc_changes { hyps; _ } =
+    let open Context.Named.Declaration in
+    let open Names in
+    (* We filter any inlined constants that refer to a hypothesis that does not exist.
+       Note that this can only happen when that hypothesis is a section variable/definition. *)
+    let all_vars = Id.Set.of_list @@ List.map get_id (extra_ctx @ hyps) in
+    let filtered_vars = List.fold_left (fun all (id, deps) ->
+        if Id.Set.subset deps all then all else Id.Set.remove id all) all_vars extra_deps in
+    let extra_ctx = List.rev @@ List.filter (fun pt -> Id.Set.mem (get_id pt) filtered_vars) extra_ctx in
+    let extra_substs = Array.of_list @@ List.map (fun pt -> Constr.mkVar @@ get_id pt) extra_ctx in
+    extra_substs, extra_ctx in
+  let inline_single_proof_state extra_substs_map extra_ctx { hyps; goal; evar; hyps_origin } =
+    let open Context.Named.Declaration in
+    let hyps, sec_hyps = CList.split_when
+        (fun pt -> Names.Id.Set.mem (Context.Named.Declaration.get_id pt) sec_vars) hyps in
+    let hyps = List.map (map_constr (inline_constr extra_substs_map)) (hyps @ extra_ctx @ sec_hyps) in
+    let goal = inline_constr extra_substs_map goal in
+    { hyps; goal; evar; hyps_origin } in
+  let inline_map map =
+    let changes = Evar.Map.map (fun ps -> ps, single_proof_state_calc_changes ps) map in
+    let substs = Evar.Map.map (fun (_, (x, _)) -> x) changes in
+    substs, Evar.Map.map (fun (ps, (_, extra_ctx)) -> inline_single_proof_state (Evar.Map.map Array.to_list substs) extra_ctx ps) changes in
+  let inline_proof_state (map, ustate, { evar; _ }) =
+    let _, map = inline_map map in
+    map, ustate, Evar.Map.find evar map in
   let rec inline_proof_dag = function
     | End -> End
     | Step step -> Step (inline_proof_step step)
   and inline_proof_step { executions; tactic } =
     { executions = List.map (fun (pse, psp) -> inline_proof_state pse, inline_proof_dag psp) executions
     ; tactic = tactic } in
-  let inline_outcome { parents; siblings; before; after } =
+  let inline_result (term, map, ustate, pss) =
+    let substs, map = inline_map map in
+    inline_constr (Evar.Map.map Array.to_list substs) term, map, ustate, List.map (fun { evar; _ } -> Evar.Map.find evar map) pss in
+  let inline_outcome { parents; siblings; before; result } =
     { parents = List.map (fun (pse, psp) -> inline_proof_state pse, inline_proof_step psp) parents
     ; siblings = inline_proof_dag siblings
     ; before = inline_proof_state before
-    ; after = List.map inline_proof_state after } in
+    ; result = inline_result result } in
   { outcomes = List.map inline_outcome outcomes
-  ; tactic = tactic_make @@ inline_tactic env @@ tactic_repr tactic
-  ; name; status; path }
+  ; tactic = Option.map (fun tac -> tactic_make @@ inline_tactic env @@ tactic_repr tac) tactic
+  ; name; status; path; sec_vars }
 
 let inline env sideff t =
   let open Declarations in
@@ -88,4 +115,9 @@ let inline env sideff t =
           | Def body -> LocalDef (id, body, const_type)
           | OpaqueDef _ -> LocalAssum (id, const_type)
         ) consts in
-      List.map (inline env extra_ctx consts) t
+      let rec collect_vars vars c = match Constr.kind c with
+        | Var id -> Id.Set.add id vars
+        | _ -> Constr.fold collect_vars vars c in
+      let extra_deps = List.map (fun pt -> get_id pt, fold_constr (fun c ids -> collect_vars ids c) pt Id.Set.empty)
+          extra_ctx in
+      List.map (inline env extra_ctx extra_deps) t
