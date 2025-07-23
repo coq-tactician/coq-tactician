@@ -1179,6 +1179,19 @@ let vernac_solve ~pstate g info tcom with_end_tac id =
         (* If the 'abstract' tactic was used, we should not run the tactic a second time.
             The reason for this is that it will cause the numbering of the _subproofx names to
             diverge. And since these numbers may be referenced later, we must keep this consistent. *)
+          (* TODO: Temporary hack to prevent synth from being executed twice and producing output twice *)
+          let is_synth =
+            try
+              let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic (Global.env ()) t) in
+              let ist = Genintern.empty_glob_sign (Global.env ()) in
+              let tcom = Tacintern.intern_pure_tactic ist tcom in
+              let s = Pp.string_of_ppcmds (tac_pp tcom) in
+            String.equal s "debug synth" || String.equal s "synth"
+            with _ -> false in
+          if is_synth then
+            let t = hide_interp_t (global, tcom, (fun t -> record_tac_complete (Some t) t), const, path) in
+            let pstate1 = ComTactic.solve ~pstate g ~info t ~with_end_tac in
+            pstate1 else
           let extracted_tactic : glob_tactic_expr ref = ref (CAst.make @@ TacId []) in
           let rtac_wrapper t = 
             extracted_tactic := t;
@@ -1187,6 +1200,13 @@ let vernac_solve ~pstate g info tcom with_end_tac id =
           try
             let t2 = hide_interp_t (global, tcom, rtac_wrapper, const, path) in
             let pstate2 =
+              (* Pfedit.solve n info
+                (set_benchmarked () <*>
+                  hide_interp_t global tcom with_end_tac
+                    rtac_wrapper const path) p in *)
+              ComTactic.solve ~pstate g ~info t2 ~with_end_tac in
+            if is_safe_decompose' !extracted_tactic then pstate2 else 
+            (* if false then pstate2, status2 else  *)
               (* TODO: Another dirty trick: We need to suppress any output generated during the
                   second run of the decomposed tactic. This is because some projects have IO-tests
                   that fail when things are printed twice. *)
@@ -1201,15 +1221,6 @@ let vernac_solve ~pstate g info tcom with_end_tac id =
               let original = !Topfmt.std_ft in
               Topfmt.std_ft := ignore_formatter ();
               Fun.protect ~finally:(fun () -> Topfmt.std_ft := original) @@ fun () ->
-              (* Pfedit.solve n info
-                (set_benchmarked () <*>
-                  hide_interp_t global tcom with_end_tac
-                    rtac_wrapper const path) p in *)
-              (* Feedback.msg_warning Pp.(str "record"); *)
-              ComTactic.solve ~pstate g ~info t2 ~with_end_tac in
-            (* if is_safe_decompose' !extracted_tactic then pstate2 else  *)
-            if is_safe_decompose' !extracted_tactic then pstate2 else 
-            (* if false then pstate2, status2 else  *)
               let t = hide_interp_t (global, tcom, (fun t -> record_tac_complete (Some t) t), const, path) in
               let pstate1 = ComTactic.solve ~pstate g ~info t ~with_end_tac in
                 (* Pfedit.solve n info
@@ -1218,16 +1229,7 @@ let vernac_solve ~pstate g info tcom with_end_tac id =
                     (fun t -> record_tac_complete (Some t) t) const path) p in *)
               let seff1 = (Evd.eval_side_effects (Proof.data @@ Declare.Proof.get pstate).sigma).seff_private in
               let seff2 = (Evd.eval_side_effects (Proof.data @@ Declare.Proof.get pstate1).sigma).seff_private in
-              (* TODO: Temporary hack to prevent synth from being executed twice and producing output twice *)
-              let is_synth =
-                try
-                  let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic (Global.env ()) t) in
-                  let ist = Genintern.empty_glob_sign (Global.env ()) in
-                  let tcom = Tacintern.intern_pure_tactic ist tcom in
-                  let s = Pp.string_of_ppcmds (tac_pp tcom) in
-                String.equal s "debug synth" || String.equal s "synth"
-                with _ -> false in
-              if seff1 <> seff2 || is_synth then
+              if seff1 <> seff2 then
                 pstate1 else
               if Proof_equality.pstate_equal ~pstate1:(Declare.Proof.get pstate1) ~pstate2:(Declare.Proof.get pstate2) then
                 pstate2
