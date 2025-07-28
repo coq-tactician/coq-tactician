@@ -70,7 +70,7 @@ let pr_decomposition = function
   | Discard -> str "Discard"
 
 let pr_ltac_use_default b =
-  if (snd b) then (* Bug: a space is inserted before "..." *) Pp.str ".." else Pp.mt ()
+  if (snd b).CAst.v then (* Bug: a space is inserted before "..." *) Pp.str ".." else Pp.mt ()
 
 open Attributes
 open Tacexpr
@@ -91,8 +91,8 @@ GRAMMAR EXTEND Gram
 
 (* TODO: A truly evil memoization trick is happening here *)
 VERNAC ARGUMENT EXTEND ltac_use_default_hack PRINTED BY { pr_ltac_use_default }
-| [ "." ] -> { (Random.int64 (Int64.max_int), false) }
-| [ "..." ] -> { (Random.int64 (Int64.max_int), true) }
+| [ "." ] -> { (Random.int64 (Int64.max_int), CAst.make ~loc false) }
+| [ "..." ] -> { (Random.int64 (Int64.max_int), CAst.make ~loc true) }
 END
 
 VERNAC { tactician_mode } EXTEND VernacSolveTactician STATE CUSTOM
