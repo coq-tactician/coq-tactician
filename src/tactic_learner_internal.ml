@@ -20,6 +20,9 @@ module type TacticianStructures = sig
   type proof_state
   val proof_state_hypotheses  : proof_state -> named_context
   val proof_state_goal        : proof_state -> term
+  val proof_state_evar        : proof_state -> Evar.t
+  val proof_state_sigma       : proof_state -> Evd.evar_map
+  val proof_state_dependent   : proof_state -> Evar.t -> proof_state
   val proof_state_equal       : proof_state -> proof_state -> bool
   val proof_state_independent : proof_state -> bool
 
@@ -32,13 +35,19 @@ module type TacticianStructures = sig
   val tactic_substitute      : tactic -> id Id.Map.t -> tactic
   val tactic_globally_equal  : tactic -> tactic -> bool
 
+  type tactic_result
+  val tactic_result_term      : tactic_result -> term
+  val tactic_result_sigma     : tactic_result -> Evd.evar_map
+  val tactic_result_dependent : tactic_result -> Evar.t -> proof_state
+  val tactic_result_states    : tactic_result -> proof_state list
+
   (* Proof tree with sharing. Behaves as a Directed Acyclic Tree. *)
   type proof_dag =
     | End
     | Step of proof_step
   and proof_step =
     { executions : (proof_state * proof_dag) list
-    ; tactic     : tactic }
+    ; tactic     : tactic option }
 
   type situation =
     { parents  : (proof_state * proof_step) list
@@ -48,7 +57,7 @@ module type TacticianStructures = sig
     { parents  : (proof_state * proof_step) list
     ; siblings : proof_dag
     ; before   : proof_state
-    ; after    : proof_state list }
+    ; result   : tactic_result }
 
   type prediction =
     { confidence : float
@@ -63,11 +72,29 @@ module TS = struct
   let term_sexpr t = constr2s t
   let term_repr t = t
 
-  type proof_state = named_context * term
+  type hyps_origin = Id.t Id.Map.t
+  type single_proof_state =
+    { hyps : named_context
+    ; goal : term
+    ; evar : Evar.t
+    ; hyps_origin : hyps_origin }
+  type proof_state = single_proof_state Evar.Map.t * UState.t * single_proof_state
+  type tactic_result = term * single_proof_state Evar.Map.t * UState.t * single_proof_state list
 
-  let proof_state_hypotheses ps = fst ps
+  let proof_state_hypotheses (_, _, { hyps; _ }) = hyps
+  let proof_state_goal (_, _, { goal; _}) = goal
+  let proof_state_evar (_, _, { evar; _}) = evar
+  let proof_state_hyps_origin (_, _, { hyps_origin; _}) = hyps_origin
+  let proof_state_dependent (map, ustate, _) var = map, ustate, Evar.Map.find var map
 
-  let proof_state_goal ps = snd ps
+  let proof_state_sigma ((map, ustate, _) : proof_state) =
+    Evar.Map.fold (fun e { hyps; goal; _} evd -> 
+        let evar_map, evar_t = Evd.new_pure_evar (Environ.val_of_named_context hyps) evd (EConstr.of_constr goal) in 
+        (* let  = snd @@ Evd.new_pure_evar (Environ.val_of_named_context hyps) evd (EConstr.of_constr goal) in  *)
+        Evd.add evd e @@ Evd.find_undefined (evar_map) (evar_t)) map
+        (* Evd.make_evar (Environ.val_of_named_context hyps) (EConstr.of_constr goal) *)
+        @@
+    Evd.set_universe_context Evd.empty ustate
 
   let proof_state_equal _ps1 _ps2 = false
   let proof_state_independent _ps = false
@@ -82,13 +109,25 @@ module TS = struct
   let tactic_substitute tac _ls = tac
   let tactic_globally_equal _tac1 _tac2 = false
 
+  let tactic_result_term (t, _, _, _) = t
+  let tactic_result_sigma (_, map, ustate, _) =
+    Evar.Map.fold (fun e { hyps; goal; _} evd ->
+        let evar_map, evar_t = Evd.new_pure_evar (Environ.val_of_named_context hyps) evd (EConstr.of_constr goal) in 
+        (* let  = snd @@ Evd.new_pure_evar (Environ.val_of_named_context hyps) evd (EConstr.of_constr goal) in  *)
+        Evd.add evd e @@ Evd.find_undefined (evar_map) (evar_t)) map
+        (* Evd.make_evar (Environ.val_of_named_context hyps) (EConstr.of_constr goal)) map  *)
+        @@
+    Evd.set_universe_context Evd.empty ustate
+  let tactic_result_dependent (_, map, ustate, _) var = map, ustate, Evar.Map.find var map
+  let tactic_result_states (_, map, ustate, ls) = List.map (fun ps -> map, ustate, ps) ls
+
   (* Proof tree with sharing. Behaves as a Directed Acyclic Tree. *)
   type proof_dag =
     | End
     | Step of proof_step
   and proof_step =
     { executions : (proof_state * proof_dag) list
-    ; tactic     : tactic }
+    ; tactic     : tactic option }
 
   type situation =
     { parents  : (proof_state * proof_step) list
@@ -98,7 +137,7 @@ module TS = struct
     { parents  : (proof_state * proof_step) list
     ; siblings : proof_dag
     ; before   : proof_state
-    ; after    : proof_state list }
+    ; result   : tactic_result }
 
   type prediction =
     { confidence : float
@@ -106,20 +145,100 @@ module TS = struct
     ; tactic     : tactic }
 end
 
-let calculate_deps sigma acc e =
-  let rec aux e acc =
-    if Evar.Set.mem e acc then acc else
-      Evar.Set.fold aux
-        (Evd.evars_of_filtered_evar_info sigma @@ Evd.find_undefined sigma e)
-        (Evar.Set.add e acc)
-  in aux e acc
+let evars_of_term sigma acc c =
+  let rec evrec acc c =
+    match EConstr.kind sigma c with
+    (* introduced in 8.17: deals with the SList stuff *)
+    | Evar (n, l) -> Evar.Map.add n l (Array.fold_left evrec acc @@ Array.of_list (Evd.expand_existential sigma (n,l)))
+    | _ -> EConstr.fold sigma evrec acc c
+  in
+  evrec acc c
+
+let evars_of_named_context sigma acc nc =
+  Context.Named.fold_outside
+    (Context.Named.Declaration.fold_constr (fun constr acc -> evars_of_term sigma acc constr))
+    nc
+    ~init:acc
+
+let evars_of_filtered_evar_info sigma acc evi =
+    let acc = evars_of_term sigma acc Evd.(evar_concl evi) in
+    let acc = match Evd.evar_body evi with
+     | Evar_empty -> acc
+     | Evar_defined b -> evars_of_term sigma acc b in
+    evars_of_named_context sigma acc (Evd.evar_filtered_context evi)
+
+let update_hyps_origin sigma hyps_origin substs hyps =
+  let dest = Array.map
+      (fun c ->
+         try
+           let hyp = EConstr.destVar sigma c in
+           Names.Id.Map.find_opt hyp hyps_origin
+         with Constr.DestKO -> None) substs in
+  List.fold_left2 (fun m source dest ->
+      match dest with
+      | None -> m
+      | Some dest -> Names.Id.Map.add (Context.Named.Declaration.get_id source) dest m)
+    Names.Id.Map.empty hyps (Array.to_list dest)
+
+let calculate_deps sigma acc e hyps_origin =
+  let rec aux e hyps_origin acc =
+    if Evar.Map.mem e acc then acc else
+      let evars = evars_of_filtered_evar_info sigma Evar.Map.empty @@ Evd.find_undefined sigma e in
+      let evars = Evar.Map.mapi (fun e substs ->
+          update_hyps_origin sigma hyps_origin substs
+            (Evd.evar_filtered_context @@ Evd.find_undefined sigma e)) (Evar.Map.mapi (fun e l -> Array.of_list (Evd.expand_existential sigma (e,l))) evars) in
+      Evar.Map.fold aux
+        evars
+        (Evar.Map.add e hyps_origin acc)
+  in aux e hyps_origin acc
+
+let evar_to_proof_state sigma evar hyps_origin =
+  let info = Evd.find_undefined sigma evar in
+  let to_term t = EConstr.to_constr ~abort_on_undefined_evars:false sigma t in
+  let hyps = List.map (Tactician_util.map_named to_term) @@ Evd.evar_filtered_context info in
+  let goal = to_term @@ Evd.evar_concl info in
+  TS.{ hyps; goal; evar; hyps_origin }
+
+type parent_info =
+  { hyps_origin : Names.Id.t Names.Id.Map.t
+  ; parent_goal : Proofview.Goal.t }
+let parent_info_field : parent_info Proofview_monad.StateStore.field = Proofview_monad.StateStore.field ()
+
+let get_hyps_origin ps =
+  let state = Goal.state ps in
+  match Proofview_monad.StateStore.get state parent_info_field with
+  | None -> Names.Id.Map.empty
+  | Some { hyps_origin; _ } -> hyps_origin
 
 let goal_to_proof_state ps =
-  let map = Goal.sigma ps in
-  let to_term t = EConstr.to_constr ~abort_on_undefined_evars:false map t in
-  let goal = to_term (Goal.concl ps) in
-  let hyps = EConstr.Unsafe.to_named_context (Proofview.Goal.hyps ps) in
-  (hyps, goal)
+  let e = Goal.goal ps in
+  let sigma = Goal.sigma ps in
+  let hyps_origin = get_hyps_origin ps in
+  let ctx = calculate_deps sigma Evar.Map.empty e hyps_origin in
+  let ctx = Evar.Map.mapi (evar_to_proof_state sigma) ctx in
+  ctx, Evd.evar_universe_context sigma, Evar.Map.find e ctx
+
+let make_result before term sigma pss =
+  let evars = evars_of_term sigma Evar.Map.empty term in
+  let hyps_origin = get_hyps_origin before in
+  let evars = Evar.Map.mapi (fun e substs ->
+      update_hyps_origin sigma hyps_origin substs
+        (Evd.evar_filtered_context @@ Evd.find_undefined sigma e)) (Evar.Map.mapi (fun e l -> Array.of_list (Evd.expand_existential sigma (e,l)))  evars) in
+  let evars = Evar.Map.fold (fun e ho acc -> calculate_deps sigma acc e ho) evars Evar.Map.empty in
+  (* NOTE: This should not be necessary, because all proof states should be reachable from the proof term.
+     However, Coq8.11 contains some tactics that wrongly associate some proof states to the wrong tactic.
+     In addition the `unshelve` tactic is screwed up. *)
+  let evars = List.fold_left
+      (fun acc ps -> calculate_deps sigma acc (Goal.goal ps) (get_hyps_origin ps)) evars pss in
+  let evars = Evar.Map.mapi (evar_to_proof_state sigma) evars in
+  let term = EConstr.to_constr ~abort_on_undefined_evars:false sigma term in
+  term, evars, Evd.evar_universe_context sigma, List.map (fun ps -> Evar.Map.find (Goal.goal ps) evars) pss
+
+let make_result_dummy (_before : Proofview.Goal.t) (term : EConstr.t)
+    (sigma : Evd.evar_map) (_pss : Proofview.Goal.t list) =
+  let term = EConstr.to_constr ~abort_on_undefined_evars:false sigma term in
+  let ustate = Evd.evar_universe_context sigma in
+  (term, Evar.Map.empty, ustate, [])
 
 type data_status =
   | Original
@@ -129,14 +248,15 @@ type data_status =
 
 type origin = KerName.t * Libnames.full_path * data_status
 
-type data_in = { outcomes : TS.outcome list; tactic : TS.tactic ; name : Constant.t; status : data_status; path : Libnames.full_path }
+type data_in = { outcomes : TS.outcome list; tactic : TS.tactic option ; name : Constant.t; status : data_status; path : Libnames.full_path; sec_vars : Names.Id.Set.t }
 
 module type TacticianOnlineLearnerType =
   functor (TS : TacticianStructures) -> sig
     open TS
     type model
     val empty    : unit -> model
-    val learn    : model -> origin -> outcome list -> tactic -> model (* TODO: Add lemma dependencies *)
+    (* Sometimes we are unable to trace which tactic was executed. Then it is None *)
+    val learn    : model -> origin -> outcome list -> tactic option -> model (* TODO: Add lemma dependencies *)
     val predict  : model -> situation list -> prediction IStream.t (* TODO: Add global environment *)
     val evaluate : model -> outcome -> tactic -> float * model
   end
@@ -145,17 +265,24 @@ module type TacticianOfflineLearnerType =
   functor (TS : TacticianStructures) -> sig
     open TS
     type model
-    val add      : origin -> outcome list -> tactic -> unit (* TODO: Add lemma dependencies *)
+    (* Sometimes we are unable to trace which tactic was executed. Then it is None *)
+    val add      : origin -> outcome list -> tactic option -> unit (* TODO: Add lemma dependencies *)
     val train    : unit -> model
     val predict  : model -> situation list -> prediction IStream.t (* TODO: Add global environment *)
     val evaluate : model -> outcome -> tactic -> float
   end
 
 type functional_learner =
-  { learn : origin -> TS.outcome list -> TS.tactic -> functional_learner
+  { learn : origin -> TS.outcome list -> TS.tactic option -> functional_learner
   ; predict : unit -> TS.situation list -> TS.prediction IStream.t
   ; evaluate : TS.outcome -> TS.tactic -> functional_learner * float }
 
+type imperative_learner =
+  { imp_learn : origin -> TS.outcome list -> TS.tactic option -> unit
+  ; imp_predict : unit -> TS.situation list -> TS.prediction IStream.t
+  ; imp_evaluate : TS.outcome -> TS.tactic -> float
+  ; functional : unit -> functional_learner }
+  
 let new_learner (module Learner : TacticianOnlineLearnerType) =
   let module Learner = Learner(TS) in
   let rec functional model =
