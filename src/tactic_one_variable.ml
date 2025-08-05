@@ -18,7 +18,7 @@ module OneVariableDef = struct
         let comb (ls1, b1) (ls2, b2) = List.append ls1 ls2, b1 && b2 end)
       (struct type r = Id.t list end)
   include MapDefTemplate (M)
-  let with_binders ids = M.local (fun ids' -> (ids@ids'))
+  let with_binders ids a cont = map (fun x -> (fun x -> x), x) @@ M.local (fun ids' -> ids@ids') @@ cont a
 end
 module OneVariableMapper = MakeMapper(OneVariableDef)
 open OneVariableDef
