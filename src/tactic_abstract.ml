@@ -7,7 +7,7 @@ module M = ReaderStateMonad
 module AbstractDef = struct
   include MapDefTemplate(M)
   open M
-  let with_binders ids x = local (fun ids' -> (ids@ids')) x
+  let with_binders ids a cont = map (fun x -> (fun x -> x), x) @@ M.local (fun ids' -> ids@ids') @@ cont a
 end
 module AbstractMapper = MakeMapper(AbstractDef)
 open AbstractDef
@@ -31,7 +31,6 @@ module M2 = WriterMonad
   (struct type w = Constant.t list let comb = List.append let id = [] end)
 module ConstantsDef = struct
   include MapDefTemplate(M2)
-  let with_binders _ids x = x
 end
 module ConstantsMapper = MakeMapper(ConstantsDef)
 open ConstantsDef

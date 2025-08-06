@@ -6,8 +6,16 @@
  (deps tactician-patch.in tactician.ml.in)
  (action (run opam config subst %{targets})))
 
+(rule ; Extra step on Windows: Remove carriage returns that are introduced by 'opam config subst'
+ (target tactician-patch-no-carriage)
+ (deps tactician-patch)
+ (action
+  (with-stdout-to tactician-patch-no-carriage
+   (with-stdin-from tactician-patch
+    (run tr -d '\r')))))
+
 (install
- (files tactician-patch)
+ (files (tactician-patch-no-carriage as tactician-patch))
  (section libexec)
  (package coq-tactician)
 )

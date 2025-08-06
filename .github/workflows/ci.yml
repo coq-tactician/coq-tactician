@@ -17,7 +17,10 @@ jobs:
           ocaml_version: '4.13-flambda'
           install: |
             startGroup "Install dependencies"
+              echo "PACKAGE=$PACKAGE"
+              echo "WORKDIR=$WORKDIR"
               opam repo add coq-extra-dev https://coq.inria.fr/opam/extra-dev
+              opam repo add archive git+https://github.com/ocaml/opam-repository-archive
               opam pin add -n -y -k path $PACKAGE $WORKDIR
               opam remove coq-stdlib -y # Make sure we can build without stdlib
               opam update -y
