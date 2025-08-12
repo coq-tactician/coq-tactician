@@ -157,5 +157,5 @@ Tactician Record Rewrite Keep.
 Tactician Record RewriteMulti Keep.
 Tactician Record Inversion Keep. *)
 
-#[export] Set Tactician RecordProofTerms.
+#[export] Unset Tactician RecordProofTerms.
 
