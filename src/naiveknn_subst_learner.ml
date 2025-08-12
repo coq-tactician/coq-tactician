@@ -45,7 +45,7 @@ module NaiveKnnSubst (SF : sig type second_feat end) = functor (TS : TacticianSt
       | Named.Declaration.LocalDef (_, _, typ) -> typ
 
     let tactic_simplified_hash ctx tac =
-      let tac = Tactic_substitute.tactic_substitute (fun id ->
+      let tac = Tactic_substitute.alpha_convert (fun id ->
           match find_decl ctx id with
           | None -> Id.of_string "__knnpl"
           | Some _ -> id)
@@ -74,7 +74,10 @@ module NaiveKnnSubst (SF : sig type second_feat end) = functor (TS : TacticianSt
       {entries = comb::purgedentries; length = l; frequencies = newfreq}
 
     let learn db _status outcomes tac ps_to_feat ctx_to_feat =
-      List.fold_left (fun db out -> add db out.before tac ps_to_feat ctx_to_feat) db outcomes
+      match tac with
+      | None -> db
+      | Some tac ->
+        List.fold_left (fun db out -> add db out.before tac ps_to_feat ctx_to_feat) db outcomes
 
     let remove_dups ranking =
       let ranking_map = List.fold_left
@@ -118,7 +121,7 @@ module NaiveKnnSubst (SF : sig type second_feat end) = functor (TS : TacticianSt
                 | [] -> id
                 | (_, id)::_ -> id
             in
-            let tactic = tactic_make (Tactic_substitute.tactic_substitute subst (tactic_repr obj)) in
+            let tactic = tactic_make (Tactic_substitute.alpha_convert subst (tactic_repr obj)) in
             {confidence = Float.neg_infinity; focus = 0; tactic} in
         let out = List.map (fun (a, entry) -> { confidence = a; focus = 0; tactic = entry.obj }) sorted in
         let subst_stream = IStream.map
