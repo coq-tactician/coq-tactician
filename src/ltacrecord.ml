@@ -4,7 +4,6 @@ open Util
 open Tactician_util
 open Tacexpr
 open Tacenv
-open Geninterp
 open Tactic_learner_internal
 open TS
 open Tactic_annotate
@@ -24,6 +23,14 @@ let global_record =
      ~key:["Tactician"; "Record"] ~value:true ())
   .get
 
+(* let record_terms = ref true *)
+
+let record_terms = 
+  (Goptions.declare_bool_option_and_ref
+     ~key:["Tactician"; "RecordProofTerms"] ~value:true ())
+  .get
+
+
 let _ = Random.self_init ()
 
 (* TODO: In interactive mode this is a memory leak, but it seems difficult to properly clean this table *)
@@ -32,7 +39,7 @@ type semilocaldb = data_in list
 let int64_to_knn : (Int64.t, semilocaldb * exn option * Safe_typing.private_constants) Hashtbl.t =
   Hashtbl.create 10
 
-let subst_outcomes (s, { outcomes; tactic; name; status=_; path }) =
+let subst_outcomes (s, { outcomes; tactic; name; status=_; path; sec_vars }) =
   let subst_tac tac =
     let tac = tactic_repr tac in
     TS.tactic_make (Tacsubst.subst_tactic s tac) in
@@ -45,18 +52,26 @@ let subst_outcomes (s, { outcomes; tactic; name; status=_; path }) =
         | Named.Declaration.LocalDef (id, term, typ) ->
           Named.Declaration.LocalDef (id, subst_mps s term, subst_mps s typ)
       ) in
-  let subst_pf (hyps, g) = Mod_subst.(subst_named_context hyps, subst_mps s g) in
+  let subst_single_pf { hyps; goal; evar; hyps_origin } =
+    { hyps = subst_named_context hyps; goal = Mod_subst.subst_mps s goal; evar; hyps_origin } in
+  (* let subst_pf (sigma, ustate, ps) = Evar.Map.map subst_single_pf sigma, ustate, subst_single_pf ps in *)
+  let subst_pf (sigma, ustate, ps) = if record_terms () then Evar.Map.map subst_single_pf sigma, ustate, subst_single_pf ps else sigma, ustate, subst_single_pf ps in
   let rec subst_pd = function
     | End -> End
     | Step ps -> Step (subst_ps ps)
   and subst_ps {executions; tactic} =
     { executions = List.map (fun (ps, pd) -> subst_pf ps, subst_pd pd) executions
-    ; tactic = subst_tac tactic } in
-  let outcomes = List.map (fun {parents; siblings; before; after} ->
+    ; tactic = Option.map subst_tac tactic } in
+  let subst_result (term, sigma, ustate, pss) =
+    Mod_subst.subst_mps s term,
+    Evar.Map.map subst_single_pf sigma,
+    ustate,
+    List.map subst_single_pf pss in
+  let outcomes = List.map (fun { parents; siblings; before; result } ->
       { parents = List.map (fun (psa, pse) -> (subst_pf psa, subst_ps pse)) parents
       ; siblings = subst_pd siblings
       ; before = subst_pf before
-      ; after = List.map subst_pf after }) outcomes in
+      ; result = subst_result result }) outcomes in
   let name = Mod_subst.subst_constant s name in
   let path' =
     (* TODO: This is not ideal, but seems to work in practice *)
@@ -69,9 +84,8 @@ let subst_outcomes (s, { outcomes; tactic; name; status=_; path }) =
         id :: DirPath.repr dp
       | MPdot (mp, l) -> Label.to_id l :: modpath_to_dirpath mp in
     Libnames.make_path (DirPath.make @@ modpath_to_dirpath mp) @@ Label.to_id id in
-
-  { outcomes; name; tactic = subst_tac tactic
-  ; status = Substituted path; path = path' }
+  { outcomes; name; tactic = Option.map subst_tac tactic
+  ; status = Substituted path; path = path'; sec_vars }
 
 let tmp_ltac_defs = Summary.ref ~name:"TACTICIANTMPSECTION" []
 let in_section_ltac_defs : (Names.KerName.t * glob_tactic_expr) list -> Libobject.obj =
@@ -96,20 +110,25 @@ let rec with_let_prefix ltac_defs tac =
         prefix acc rem in
   prefix tac ltac_defs
 
-let rebuild_outcomes { outcomes; tactic; name; status=_; path } =
+let rebuild_outcomes { outcomes; tactic; name; status=_; path; sec_vars } =
+  let sec_vars =
+    Names.Id.Set.inter sec_vars @@
+    Names.Id.Set.of_list @@
+    List.map Context.Named.Declaration.get_id @@ Environ.named_context (Global.env ()) in
   let rebuild_tac tac = tactic_make (with_let_prefix !tmp_ltac_defs (tactic_repr tac)) in
   let rec rebuild_pd = function
     | End -> End
     | Step ps -> Step (rebuild_ps ps)
   and rebuild_ps {executions; tactic} =
     { executions = List.map (fun (ps, pd) -> ps, rebuild_pd pd) executions
-    ; tactic = rebuild_tac tactic } in
-  let outcomes = List.map (fun {parents; siblings; before; after} ->
+    ; tactic = Option.map rebuild_tac tactic } in
+  let outcomes = List.map (fun { parents; siblings; before; result } ->
       { parents = List.map (fun (psa, pse) -> (psa, rebuild_ps pse)) parents
       ; siblings = rebuild_pd siblings
-      ; before; after }) outcomes in
-  { outcomes; tactic = rebuild_tac tactic
-  ; name; status = Discharged path; path = Lib.make_path @@ Libnames.basename path }
+      ; before; result }) outcomes in
+  { outcomes; tactic = Option.map rebuild_tac tactic
+  ; name; status = Discharged path; path = Lib.make_path @@ Libnames.basename path
+  ; sec_vars }
 
 let expmod_constr info c =
   let c = Cooking.abstract_as_body info c in
@@ -122,12 +141,12 @@ let expmod_constr info c =
       | Names.Name.Name id -> id)) rels in
   Vars.substl args c
 
-let discharge_outcomes senv { outcomes; tactic; name; status; path } =
-  try
-    let sections = Safe_typing.sections_of_safe_env senv in
-    let env = Safe_typing.env_of_safe_env senv in
-    let discharge_name =
-      (* TODO: We use the discharging info of the constant corresponding to the recorded proof
+let discharge_outcomes senv { outcomes; tactic; name; status; path; sec_vars } =
+  let sections = Safe_typing.sections_of_safe_env senv in
+  let env = Safe_typing.env_of_safe_env senv in
+  (* let modlist = Section.replacement_context env @@ Option.get sections in *)
+  let discharge_name =
+    (* TODO: We use the discharging info of the constant corresponding to the recorded proof
          to discharge the proof states. However, for constants generated by program obligations
          this does not work, because the obligation system performs a tree-shaking step that
          removes unneeded hypotheses. This can make the discharging information unsuitable.
@@ -145,52 +164,76 @@ let discharge_outcomes senv { outcomes; tactic; name; status; path } =
         else name
       else
         name in
+  let irrelevantctx =
+      if Environ.mem_constant discharge_name env then
+        let constantctx = Names.Id.Set.of_list @@
+          List.map Context.Named.Declaration.get_id @@ (Environ.lookup_constant discharge_name env).const_hyps in
+        Some (Names.Id.Set.filter (fun x -> not @@ Names.Id.Set.mem x constantctx) @@ sec_vars)
+      else None in
+  match irrelevantctx with
+  | None -> None
+  | Some irrelevantctx ->
+    let is_relevant hyps_origin hyp =
+      Option.default true @@ Option.map (fun orig ->
+          not @@ Names.Id.Set.mem orig irrelevantctx) @@
+      Names.Id.Map.find_opt (Context.Named.Declaration.get_id hyp) hyps_origin in
+    let mk_mask hyps_origin hyps = List.map (is_relevant hyps_origin) hyps in
     let info = Section.segment_of_constant discharge_name @@ Option.get sections in
     let cache = Cooking.create_cache info in
-    let secctx = Environ.named_context env in
-    let discharge_name =
-      (* TODO: We use the discharging info of the constant corresponding to the recorded proof
-           to discharge the proof states. However, for constants generated by program obligations
-           this does not work, because the obligation system performs a tree-shaking step that
-           removes unneeded hypotheses. This can make the discharging information unsuitable.
-           As a hacky workaround, we instead use the discharging information of the constant that
-           generated the obligation. *)
-      let name_str = Names.Label.to_string @@ Names.Constant.label name in
-      if Str.string_match (Str.regexp "^\\(.*\\)_obligation_[0-9]*$") name_str 0 then
-        let obligation_parent = Str.matched_group 1 name_str in
-        let obligation_parent =
-          if Str.string_match (Str.regexp "^\\(.*\\)_obligations$") obligation_parent 0 then
-            Str.matched_group 1 obligation_parent else obligation_parent in
-        let obligation_parent = Names.Constant.change_label name @@ Names.Label.make obligation_parent in
-        if Environ.mem_constant obligation_parent env then
-          obligation_parent
-        else name
-      else
-        name in
-    let constantctx = if Environ.mem_constant discharge_name env
-      then Names.Id.Set.of_list @@
-        List.map Context.Named.Declaration.get_id @@ (Environ.lookup_constant discharge_name env).const_hyps
-      else raise Not_found in
-    let irrelevantctx = Names.Id.Set.of_list @@ List.filter
-        (fun x -> not @@ Names.Id.Set.mem x constantctx) @@ List.map Context.Named.Declaration.get_id secctx in
-    let discharge_constr t = expmod_constr cache t in
-    let discharge_proof_state (ctx, concl) =
-      List.map (Tactician_util.map_named discharge_constr) @@
-      List.filter (fun x -> not @@ Names.Id.Set.mem (Context.Named.Declaration.get_id x) irrelevantctx) ctx,
-      discharge_constr concl in
+    let discharge_constr sigma masks t =
+      let t = expmod_constr cache t in
+      let rec fix_evars c =
+        match Constr.kind c with
+        | Constr.Evar (e, subst) ->
+          (* Introduced in 8.17: SList adaptation *)
+          let new_args = Array.filter_with (Evar.Map.find e masks) (Array.of_list (Evd.expand_existential0 sigma (e, subst))) in
+          Constr.of_kind (Constr.Evar (e, SList.of_full_list (List.map fix_evars @@ Array.to_list new_args)))
+        | _ -> Constr.map fix_evars c in
+      fix_evars t in
+    let discharge_tactic t ctx evd =
+      let t = tactic_repr t in
+      let env = Environ.push_named_context ctx @@ Environ.reset_context env in
+      tactic_make @@ Discharge_tacexpr.discharge t env evd cache in
+    let discharge_single_proof_state sigma masks { hyps; goal; evar; hyps_origin } =
+      { hyps = List.map (Tactician_util.map_named (discharge_constr sigma masks)) @@
+           List.filter (is_relevant hyps_origin) hyps
+      ; goal = discharge_constr sigma masks goal 
+      ; evar; hyps_origin } in
+    let discharge_proof_state (map, ustate, { evar; _ }) =
+      let masks = Evar.Map.map (fun { hyps; hyps_origin;  _ } -> mk_mask hyps_origin hyps) map in
+      let sigma = Evar.Map.fold (fun e { hyps; goal; _} evd -> 
+        let evar_map, evar_t = Evd.new_pure_evar ~relevance:(EConstr.ERelevance.relevant) (Environ.val_of_named_context hyps) evd (EConstr.of_constr goal) in 
+        (* let  = snd @@ Evd.new_pure_evar (Environ.val_of_named_context hyps) evd (EConstr.of_constr goal) in  *)
+        Evd.add evd e @@ Evd.find_undefined (evar_map) (evar_t)) map
+        (* Evd.make_evar (Environ.val_of_named_context hyps) (EConstr.of_constr goal) *)
+        @@ Evd.set_universe_context Evd.empty ustate in
+      let map = Evar.Map.map (discharge_single_proof_state sigma masks) map in
+      map, ustate, Evar.Map.find evar map in
     let rec discharge_pd = function
       | End -> End
       | Step ps -> Step (discharge_ps ps)
     and discharge_ps {executions; tactic} =
       { executions = List.map (fun (ps, pd) -> discharge_proof_state ps, discharge_pd pd) executions
-      ; tactic } in
-    let outcomes = List.map (fun {parents; siblings; before; after} ->
+      ; tactic = if executions = [] then tactic else
+            Option.map (fun t -> discharge_tactic t
+                           (Tactic_learner_internal.TS.proof_state_hypotheses (fst @@ List.hd executions))
+                           (Tactic_learner_internal.TS.proof_state_sigma (fst @@ List.hd executions))) tactic } in
+    let discharge_result ((term, map, ustate, pss) as tr)=
+      let masks = Evar.Map.map (fun { hyps; hyps_origin; _ } -> mk_mask hyps_origin hyps) map in
+
+      let sigma = tactic_result_sigma tr in
+      let map = Evar.Map.map (discharge_single_proof_state sigma masks) map in
+      discharge_constr sigma masks term, map, ustate, List.map (fun { evar; _ } -> Evar.Map.find evar map) pss in
+    let tactic = if outcomes = [] then tactic else
+        Option.map (fun t -> discharge_tactic t
+                       (Tactic_learner_internal.TS.proof_state_hypotheses (List.hd outcomes).before)
+                       (Tactic_learner_internal.TS.proof_state_sigma (List.hd outcomes).before)) tactic in
+    let outcomes = List.map (fun {parents; siblings; before; result} ->
         { parents = List.map (fun (psa, pse) -> (psa, discharge_ps pse)) parents
         ; siblings = discharge_pd siblings
         ; before = discharge_proof_state before
-        ; after = List.map discharge_proof_state after }) outcomes in
-    Some { outcomes; tactic; name; status; path }
-  with Not_found -> None
+        ; result = discharge_result result }) outcomes in
+    Some { outcomes; tactic; name; status; path; sec_vars }
 
 let section_ltac_helper bodies =
   tmp_ltac_defs := []; (* Safe to discard tmp state from old section discharge *)
@@ -260,9 +303,9 @@ let () = Goptions.declare_bool_option load_plugin_hack_option
 
 let in_db : id -> data_in -> Libobject.obj =
   Libobject.(declare_named_object { (default_object "LTACRECORD") with
-                              cache_function = (fun ((path, kn),({ outcomes; tactic; name=_; status; path=_ } : data_in)) ->
+                              cache_function = (fun ((path, kn),({ outcomes; tactic; name=_; status; path=_; sec_vars=_ } : data_in)) ->
                                   learner_learn (kn, path, status) outcomes tactic)
-                            ; load_function = (fun _ ((path, kn), { outcomes; tactic; name; status; path=_ }) ->
+                            ; load_function = (fun _ ((path, kn), { outcomes; tactic; name; status; path=_; sec_vars=_ }) ->
                                   if Names.KerName.equal (Names.Constant.canonical name) (Names.Constant.user name) then
                                     if global_record () then learner_learn (kn, path, status) outcomes tactic else ())
                             ; open_function = (fun _ _ (_, _) -> ())
@@ -281,9 +324,10 @@ let add_to_db (x : data_in) =
   ignore(Lib.add_leaf (in_db (Names.Label.to_id @@ Names.Constant.label x.name) x))
 
 (* Types and accessors for state in the proof monad *)
-type localdb = ((Proofview.Goal.t * Proofview.Goal.t list) list * glob_tactic_expr) list
+type localdb = ((Proofview.Goal.t * EConstr.t * Evd.evar_map * Proofview.Goal.t list) list * glob_tactic_expr option) list
+
 type goal_stack = Proofview.Goal.t list list
-type tactic_trace = glob_tactic_expr list
+type tactic_trace = glob_tactic_expr option list
 type state_id_stack = int list
 
 let record_field : bool Evd.Store.field = Evd.Store.field "tactician_record"
@@ -373,14 +417,20 @@ let push_state_id_stack () =
   fun _ -> tclUNIT ()
 
 let warn tac =
-  let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic (Global.env ()) t) in
-  (* The unshelve tactic is the only tactic known to generate goals that do not inherit state from their
-     parents (because those goals were on the shelf). We filter tactics expressions that contain this
-     tactic out of the warning. *)
-  let unshelve_ml = Tacexpr.{ mltac_name = { mltac_plugin = "coq-core.plugins.ltac"; mltac_tactic = "unshelve" }
-                            ; mltac_index = 0 } in
-  if not (Find_tactic_syntax.contains_ml_tactic unshelve_ml tac) then
-    Feedback.msg_warning Pp.(str "Tactician has uncovered a bug in a tactic. Please report. " ++ tac_pp tac)
+  let msg tac =
+      Feedback.msg_warning Pp.(str "Tactician has uncovered a bug in a tactic. Please report. " ++ tac) in
+  match tac with
+  | None ->
+    msg (Pp.str "Unknown")
+  | Some tac ->
+    let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic (Global.env ()) t) in
+    (* The unshelve tactic is the only tactic known to generate goals that do not inherit state from their
+       parents (because those goals were on the shelf). We filter tactics expressions that contain this
+       tactic out of the warning. *)
+    let unshelve_ml = Tacexpr.{ mltac_name = { mltac_plugin = "coq-core.plugins.ltac"; mltac_tactic = "unshelve" }
+                              ; mltac_index = 0 } in
+    if not (Find_tactic_syntax.contains_ml_tactic unshelve_ml tac) then
+      msg (tac_pp tac)
 
 let pop_state_id_stack tac2 =
   let open Proofview in
@@ -409,20 +459,89 @@ let push_tactic_trace tac =
 let get_tactic_trace gl =
   get_field_goal2 tactic_trace_field gl (fun _ -> [])
 
-let mk_outcome (st, _sts) =
+let init_parent_info () =
+  let open Proofview in
+  let open Notations in
+  Goal.enter @@ fun gl ->
+  let state = Goal.state gl in
+  match Proofview_monad.StateStore.get state parent_info_field with
+  | None ->
+    let hyps_origin = List.fold_left (fun m pt ->
+        let id = Context.Named.Declaration.get_id pt in
+        Names.Id.Map.add id id m) Names.Id.Map.empty (Goal.hyps gl) in
+    let pinfo = { hyps_origin; parent_goal = gl } in
+    modify_field_goals parent_info_field (fun _ st -> st, ()) (fun i ->
+        assert (i == 0); pinfo) >>= fun _ -> tclUNIT ()
+  | Some _ -> tclUNIT ()
+
+let update_hyps_origin () =
+  let open Proofview in
+  let open Notations in
+  Goal.enter @@ fun gl ->
+  let sigma = Goal.sigma gl in
+  let state = Goal.state gl in
+  let { hyps_origin; parent_goal } =
+    match Proofview_monad.StateStore.get state parent_info_field with
+   | None ->
+     (* This indicates either a bug or an unshelved goal, which we cannot deal with *)
+     { hyps_origin = Names.Id.Map.empty; parent_goal = gl }
+   | Some pinfo -> pinfo in
+  let parent_sigma = Goal.sigma parent_goal in
+    (* let Evd.{ evar_body; _ } = Evd.find sigma @@ Goal.goal parent_goal in *)
+    let EvarInfo x = Evd.find sigma @@ Goal.goal parent_goal in
+    let evar_body = Evd.evar_body x in
+    match evar_body with
+    | Evd.Evar_empty ->
+      (* Nothing was changed, nothing needs to happen *)
+      tclUNIT ()
+    | Evd.Evar_defined term ->
+      let rec find_subst acc t =
+        if not @@ Option.is_empty acc then acc else
+          match EConstr.kind sigma t with
+          | Constr.Evar (e, subst) when Evar.equal e (Goal.goal gl) ->
+            Some (Evd.expand_existential sigma (e, subst))
+          | _ -> EConstr.fold sigma find_subst acc t in
+      match find_subst None term with
+      | None ->
+        (* This can happen when a tactic generates dangling goal that is not used in the final proof term.
+           One tactic that does this is setoit_rewrite X in H; auto, when auto solves the main goal without
+           using hypothesis H. *)
+        Feedback.msg_warning Pp.(str "Tactician could not find the substitution map of a new goal");
+        tclUNIT ()
+      | Some substs ->
+        let dest = Array.map
+            (fun c ->
+               try
+                let hyp = EConstr.destVar parent_sigma c in
+                Names.Id.Map.find_opt hyp hyps_origin
+              with Constr.DestKO -> None) (Array.of_list substs) in
+        let new_hyps_origin = List.fold_left2 (fun m source dest ->
+          match dest with
+            | None -> m
+            | Some dest -> Names.Id.Map.add (Context.Named.Declaration.get_id source) dest m)
+            Names.Id.Map.empty (Goal.hyps gl) (Array.to_list dest) in
+        modify_field_goals parent_info_field (fun i st ->
+            assert (i = 0);
+            { hyps_origin = new_hyps_origin; parent_goal = gl }, ()) (fun _ -> assert false) >>=
+        fun _ -> tclUNIT ()
+
+let mk_outcome (st, term, sigma, sts) =
   (* let mem = (List.map TS.tactic_make (get_tactic_trace st)) in *)
-  let st : proof_state = goal_to_proof_state st in
+  let term = if record_terms () then term else EConstr.mkCast (EConstr.mkVar (Names.Id.of_string "__not_recording_term__"), Constr.VMcast, EConstr.mkProp) in
   { parents = [] (* List.map (fun tac -> (st (\* TODO: Fix *\), { executions = []; tactic = tac })) mem *)
   ; siblings = End
-  ; before = st
-  ; after = [] (* List.map goal_to_proof_state sts *) }
+  ; before = goal_to_proof_state st
+  ; result = if record_terms () then make_result st term sigma sts else make_result_dummy st term sigma sts }
 
 let mk_data_in outcomes tactic name path =
-  let tactic = TS.tactic_make tactic in
+  let tactic = Option.map TS.tactic_make tactic in
   let outcomes = List.map mk_outcome outcomes in
-  { outcomes; tactic; name; status = Original; path }
+  let sec_vars = Names.Id.Set.of_list @@
+    List.map Context.Named.Declaration.get_id @@ Environ.named_context (Global.env ()) in
+  { outcomes; tactic; name; status = Original; path; sec_vars }
 
-let add_to_db2 id ((outcomes, tactic) : (Proofview.Goal.t * Proofview.Goal.t list) list * glob_tactic_expr)
+let add_to_db2 id ((outcomes, tactic) : (Proofview.Goal.t * EConstr.t * Evd.evar_map * Proofview.Goal.t list) list *
+                                        glob_tactic_expr option)
     sideff name path =
   let data = mk_data_in outcomes tactic name path in
   add_to_db data;
@@ -443,6 +562,7 @@ let register tac name =
   register_ml_tactic fullname [| tac |]
 
 let run_ml_tac name = CAst.make @@ TacML ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = name}; mltac_index = 0}, [])
+(* let run_ml_tac name = TacML (CAst.make ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = name}; mltac_index = 0}, [])) *)
 
 (* Running predicted tactics *)
 
@@ -522,7 +642,7 @@ let predict () =
   get_localdb () >>= fun db -> get_name () >>= fun (const, path) ->
   let learner = learner_get () in
   let learner = List.fold_left (fun learner (outcomes, tactic) ->
-      let { outcomes; tactic; name; status; path} = mk_data_in outcomes tactic const path in
+      let { outcomes; tactic; name; status; path; _} = mk_data_in outcomes tactic const path in
       learner.learn (Names.Constant.canonical name, path, status) outcomes tactic
     ) learner db in
   let predictor = learner.predict () in
@@ -575,6 +695,21 @@ let userPredict debug =
   (Proofview.tclLIFT (if List.is_empty r then
                         NonLogical.print_info (Pp.str "Ran out of suggestions to give...") else
                         Proofview.NonLogical.print_info (print_rank debug env r)))
+
+let term_from_goal sigma gl =
+  let open Proofview in
+  (* let Evd.{ evar_body; _ } = Evd.find sigma @@ Goal.goal gl in *)
+  let EvarInfo x = Evd.find sigma @@ Goal.goal gl in
+  let evar_body = Evd.evar_body x in
+  match evar_body with
+  | Evd.Evar_empty ->
+    let ctx = 
+      (* Removed in 8.17 *)
+      (* Array.of_list @@ *)
+      List.map (fun pt -> EConstr.mkVar @@ Context.Named.Declaration.get_id pt) @@
+      Goal.hyps gl in
+    EConstr.mkEvar (Goal.goal gl, SList.of_full_list ctx)
+  | Evd.Evar_defined term -> term
 
 let contains s1 s2 =
     let re = Str.regexp_string s2
@@ -639,8 +774,10 @@ let commonSearch timeout debug max_exec =
                  push_witness { tac = t; focus; prediction_index = i } <*>
                  (tac_exec_count := 1 + !tac_exec_count;
                   tclDebugTac t env debug) >>= fun () ->
-                 Goal.goals >>= fun gls ->
-                 let outcome = mk_outcome (gl, gls) in
+                 Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
+                 tclEVARMAP >>= fun sigma ->
+                 let term = term_from_goal sigma gl in
+                 let outcome = mk_outcome (gl, term, sigma, gls) in
                  tclUNIT (snd @@ learner.evaluate outcome (t, h)))) in
       let transform i (r : Tactic_learner_internal.TS.prediction) =
         { confidence = r.confidence; focus = r.focus; tactic = taceval i r.focus r.tactic } in
@@ -675,6 +812,14 @@ let commonSearch timeout debug max_exec =
                            tclZERO ~info:i (SearchFailure ({ tac_exec_count = !tac_exec_count
                                                            ; predict_count = !predict_count }, e))))
 
+let calculate_deps sigma acc e =
+  let rec aux e acc =
+    if Evar.Set.mem e acc then acc else
+      Evar.Set.fold aux
+        (Evd.evars_of_filtered_evar_info sigma @@ Evd.find_undefined sigma e)
+        (Evar.Set.add e acc)
+  in aux e acc
+
 let solved_check t fail =
   let calc_defined_deps sigma es =
     let open Evd in
@@ -691,7 +836,7 @@ let solved_check t fail =
   tclEVARMAP >>= fun sigma_before ->
   let gls = Evar.Set.of_list @@ List.map Goal.goal gls in
   let gls_deps = Evar.Set.fold
-      (fun e evs -> Tactic_learner_internal.calculate_deps sigma_before evs e)
+      (fun e evs -> calculate_deps sigma_before evs e)
       gls Evar.Set.empty in
   let gls_deps = Evar.Set.diff gls_deps gls in
   t >>= fun res ->
@@ -827,20 +972,6 @@ let qualid_of_global env r =
 
 (* Tactic recording tactic *)
 
-let val_tag wit = val_tag (Genarg.topwit wit)
-let register_interp0 wit f =
-  let open Ftactic.Notations in
-  let interp ist v =
-    f ist v >>= fun v -> Ftactic.return (Val.inject (val_tag wit) v)
-  in
-  Geninterp.register_interp0 wit interp
-
-let wit_glbtactic : (Empty.t, glob_tactic_expr, glob_tactic_expr) Genarg.genarg_type =
-  let wit = Genarg.create_arg "glbtactic" in
-  let () = register_val0 wit None in
-  register_interp0 wit (fun _ist v -> Ftactic.return v);
-  wit
-
 let should_record b =
   b && global_record ()
 
@@ -848,18 +979,22 @@ let push_state_tac () =
   let open Proofview in
   let open Notations in
   get_record () >>= fun b -> if not (should_record b) then tclUNIT () else
-    push_state_id_stack () <*> Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
+    init_parent_info () <*> push_state_id_stack () <*> Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
     push_goal_stack gls
 
-let record_tac (tac2 : glob_tactic_expr) : unit Proofview.tactic =
+let record_tac (tac2 : glob_tactic_expr option) : unit Proofview.tactic =
   let open Proofview in
   let open Notations in
+  tclEVARMAP >>= fun sigma ->
   let collect_states before_gls after_gls =
     List.map (fun gl_before ->
+        (* let term = term_from_goal sigma gl_before in *)
+        let term = if record_terms () then term_from_goal sigma gl_before else EConstr.mkVar (Names.Id.of_string "__not_recording_term__") in
         let i = get_state_id_goal_top gl_before in
-        (gl_before, List.filter_map (fun (j, gl_after) ->
+        (gl_before, term, sigma, List.filter_map (fun (j, gl_after) ->
              if i = j then Some gl_after else None) after_gls)) before_gls in
   get_record () >>= fun b -> if not (should_record b) then tclUNIT () else
+    update_hyps_origin () <*>
     pop_goal_stack () >>= fun before_gls ->
     Goal.goals >>= record_map (fun x -> x) >>= (fun after_gls ->
         let after_gls = List.map (fun gl -> get_state_id_goal_top gl, gl) after_gls in
@@ -869,27 +1004,55 @@ let record_tac (tac2 : glob_tactic_expr) : unit Proofview.tactic =
 
 let ml_record_tac args _is =
   (*let num = Tacinterp.Value.cast (Genarg.topwit Tacarg.wit_tactic) (List.hd args) in*)
-  let tac = Tacinterp.Value.cast (Genarg.topwit wit_glbtactic) (List.hd args) in
+  let tac = Tacinterp.Value.cast (Genarg.topwit @@ Genarg.wit_opt wit_glbtactic) (List.hd args) in
   record_tac tac
 
 let ml_push_state_tac _args _is =
   push_state_tac ()
 
+let ml_fail_strict_tac args is =
+  (*let num = Tacinterp.Value.cast (Genarg.topwit Tacarg.wit_tactic) (List.hd args) in*)
+  let tac = Tacinterp.Value.cast (Genarg.topwit @@ Genarg.wit_opt wit_glbtactic) (List.hd args) in
+  let tac = match tac with
+    | None -> Pp.str "Unknown"
+    | Some tac -> Pptactic.pr_glob_tactic (Global.env ()) tac in
+  Feedback.msg_warning Pp.(str "Strict failure: " ++ tac);
+  Proofview.tclUNIT ()
+
 let () = register ml_record_tac "recordtac"
 let () = register ml_push_state_tac "pushstatetac"
+let () = register ml_fail_strict_tac "failstricttac"
 
-let run_record_tac (tac : glob_tactic_expr) : glob_tactic_expr =
-  let enc = Genarg.in_gen (Genarg.glbwit wit_glbtactic) tac in
+let run_record_tac (tac : glob_tactic_expr option) : glob_tactic_expr =
+  let enc = Genarg.in_gen (Genarg.glbwit @@ Genarg.wit_opt wit_glbtactic) tac in
   CAst.make @@ TacML ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = "recordtac"}; mltac_index = 0},
                       [TacGeneric (None, enc)])
+(* let run_record_tac (tac : glob_tactic_expr option) : glob_tactic_expr =
+  let enc = Genarg.in_gen (Genarg.glbwit @@ Genarg.wit_opt wit_glbtactic) tac in
+  TacML (CAst.make ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = "recordtac"}; mltac_index = 0},
+                    [TacGeneric (None, enc)])) *)
 
 let run_pushs_state_tac (): glob_tactic_expr =
   (*let tac_glob = Tacintern.intern_pure_tactic*)
   CAst.make @@ TacML ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = "pushstatetac"}; mltac_index = 0},
                 [])
 
-let record_tac_complete orig tac : glob_tactic_expr =
+let fail_strict_tac (tac : glob_tactic_expr option) : glob_tactic_expr =
+  let enc = Genarg.in_gen (Genarg.glbwit @@ Genarg.wit_opt wit_glbtactic) tac in
+  CAst.make @@ TacML ({mltac_name = {mltac_plugin = "recording"; mltac_tactic = "failstricttac"}; mltac_index = 0},
+                    [TacGeneric (None, enc)])
+
+(* This still needs some kind of nicer solution. See https://github.com/coq-tactician/coq-tactician/issues/14 *)
+(* let record_tac_complete orig tac : glob_tactic_expr = (* TODO: Implement self-learning *)
+  (* let strict_tac = Tactic_normalize.tactic_strict tac in *)
+  TacThen (run_pushs_state_tac (), TacThen ((* TacFirst [strict_tac; TacThen (fail_strict_tac tac, *) tac, run_record_tac orig)) *)
+let record_tac_complete orig tac : glob_tactic_expr = 
   CAst.make @@ TacThen (run_pushs_state_tac (), CAst.make @@ TacThen (tac, run_record_tac orig))
+
+let record_tac_complete_ml orig tac =
+  let open Proofview in
+  let open Notations in
+  push_state_tac () >>= fun () -> tac >>= fun () -> record_tac orig
 
 let hide_interp_t (global, t, rtac, const, path) =
   let open Proofview in
@@ -915,6 +1078,27 @@ type aborted_or_should_inline =
   | NotAborted of { should_inline : bool }
 
 let vernac_solve g info tcom with_end_tac id =
+  let print_error ~pstate ~pstate1 ~pstate2 =
+    let open Proofview in
+    let open Notations in
+    let tac =
+      let open Proofview in
+      Proofview.tclENV >>= fun env ->
+      let ist = Genintern.empty_glob_sign ~strict:false env in
+      let t1 = Tacintern.intern_pure_tactic ist tcom in
+      let t2 = decompose_annotate t1 (fun _ t -> t) in
+      Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
+      let msg = Pp.(
+        str "Tactician found a bug in it's tactical decomposition. Please report." ++ fnl () ++
+        Pptactic.pr_glob_tactic (Global.env ()) t1 ++ fnl () ++
+        Pptactic.pr_glob_tactic (Global.env ()) t2 ++ fnl ()
+        (* Printer.pr_open_subgoals_diff ~diffs:true ~oproof:pstate1 pstate2 ++ fnl () ++ *)
+        (* Printer.pr_open_subgoals_diff ~diffs:true ~oproof:pstate2 pstate1 *)
+      ) in
+      Feedback.msg_warning msg; tclUNIT () in
+    let g = Option.default (Goal_select.get_default_goal_selector ()) g in
+    ignore (ComTactic.solve ~pstate g ~info (Proof_equality.id_interp tac) ~with_end_tac) in
+  (* Returns true if tactic execution should be skipped *)
   load_plugins (); (* TODO: Is this required here? *)
   (* Returns none if the tactic has not been executed, some otherwise, with data about what was executed *)
   let already_executed id =
@@ -980,41 +1164,42 @@ let vernac_solve g info tcom with_end_tac id =
   | None -> Vernactypes.vtmodifyproof @@ fun ~pstate ->
     let name = Declare.Proof.get_name pstate in
     let const = Names.Constant.make2 (Global.current_modpath ()) (Names.Label.of_id name) in
-    let path = Lib.make_path name in
+    let path = Lib.make_path name in    
     let save_db env sideff (db : localdb) =
       let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic env t) in
       let string_tac t = Pp.string_of_ppcmds (tac_pp t) in
       let tryadd (execs, tac) =
-        let filter =
-          try
-            (* In v8.11 and v8.12, this is know to very occasionally crash (particularly for 'simpl in').
-               Therefore, we have to wrap it in a try-catch. *)
-            let s = string_tac tac in
-            (* TODO: Move this to annotation time *)
-            String.equal s "admit" || String.equal s "synth" || String.is_prefix "synth with cache" s
-            || String.is_prefix "tactician ignore" s || String.is_prefix "fix" s || String.is_prefix "cofix" s
-            || String.is_prefix "change_no_check" s || String.is_prefix "exact_no_checK" s
-            || String.is_prefix "native_cast_no_check" s || String.is_prefix "vm_cast_no_check" s
-            || String.is_prefix "shelve" s
-          with
-          (* Intentionally catching assert failure coming from constrextern.ml l629 in 8.11 and 8.12 *)
-          | Assert_failure _ -> false
-          | e when CErrors.noncritical e -> false in
-        if not filter then
-          add_to_db2 id (execs, tac) sideff const path;
+        let tac =
+          match tac with
+          | None -> None
+          | Some tac ->
+            let filter =
+              try
+                (* In v8.11 and v8.12, this is know to very occasionally crash (particularly for 'simpl in').
+                  Therefore, we have to wrap it in a try-catch. *)
+                let s = string_tac tac in
+                (* TODO: Move this to annotation time *)
+                String.equal s "admit" || String.equal s "synth" || String.is_prefix "synth with cache" s
+                || String.is_prefix "tactician ignore" s || String.is_prefix "fix" s || String.is_prefix "cofix" s
+                || String.is_prefix "change_no_check" s || String.is_prefix "exact_no_checK" s
+                || String.is_prefix "native_cast_no_check" s || String.is_prefix "vm_cast_no_check" s
+                || String.is_prefix "shelve" s
+              with _ -> false in
+            if filter then None  else Some tac in
+        add_to_db2 id (execs, tac) sideff const path;
         let msg typ t =
           Feedback.msg_warning Pp.(
               str "Tactician detected a " ++ str typ ++ str " problem " ++
               str "for the following tactic. " ++ str t ++ str " Please report.") in
         try (* This is purely for parsing bug detection and could be removed for performance reasons *)
-          let s = string_tac tac in
-          try
-            let _ = Procq.parse_string Pltac.tactic_eoi s in ()
-          with e when CErrors.noncritical e -> msg "printing/parsing" s
-        with
-        (* Intentionally catching assert failure coming from constrextern.ml l629 in 8.11 and 8.12 *)
-        | Assert_failure _ -> msg "printing" ""
-        | e when CErrors.noncritical e -> msg "printing" "" in
+          match tac with
+          | None -> ()
+          | Some tac ->
+            let s = string_tac tac in
+            try
+              let _ = Procq.parse_string Pltac.tactic_eoi s in ()
+            with _ -> msg "printing/parsing" s
+        with _ -> msg "printing" "" in
       List.iter (fun trp -> tryadd trp) @@ List.rev db in
     try
       let g = Option.default (Goal_select.get_default_goal_selector ()) g in
@@ -1044,8 +1229,84 @@ let vernac_solve g info tcom with_end_tac id =
       end;
 
       let global = match g with Goal_select.SelectAll | Goal_select.SelectList _ -> true | _ -> false in
-      let t = hide_interp_t (global, tcom, (fun t -> decompose_annotate t record_tac_complete), const, path) in
-      let pstate = ComTactic.solve ~pstate g ~info t ~with_end_tac in
+      (* In 8.13, there is no longer G_ltac.print_info_trace *)
+      (* let info = Option.append info (G_ltac.print_info_trace ()) in *)
+      let pstate =
+        (* If the 'abstract' tactic was used, we should not run the tactic a second time.
+            The reason for this is that it will cause the numbering of the _subproofx names to
+            diverge. And since these numbers may be referenced later, we must keep this consistent. *)
+          (* TODO: Temporary hack to prevent synth from being executed twice and producing output twice *)
+          let is_synth =
+            try
+              let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic (Global.env ()) t) in
+              let ist = Genintern.empty_glob_sign ~strict:false (Global.env ()) in
+              let tcom = Tacintern.intern_pure_tactic ist tcom in
+              let s = Pp.string_of_ppcmds (tac_pp tcom) in
+            String.equal s "debug synth" || String.equal s "synth"
+            with _ -> false in
+          if is_synth then
+            let t = hide_interp_t (global, tcom, (fun t -> record_tac_complete (Some t) t), const, path) in
+            let pstate1 = ComTactic.solve ~pstate g ~info t ~with_end_tac in
+            pstate1 else
+          let extracted_tactic : glob_tactic_expr ref = ref (CAst.make @@ TacId []) in
+          let rtac_wrapper t = 
+            extracted_tactic := t;
+            decompose_annotate t record_tac_complete
+          in
+          try
+            let t2 = hide_interp_t (global, tcom, rtac_wrapper, const, path) in
+            let pstate2 =
+              (* Pfedit.solve n info
+                (set_benchmarked () <*>
+                  hide_interp_t global tcom with_end_tac
+                    rtac_wrapper const path) p in *)
+              ComTactic.solve ~pstate g ~info t2 ~with_end_tac in
+            if is_safe_decompose' !extracted_tactic then pstate2 else 
+            (* if false then pstate2, status2 else  *)
+              (* TODO: Another dirty trick: We need to suppress any output generated during the
+                  second run of the decomposed tactic. This is because some projects have IO-tests
+                  that fail when things are printed twice. *)
+              let ignore_formatter () =
+                Format.(formatter_of_out_functions
+                          { out_string = (fun _ _ _ -> ())
+                          ; out_flush = (fun _ -> ())
+                          ; out_newline = (fun _ -> ())
+                          ; out_spaces = (fun _ -> ())
+                          ; out_indent = (fun _ -> ())
+                          }) in
+              let original = !Topfmt.std_ft in
+              Topfmt.std_ft := ignore_formatter ();
+              Fun.protect ~finally:(fun () -> Topfmt.std_ft := original) @@ fun () ->
+              let t = hide_interp_t (global, tcom, (fun t -> record_tac_complete (Some t) t), const, path) in
+              let pstate1 = ComTactic.solve ~pstate g ~info t ~with_end_tac in
+                (* Pfedit.solve n info
+                  (set_benchmarked () <*>
+                  hide_interp_t global tcom with_end_tac
+                    (fun t -> record_tac_complete (Some t) t) const path) p in *)
+              let seff1 = (Evd.eval_side_effects (Proof.data @@ Declare.Proof.get pstate).sigma).seff_private in
+              let seff2 = (Evd.eval_side_effects (Proof.data @@ Declare.Proof.get pstate1).sigma).seff_private in
+              if seff1 <> seff2 then
+                pstate1 else
+              if Proof_equality.pstate_equal ~pstate1:(Declare.Proof.get pstate1) ~pstate2:(Declare.Proof.get pstate2) then
+                pstate2
+              else
+                (print_error ~pstate:pstate ~pstate1 ~pstate2;
+                pstate1)
+                (* pstate1 *)
+          with
+          | e when CErrors.noncritical e ->
+            let t = hide_interp_t (global, tcom, (fun t -> record_tac_complete (Some t) t), const, path) in
+            let pstate1 = ComTactic.solve ~pstate g ~info t ~with_end_tac in
+              (* Pfedit.solve n info
+                (set_benchmarked () <*>
+                hide_interp_t global tcom with_end_tac
+                  (fun t -> record_tac_complete (Some t) t) const path) p in *)
+            let msg = Pp.(str "Tactician's tactical decomposition crashed. Please report.") in
+            Feedback.msg_warning msg;
+            pstate1
+      in
+      (* let t = hide_interp_t (global, tcom, (fun t -> decompose_annotate t record_tac_complete), const, path) in
+      let pstate = ComTactic.solve ~pstate g ~info t ~with_end_tac in *)
       let env = Global.env () in
       let Proof.{ sigma; _ } = Proof.data @@ Declare.Proof.get pstate in
       let sideff = Evd.eval_side_effects sigma in
@@ -1066,3 +1327,63 @@ let tactician_ignore t =
   get_record () >>= fun b ->
   set_record false <*> t <*> set_record b
 
+let subst_one dep_proof_ok x (hyp,rhs,dir) =
+  let open Termops in
+  let module NamedDecl = Context.Named.Declaration in
+  let open Logic in
+  let open Names in
+  (* Removed Tacticals.New in 8.15 *)
+  let open Tacticals in
+  let open Locus in
+  let open Tactics in
+  let open Equality in
+  let open EConstr in
+  Proofview.Goal.enter begin fun gl ->
+  let env = Proofview.Goal.env gl in
+  let sigma = Tacmach.project gl in
+  let hyps = Proofview.Goal.hyps gl in
+  let concl = Proofview.Goal.concl gl in
+  (* The set of hypotheses using x *)
+  let dephyps =
+    List.rev (pi3 (List.fold_right (fun dcl (dest,deps,allhyps) ->
+      let id = NamedDecl.get_id dcl in
+      if not (Id.equal id hyp)
+         && List.exists (fun y -> occur_var_in_decl env sigma y dcl) deps
+      then
+        (* let id_dest = if !regular_subst_tactic then dest else MoveLast in *)
+        let id_dest = dest in
+        (dest,id::deps,(id_dest,id)::allhyps)
+      else
+        (MoveBefore id,deps,allhyps))
+      hyps
+      (MoveBefore x,[x],[]))) in (* In practice, no dep hyps before x, so MoveBefore x is good enough *)
+  (* Decides if x appears in conclusion *)
+  let depconcl = occur_var env sigma x concl in
+  let need_rewrite = not (List.is_empty dephyps) || depconcl in
+  tclTHENLIST
+    ((if need_rewrite then
+      [Generalize.revert (List.map snd dephyps);
+       general_rewrite ~where:None ~l2r:dir AtLeastOneOccurrence ~freeze:true ~dep:dep_proof_ok ~with_evars:false ((mkVar hyp), NoBindings);
+       (tclMAP (fun (dest,id) -> intro_move (Some id) dest) dephyps)]
+      else
+       [Proofview.tclUNIT ()]) @
+     [tclTRY (clear [x; hyp])])
+  end
+
+let subst_from hyps dir =
+  let open Proofview in
+  let subst_one_from gl hyp =
+    (* Removed Tacmach.New in 8.15 *)
+    let c = Tacmach.pf_get_hyp_typ hyp gl in
+    let sigma = Goal.sigma gl in
+    try
+      let env = Goal.env gl in
+      let _, _, (_, lhs, rhs) = Hipattern.find_eq_data_decompose env sigma c in
+      match dir with
+      | true when EConstr.isVar sigma lhs -> subst_one true (EConstr.destVar sigma lhs) (hyp, rhs, dir)
+      | false when EConstr.isVar sigma rhs -> subst_one true (EConstr.destVar sigma rhs) (hyp, lhs, dir)
+      | _ -> Tacticals.tclZEROMSG Pp.(str "Hypothesis could not be substituted.")
+    with Constr_matching.PatternMatchingFailure ->
+      Tacticals.tclZEROMSG Pp.(str "Hypothesis could not be substituted.") in
+  Proofview.Goal.enter @@ fun gl ->
+  Tacticals.tclMAP (subst_one_from gl) hyps
