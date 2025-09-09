@@ -1,5 +1,5 @@
-From Tactician Require Export Ltac1.Neural.
-(* From Tactician Require Export Ltac1.Original. *)
+(* From Tactician Require Export Ltac1.Neural. *)
+From Tactician Require Export Ltac1.Original.
 (* From Tactician Require Export Ltac1.Term. *)
 (* From Tactician Require Export Ltac1.Ex. *)
 
