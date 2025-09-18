@@ -26,7 +26,8 @@ jobs:
             make -j6 check &&
             make install
           CIBW_TEST_COMMAND: pytact-check --help
-          CIBW_SKIP: "*-musllinux* cp312-* cp313-* pp*"
+          # TODO: Python 3.13 disabled until upstream pycapnp is made compatible with it
+          CIBW_SKIP: "pp* cp313-*"
 
       - uses: actions/upload-artifact@v4
         with:

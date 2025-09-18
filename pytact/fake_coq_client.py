@@ -1,21 +1,17 @@
 import contextlib
 import socket
 import argparse
-import signal
-from subprocess import Popen
+import asyncio
 import capnp
 import pytact.graph_api_capnp as graph_api_capnp
 from pytact.data_reader import capnp_message_generator_from_file_lowlevel, record_lowlevel_generator
 
-def run_fake_client(server_socket, messages_generator):
-    socket_reader = graph_api_capnp.PredictionProtocol.Response.read_multiple_packed(
-        server_socket, traversal_limit_in_words=2**64-1)
-    for msg in messages_generator:
-        msg.dynamic.as_builder().write_packed(server_socket)
-        prev_sig = signal.signal(signal.SIGINT, signal.SIG_DFL)  # SIGINT catching OFF
-        response = next(socket_reader)
-        signal.signal(signal.SIGINT, prev_sig)  # SIGINT catching ON
-        messages_generator.send(response.as_builder())
+async def run_fake_client(server_stream, messages_generator):
+    async for msg in messages_generator:
+        await msg.dynamic.as_builder().write_async(server_stream)
+        response = await graph_api_capnp.PredictionProtocol.Response.read_async(
+            server_stream, traversal_limit_in_words=2**64-1)
+        await messages_generator.asend(response.as_builder())
 
 def compare(request, response, recorded_response):
     if response.to_dict() == recorded_response.to_dict():
@@ -29,7 +25,7 @@ def compare(request, response, recorded_response):
             f"Servers response: {response}\n"
         )
 
-def main():
+async def server():
     parser = argparse.ArgumentParser(
         description = 'A fake Coq client that connects to a prediction server and feeds it a stream of previously ' +
                       'recorded messages.',
@@ -73,17 +69,20 @@ def main():
             if record_file is not None:
                 messages_generator = record_lowlevel_generator(record_file, messages_generator)
             if cmd_args.tcp_location is not None:
-                addr, port = cmd_args.tcp_location.split(':')
-                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
-                    server_socket.connect((addr, int(port)))
-                    run_fake_client(server_socket, messages_generator)
+                host, port = cmd_args.tcp_location.split(':')
+                capnp_stream = await capnp.AsyncIoStream.create_connection(host=host, port=port)
+                await run_fake_client(capnp_stream, messages_generator)
             else:
                 our_sock, their_sock = socket.socketpair()
-                process = Popen(cmd_args.executable, shell=True, stdin=their_sock)
+                process = await asyncio.create_subprocess_shell(cmd_args.executable, stdin=their_sock)
                 their_sock.close()
-                run_fake_client(our_sock, messages_generator)
-                our_sock.close()
-                process.communicate()
+                capnp_stream = await capnp.AsyncIoStream.create_connection(sock=our_sock)
+                await run_fake_client(capnp_stream, messages_generator)
+                capnp_stream.close()
+                await process.wait()
+
+def main():
+    asyncio.run(capnp.run(server()))
 
 if __name__ == '__main__':
     main()

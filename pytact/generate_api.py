@@ -6,17 +6,9 @@ import keyword
 from typing import Any
 from jinja2 import Environment, PackageLoader
 import inflection
-import shutil
 
 import capnp
-capnp_executable = shutil.which("capnp")
-if not capnp_executable:
-    raise ValueError("capnp executable not found")
-capnp_dir = os.path.dirname(capnp_executable)
-include_dir = [os.path.abspath(os.path.join(capnp_dir, "..", "include")),
-               os.path.abspath(os.path.join(capnp_dir, "..", "include", "capnp"))]
-capnp.add_import_hook(include_dir)
-import schema_capnp
+import capnp.schema_capnp as schema_capnp
 
 def cython_name(name):
     return '_'.join([inflection.camelize(p) for p in name.split(':')[1].split('.')])

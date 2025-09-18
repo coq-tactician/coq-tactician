@@ -1,12 +1,15 @@
 from collections import defaultdict
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
+import asyncio
 import sys
 import socket
 import socketserver
 import argparse
 import contextlib
 from typing import Union, Tuple
+import capnp
 from pytact.data_reader import (data_reader, Original, capnp_message_generator, ProofState,
                                 TacticPredictionGraph, TacticPredictionsGraph,
                                 TacticPredictionText, TacticPredictionsText,
@@ -24,70 +27,77 @@ class OracleTactic:
     arguments: Tuple[Union[GlobalArgument, LocalArgument], ...]
     clean: bool
 
-def text_prediction_loop(text_oracle_data, context: GlobalContextMessage):
+async def text_prediction_loop(text_oracle_data, context: GlobalContextMessage):
     prediction_requests = context.prediction_requests
-    for msg in prediction_requests:
-        if isinstance(msg, ProofState):
-            proof_state = msg
-            if proof_state.text in text_oracle_data:
-                preds = [TacticPredictionText(t, 1) for t in text_oracle_data[proof_state.text]]
+    async for msg in prediction_requests:
+        # Redirect any exceptions to Coq. Additionally, deal with CancellationError
+        # thrown when a request from Coq is cancelled
+        async with context.redirect_exceptions(Exception):
+            if isinstance(msg, ProofState):
+                proof_state = msg
+                if proof_state.text in text_oracle_data:
+                    preds = [TacticPredictionText(t, 1) for t in text_oracle_data[proof_state.text]]
+                else:
+                    preds = []
+                await prediction_requests.asend(TacticPredictionsText(preds))
+            elif isinstance(msg, CheckAlignmentMessage):
+                alignment = CheckAlignmentResponse([], [])
+                await prediction_requests.asend(alignment)
+            elif isinstance(msg, GlobalContextMessage):
+                await text_prediction_loop(text_oracle_data, msg)
             else:
-                preds = []
-            prediction_requests.send(TacticPredictionsText(preds))
-        elif isinstance(msg, CheckAlignmentMessage):
-            alignment = CheckAlignmentResponse([], [])
-            prediction_requests.send(alignment)
-        elif isinstance(msg, GlobalContextMessage):
-            text_prediction_loop(text_oracle_data, msg)
-        else:
-            raise Exception("Capnp protocol error")
+                raise Exception("Capnp protocol error")
 
-def graph_prediction_loop(context: GlobalContextMessage, oracle_data, known_definitions, known_tactics):
+async def graph_prediction_loop(context: GlobalContextMessage, oracle_data, known_definitions, known_tactics):
     available_tacticids = set([ t.ident for t in context.tactics ])
     available_definitions = { d.node.identity : d.node for d in context.definitions.definitions() }
     prediction_requests = context.prediction_requests
-    for msg in prediction_requests:
-        if isinstance(msg, ProofState):
-            proof_state = msg
-            def resolve_arg(arg):
-                if isinstance(arg, LocalArgument):
-                    return proof_state.context[arg.context_index]
-                elif isinstance(arg, GlobalArgument) and arg.identity in available_definitions:
-                    return available_definitions[arg.identity]
-                else:
-                    return None
-            possible_tactics = [
-                TacticPredictionGraph(t.tactic_id,
-                                    [resolve_arg(arg) for arg in t.arguments],
-                                    1 if t.clean else 0.95)
-                for t in sorted(oracle_data[proof_state.root.identity], key = lambda t: not t.clean)
-                if t.tactic_id in available_tacticids and
-                all([resolve_arg(arg) is not None for arg in t.arguments])]
-            prediction_requests.send(TacticPredictionsGraph(possible_tactics))
-        elif isinstance(msg, CheckAlignmentMessage):
-            unknown_definitions = [ d for d in context.definitions.definitions()
-                                    if d.node.identity not in known_definitions ]
-            unknown_tactics = [ t.ident for t in context.tactics
-                                if t.ident not in known_tactics ]
-            alignment = CheckAlignmentResponse(unknown_definitions, unknown_tactics)
-            prediction_requests.send(alignment)
-        elif isinstance(msg, GlobalContextMessage):
-            graph_prediction_loop(msg, oracle_data, known_definitions, known_tactics)
-        else:
-            raise Exception("Capnp protocol error")
+    async for msg in prediction_requests:
+        # Redirect any exceptions to Coq. Additionally, deal with CancellationError
+        # thrown when a request from Coq is cancelled
+        async with context.redirect_exceptions(Exception):
+            if isinstance(msg, ProofState):
+                proof_state = msg
+                def resolve_arg(arg):
+                    if isinstance(arg, LocalArgument):
+                        return proof_state.context[arg.context_index]
+                    elif isinstance(arg, GlobalArgument) and arg.identity in available_definitions:
+                        return available_definitions[arg.identity]
+                    else:
+                        return None
+                possible_tactics = [
+                    TacticPredictionGraph(t.tactic_id,
+                                        [resolve_arg(arg) for arg in t.arguments],
+                                        1 if t.clean else 0.95)
+                    for t in sorted(oracle_data[proof_state.root.identity], key = lambda t: not t.clean)
+                    if t.tactic_id in available_tacticids and
+                    all([resolve_arg(arg) is not None for arg in t.arguments])]
+                await prediction_requests.asend(TacticPredictionsGraph(possible_tactics))
+            elif isinstance(msg, CheckAlignmentMessage):
+                unknown_definitions = [ d for d in context.definitions.definitions()
+                                        if d.node.identity not in known_definitions ]
+                unknown_tactics = [ t.ident for t in context.tactics
+                                    if t.ident not in known_tactics ]
+                alignment = CheckAlignmentResponse(unknown_definitions, unknown_tactics)
+                await prediction_requests.asend(alignment)
+            elif isinstance(msg, GlobalContextMessage):
+                await graph_prediction_loop(msg, oracle_data, known_definitions, known_tactics)
+            else:
+                raise Exception(f"Capnp protocol error {type(msg)}")
 
-def run_session(oracle_data, text_oracle_data, known_definitions, known_tactics, args, capnp_socket, record_file):
-    messages_generator = capnp_message_generator(capnp_socket, record_file)
+async def run_session(
+        oracle_data, text_oracle_data, known_definitions, known_tactics, args, record_file, capnp_socket):
+    messages_generator = capnp_message_generator(capnp_socket, args.rpc, record_file)
     if args.mode == 'text':
         print('Python server running in text mode')
-        text_prediction_loop(text_oracle_data, messages_generator)
+        await text_prediction_loop(text_oracle_data, messages_generator)
     elif args.mode == 'graph':
         print('Python server running in graph mode')
-        graph_prediction_loop(messages_generator, oracle_data, known_definitions, known_tactics)
+        await graph_prediction_loop(messages_generator, oracle_data, known_definitions, known_tactics)
     else:
         raise Exception("The 'mode' argument needs to be either 'text' or 'graph'")
 
-def main():
+async def server():
     sys.setrecursionlimit(10000)
     parser = argparse.ArgumentParser(
         description = 'A tactic prediction server acting as an oracle, retrieving it\'s information from a dataset',
@@ -113,6 +123,8 @@ def main():
                         default = None,
                         help='Record all exchanged messages to the specified file, so that they can later be ' +
                         'replayed through "pytact-fake-coq"')
+    parser.add_argument('--rpc', action='store_true', default = False,
+                        help='Communicate through Cap\'n Proto RPC.')
     cmd_args = parser.parse_args()
 
     print("Building oracle data...")
@@ -160,22 +172,19 @@ def main():
         record_context = contextlib.nullcontext()
     with record_context as record_file:
         if cmd_args.port is not None:
-            class Handler(socketserver.BaseRequestHandler):
-                def handle(self):
-                    run_session(oracle_data, text_oracle_data, known_definitions, known_tactics,
-                                cmd_args, self.request, record_file)
-            class Server(socketserver.ForkingTCPServer):
-                def __init__(self, *kwargs):
-                    self.allow_reuse_address = True
-                    self.daemon_threads = True
-                    super().__init__(*kwargs)
-            addr = ('localhost', cmd_args.port)
-            with Server(addr, Handler) as server:
-                server.serve_forever()
+            new_connection = partial(run_session, oracle_data, text_oracle_data, known_definitions, known_tactics,
+                        cmd_args, record_file)
+            server = await capnp.AsyncIoStream.create_server(new_connection, host='localhost', port=cmd_args.port)
+            async with server:
+                await server.serve_forever()
         else:
-            capnp_socket = socket.socket(fileno=sys.stdin.fileno())
-            run_session(oracle_data, text_oracle_data, known_definitions, known_tactics,
-                        cmd_args, capnp_socket, record_file)
+            stdin_socket = socket.socket(fileno=sys.stdin.fileno())
+            capnp_stream = await capnp.AsyncIoStream.create_connection(sock=stdin_socket)
+            await run_session(oracle_data, text_oracle_data, known_definitions, known_tactics,
+                              cmd_args, record_file, capnp_stream)
+
+def main():
+    asyncio.run(capnp.run(server()))
 
 if __name__ == '__main__':
     main()

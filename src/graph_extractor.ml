@@ -6,6 +6,62 @@ open Context
 open Ltac_plugin
 open Tacexpr
 
+let declare_bool_option ~name ~default =
+  let key = ["Tactician"; "Neural"; name] in
+  Goptions.declare_bool_option_and_ref
+    ~depr:false ~name:(String.concat " " key)
+    ~key ~value:default
+
+let declare_int_option ~name ~default =
+  let open Goptions in
+  let key = ["Tactician"; "Neural"; name] in
+  let r_opt = ref default in
+  let optwrite v = r_opt := match v with | None -> default | Some v -> v in
+  let optread () = Some !r_opt in
+  let _ = declare_int_option {
+      optdepr = false;
+      optname = String.concat " " key;
+      optkey = key;
+      optread; optwrite
+    } in
+  fun () -> !r_opt
+
+let declare_string_option ~name ~default =
+  let open Goptions in
+  let key = ["Tactician"; "Neural"; name] in
+  let r_opt = ref default in
+  let optwrite v = r_opt := v in
+  let optread () = !r_opt in
+  let _ = declare_string_option {
+      optdepr = false;
+      optname = String.concat " " key;
+      optkey = key;
+      optread; optwrite
+    } in
+  optread
+
+let tactic_arguments_option = declare_bool_option ~name:"TacticArguments" ~default:true
+
+type analyzed_tactic =
+  { anonymized_tactic : glob_tactic_expr
+  ; base_tactic : glob_tactic_expr
+  ; interm_tactic : glob_tactic_expr
+  ; args : Tactic_one_variable.var_type list
+  ; tactic_exact : bool }
+
+let analyze_tactic tac =
+    let anonymized_tactic = Tactic_name_remove.tactic_name_remove tac in
+    let tac = Tactic_normalize.tactic_normalize @@ Tactic_normalize.tactic_strict anonymized_tactic in
+    let (args, tactic_exact), interm_tactic =
+      if tactic_arguments_option () then
+        Tactic_one_variable.tactic_one_variable tac
+      else ([], true), tac in
+    let base_tactic =
+      if tactic_arguments_option () then
+        Tactic_one_variable.tactic_strip tac
+      else tac in
+    { anonymized_tactic; base_tactic; interm_tactic; args; tactic_exact }
+
 module ProjMap = CMap.Make(Projection.Repr)
 
 let map_named f = function
@@ -284,7 +340,7 @@ module CICGraphMonad (G : GraphMonadType) : CICGraphMonadType
     let+ named = lookup_named_map in
     try
       Id.Map.find id named
-    with Not_found -> CErrors.anomaly Pp.(str "Variable name could not be resolved")
+    with Not_found -> CErrors.anomaly Pp.(str "Variable name " ++ Id.print id ++ str " could not be resolved")
   let lookup_def_depth =
     let+ { def_depth; _ } = ask in
     def_depth
@@ -525,20 +581,18 @@ end = struct
     let* env = lookup_env
     and+ metadata = lookup_include_metadata in
     let if_metadata f = if metadata then f () else "" in
-    let tactic, args = match tactic with
+    let tactic, args =
+      match tactic with
       | None -> None, []
       | Some tac ->
         let pr_tac t = Pp.string_of_ppcmds @@ Sexpr.format_oneline (Pptactic.pr_glob_tactic env t) in
         let tactic_non_anonymous = tac in
-        let tac_orig = Tactic_name_remove.tactic_name_remove tac in
-        let tac = Tactic_normalize.tactic_normalize @@ Tactic_normalize.tactic_strict tac_orig in
-        let (args, tactic_exact), interm_tactic = Tactic_one_variable.tactic_one_variable tac in
-        let base_tactic = Tactic_one_variable.tactic_strip tac in
+        let { anonymized_tactic; base_tactic; interm_tactic; args; tactic_exact } = analyze_tactic tac in
         let tactic_hash = Tactic_hash.tactic_hash env base_tactic in
         try
           let tactic =
             if metadata then
-              Some { tactic = pr_tac tac_orig
+              Some { tactic = pr_tac anonymized_tactic
                    ; tactic_non_anonymous = pr_tac tactic_non_anonymous
                    ; base_tactic = pr_tac base_tactic
                    ; interm_tactic = pr_tac interm_tactic

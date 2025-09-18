@@ -170,113 +170,114 @@ let rec proof_object env state tacs context_map =
   end
 
 
-let available_tactics tacs =
-  let module AvailableTactics = Api.Service.AvailableTactics in
-  AvailableTactics.local @@ object
-    inherit AvailableTactics.service
+(* let available_tactics tacs = *)
+(*   let module AvailableTactics = Api.Service.AvailableTactics in *)
+(*   AvailableTactics.local @@ object *)
+(*     inherit AvailableTactics.service *)
 
-    method tactics_impl params release_param_caps =
-      let open AvailableTactics.Tactics in
-      release_param_caps ();
-      let response, results = Service.Response.create Results.init_pointer in
-      let tac_arr = Results.tactics_init results (TacticMap.cardinal tacs) in
-      List.iteri (fun i (hash, (_tac, params)) ->
-          let arri = Capnp.Array.get tac_arr i in
-          Api.Builder.AbstractTactic.ident_set arri hash;
-          Api.Builder.AbstractTactic.parameters_set_exn arri params)
-        (TacticMap.bindings tacs);
-      Service.return response
+(*     method tactics_impl params release_param_caps = *)
+(*       let open AvailableTactics.Tactics in *)
+(*       release_param_caps (); *)
+(*       let response, results = Service.Response.create Results.init_pointer in *)
+(*       let tac_arr = Results.tactics_init results (TacticMap.cardinal tacs) in *)
+(*       List.iteri (fun i (hash, (_tac, params)) -> *)
+(*           let arri = Capnp.Array.get tac_arr i in *)
+(*           Api.Builder.AbstractTactic.ident_set arri hash; *)
+(*           Api.Builder.AbstractTactic.parameters_set_exn arri params) *)
+(*         (TacticMap.bindings tacs); *)
+(*       Service.return response *)
 
-    method print_tactic_impl params release_param_caps =
-      let open AvailableTactics.PrintTactic in
-      release_param_caps ();
-      let response, results = Service.Response.create Results.init_pointer in
-      let id = Params.tactic_get params in
-      let tac, params = find_tactic tacs id in
-      let str =
-        try Pp.string_of_ppcmds @@ pp_tac tac
-        with NoSuchTactic -> "NoSuchTactic" in
-      Results.tactic_set results str;
-      Service.return response
-  end
+(*     method print_tactic_impl params release_param_caps = *)
+(*       let open AvailableTactics.PrintTactic in *)
+(*       release_param_caps (); *)
+(*       let response, results = Service.Response.create Results.init_pointer in *)
+(*       let id = Params.tactic_get params in *)
+(*       let tac, params = find_tactic tacs id in *)
+(*       let str = *)
+(*         try Pp.string_of_ppcmds @@ pp_tac tac *)
+(*         with NoSuchTactic -> "NoSuchTactic" in *)
+(*       Results.tactic_set results str; *)
+(*       Service.return response *)
+(*   end *)
 
-let pull_reinforce =
-  let module Reinforce = Api.Service.PullReinforce in
-  Reinforce.local @@ object
-    inherit Reinforce.service
+(* let pull_reinforce = *)
+(*   let module Reinforce = Api.Service.PullReinforce in *)
+(*   Reinforce.local @@ object *)
+(*     inherit Reinforce.service *)
 
-    method reinforce_impl params release_param_caps =
-      let open Reinforce.Reinforce in
-      release_param_caps ();
-      let response, results = Service.Response.create Results.init_pointer in
+(*     method reinforce_impl params release_param_caps = *)
+(*       let open Reinforce.Reinforce in *)
+(*       release_param_caps (); *)
+(*       let response, results = Service.Response.create Results.init_pointer in *)
 
-      Tactic_learner_internal.process_queue ();
-      let tacs = Neural_learner.(!last_model) in
-      print_endline (string_of_int (TacticMap.cardinal tacs));
-      let capability = available_tactics tacs in
-      Results.available_set results (Some capability);
-      Capability.dec_ref capability;
+(*       Tactic_learner_internal.process_queue (); *)
+(*       let tacs = Neural_learner.(!last_model) in *)
+(*       print_endline (string_of_int (TacticMap.cardinal tacs)); *)
+(*       let capability = available_tactics tacs in *)
+(*       Results.available_set results (Some capability); *)
+(*       Capability.dec_ref capability; *)
 
-      let res = Results.result_init results in
-      begin try
-          let lemm_str = Params.lemma_get params in
-          let evd, c = try
-              let lemm_constr_expr = Pcoq.parse_string Pcoq.Constr.lconstr lemm_str in
-              Constrintern.interp_constr_evars (Global.env ()) Evd.empty lemm_constr_expr
-            with e when CErrors.noncritical e ->
-              raise ParseError in
+(*       let res = Results.result_init results in *)
+(*       begin try *)
+(*           let lemm_str = Params.lemma_get params in *)
+(*           let evd, c = try *)
+(*               let lemm_constr_expr = Pcoq.parse_string Pcoq.Constr.lconstr lemm_str in *)
+(*               Constrintern.interp_constr_evars (Global.env ()) Evd.empty lemm_constr_expr *)
+(*             with e when CErrors.noncritical e -> *)
+(*               raise ParseError in *)
 
-          let env = Global.env () in
-          let start = Proof.start ~name:(Names.Id.of_string "dummy") ~poly:false evd [env, c] in
-          write_execution_result env start res (proof_object env start tacs)
-        with ParseError ->
-          let exc = Api.Builder.ExecutionResult.protocol_error_init res in
-          Api.Builder.Exception.parse_error_set exc
-      end;
-      Service.return response
-  end
+(*           let env = Global.env () in *)
+(*           let start = Proof.start ~name:(Names.Id.of_string "dummy") ~poly:false evd [env, c] in *)
+(*           write_execution_result env start res (proof_object env start tacs) *)
+(*         with ParseError -> *)
+(*           let exc = Api.Builder.ExecutionResult.protocol_error_init res in *)
+(*           Api.Builder.Exception.parse_error_set exc *)
+(*       end; *)
+(*       Service.return response *)
+(*   end *)
 
 let () =
   Logs.set_level (Some Logs.Warning);
   Logs.set_reporter (Logs_fmt.reporter ())
 
-let reinforce file_descr =
-  let service_name = Capnp_rpc_net.Restorer.Id.public "" in
-  Lwt_main.run @@
-  (Lwt_switch.with_switch @@ fun switch ->
-   let endpoint = Capnp_rpc_unix.Unix_flow.connect (Lwt_unix.of_unix_file_descr file_descr)
-                  |> Capnp_rpc_net.Endpoint.of_flow (module Capnp_rpc_unix.Unix_flow)
-                    ~peer_id:Capnp_rpc_net.Auth.Digest.insecure
-                    ~switch in
-   let restore = Capnp_rpc_net.Restorer.single service_name pull_reinforce in
-   let _ : Capnp_rpc_unix.CapTP.t = Capnp_rpc_unix.CapTP.connect ~restore endpoint in
-   let w, f = Lwt.wait () in
-   Lwt_switch.add_hook (Some switch) (fun () -> Lwt.return @@ Lwt.wakeup f ());
-   w);
-  let total_memory (a,b,c) = 8 * (int_of_float (a -. b +. c)) in
-  Feedback.msg_notice Pp.(str "Proving session finished with "
-                          ++ int (total_memory @@ Gc.counters ()) ++ str " allocated, requesting GC.full_major");
-  Gc.full_major ();
-  Feedback.msg_notice Pp.(str "Proving session finished with memory allocated: "
-                          ++ int (total_memory @@ Gc.counters ()))
+(* let reinforce file_descr = *)
+(*   let service_name = Capnp_rpc_net.Restorer.Id.public "" in *)
+(*   Lwt_main.run @@ *)
+(*   (Lwt_switch.with_switch @@ fun switch -> *)
+(*    let endpoint = Capnp_rpc_unix.Unix_flow.connect (Lwt_unix.of_unix_file_descr file_descr) *)
+(*                   |> Capnp_rpc_net.Endpoint.of_flow (module Capnp_rpc_unix.Unix_flow) *)
+(*                     ~peer_id:Capnp_rpc_net.Auth.Digest.insecure *)
+(*                     ~switch in *)
+(*    let restore = Capnp_rpc_net.Restorer.single service_name pull_reinforce in *)
+(*    let t : Capnp_rpc_unix.CapTP.t = Capnp_rpc_unix.CapTP.connect ~restore endpoint in *)
+(*    Capnp_rpc_unix.CapTP.disconnect *)
+(*    let w, f = Lwt.wait () in *)
+(*    Lwt_switch.add_hook (Some switch) (fun () -> Lwt.return @@ Lwt.wakeup f ()); *)
+(*    w); *)
+(*   let total_memory (a,b,c) = 8 * (int_of_float (a -. b +. c)) in *)
+(*   Feedback.msg_notice Pp.(str "Proving session finished with " *)
+(*                           ++ int (total_memory @@ Gc.counters ()) ++ str " allocated, requesting GC.full_major"); *)
+(*   Gc.full_major (); *)
+(*   Feedback.msg_notice Pp.(str "Proving session finished with memory allocated: " *)
+(*                           ++ int (total_memory @@ Gc.counters ())) *)
 
-let reinforce_stdin () =
-  reinforce Unix.stdin
+let reinforce_stdin () = ()
+  (* reinforce Unix.stdin *)
 
-let reinforce_tcp ip_addr port =
-  Feedback.msg_notice Pp.(str "connecting to prover to " ++ str ip_addr ++ str ":" ++ int port);
-  let my_socket = Unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
-  let server_addr = Unix.ADDR_INET (Unix.inet_addr_of_string ip_addr, port) in
-  (try
-    Unix.connect my_socket server_addr;
-    Feedback.msg_notice Pp.(str "connected to prover");
-    reinforce my_socket;
-  with
-  | Unix.Unix_error (Unix.ECONNREFUSED,s1,s2) ->
-       Feedback.msg_notice Pp.(str "connection to prover refused");
-  | ex ->
-     (
-       Feedback.msg_notice Pp.(str "exception caught, closing connection to prover");
-     Unix.close my_socket;
-     raise ex));
-    Unix.close my_socket
+let reinforce_tcp ip_addr port = ()
+  (* Feedback.msg_notice Pp.(str "connecting to prover to " ++ str ip_addr ++ str ":" ++ int port); *)
+  (* let my_socket = Unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in *)
+  (* let server_addr = Unix.ADDR_INET (Unix.inet_addr_of_string ip_addr, port) in *)
+  (* (try *)
+  (*   Unix.connect my_socket server_addr; *)
+  (*   Feedback.msg_notice Pp.(str "connected to prover"); *)
+  (*   reinforce my_socket; *)
+  (* with *)
+  (* | Unix.Unix_error (Unix.ECONNREFUSED,s1,s2) -> *)
+  (*      Feedback.msg_notice Pp.(str "connection to prover refused"); *)
+  (* | ex -> *)
+  (*    ( *)
+  (*      Feedback.msg_notice Pp.(str "exception caught, closing connection to prover"); *)
+  (*    Unix.close my_socket; *)
+  (*    raise ex)); *)
+  (*   Unix.close my_socket *)

@@ -3,14 +3,14 @@ requires = [
     "setuptools",
     "wheel",
     "Cython>=3.0.3",
-    "pycapnp>=1.2.2,<2",
+    "pycapnp>=2.0.0",
     "Jinja2",
     "inflection"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "pytactician"
-version = '15.1'
+version = '16.0.0'
 description = "Python Library for interfacing with Coq and Tactician"
 authors = [
     {name = "Lasse Blaauwbroek", email = "lasse@blaauwbroek.eu"},
@@ -36,13 +36,14 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
-    "pycapnp>=1.2.2,<2",
+    "pycapnp>=2.0.0",
     "immutables",
     "graphviz",
     "sanic==23.6.0",
     "sanic-ext==23.6.0",
     "Jinja2",
-    "inflection"
+    "inflection",
+    "importlib-resources;python_version<'3.9'",
 ]
 
 [project.urls]

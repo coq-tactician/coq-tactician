@@ -6,9 +6,11 @@ Assistant](https://coq.inria.fr) through the
 [Tactician](https://coq-tactician.github.io) plugin and reading associated
 datasets.
 
-The major version number `x` of this library
-indicates the version of the dataset and communication protocol. Any PyTactician
-version `x.y` is compatible with the communication protocol `x`.
+PyTactician is versioned as `x.y.z`. The major version number `x` indicates the
+version of the dataset it is compatible with. The minor version number `y`
+corresponds to the version of the communication protocol with Coq. Finally, `z`
+is incremented when the API of PyTactician changes, without the schema of the
+dataset or communication protocol changing.
 
 ## Installation
 

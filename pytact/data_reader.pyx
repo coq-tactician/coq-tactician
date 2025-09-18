@@ -56,10 +56,7 @@ as can be found in `pytact.fake_coq_client`.
 The function `capnp_message_generator_lowlevel` converts a socket into a generator that
 yields lowlevel Cap'n Proto request messages for predictions and expects to be sent Cap'n proto
 messages in return. There are four types of messages `msg` Coq sends.
-1. Synchronize: If `msg.is_synchronize` is true, Coq is attempting to synchronize
-   its state with the server. A `PredictionProtocol.Response.synchronized` message is expected
-   in return.
-2. Initialize: If `msg.is_initialize` is true, Coq is sending a list of available
+1. Initialize: If `msg.is_initialize` is true, Coq is sending a list of available
    tactics and a global context fragment to be added to an existing stack of global context
    information. An empty stack can be created through `empty_online_definitions_initialize`.
    To add an initialize message to the stack, you can use
@@ -71,7 +68,7 @@ messages in return. There are four types of messages `msg` Coq sends.
    tactics and predictions sent in this message, until an initialize message is received
    such that `msg.initialize.stack_size` is smaller than the current stack size.
    A `PredictionProtocol.Response.initialized` message is expected in response of this message.
-4. Predict: If `msg.is_predict` is true, Coq is asking to predict a list of plausible
+2. Predict: If `msg.is_predict` is true, Coq is asking to predict a list of plausible
    tactics given a proof state. The proof state can be easily accessed using
    ```
    with pytact.data_reader.online_data_predict(definitions, msg.predict) as proof_state:
@@ -79,7 +76,7 @@ messages in return. There are four types of messages `msg` Coq sends.
    ```
    A `PredictionProtocol.Response.prediction` or `PredictionProtocol.Response.textPrediction`
    message is expected in return.
-5. Check Alignment: If `msg.is_check_alignment` is true, then Coq is asking the server
+3. Check Alignment: If `msg.is_check_alignment` is true, then Coq is asking the server
    to check which tactics and definitions are known to it. A
    `PredictionProtocol.Response.alignment` message is expected in return.
 
@@ -91,10 +88,10 @@ This trace can later be replayed using
 """
 
 from __future__ import annotations
-from contextlib import contextmanager, ExitStack
+from contextlib import contextmanager, asynccontextmanager, ExitStack
 from dataclasses import dataclass
 from typing import Any, Callable, TypeVar, Union, cast, BinaryIO
-from collections.abc import Iterable, Sequence, Generator
+from collections.abc import Iterable, Sequence, Generator, AsyncGenerator
 from pathlib import Path
 from immutables import Map
 import signal
@@ -113,6 +110,10 @@ import threading
 import subprocess
 import shutil
 import time
+import sys
+from functools import partial
+import asyncio
+from asyncio import CancelledError
 
 T = TypeVar('T')
 class TupleLike():
@@ -181,7 +182,7 @@ cdef class LowlevelDataReader:
                 raise ValueError(
                     f"This library is compiled for a dataset containing data versioned as "
                     f"{graph_api_capnp.currentVersion} but file {f} contains data versioned as "
-                    f"{reader.data_version}.")
+                    f"{reader.data_version.dynamic}.")
             relative_self = Path(reader.dependencies[0])
             if f != relative_self:
                 real_root = Path(*(dataset_path/f).parts[:-len(relative_self.parts)])
@@ -1037,7 +1038,7 @@ cdef class Definition:
         elif kind.isTacticalConstant():
             return TacticalConstant(ProofStep_List.init(kind.getTacticalConstant(), graph_index, graph))
         elif kind.isManualSectionConstant():
-            return ManualConstant()
+            return ManualSectionConstant()
         elif kind.isTacticalSectionConstant():
             return TacticalSectionConstant(ProofStep_List.init(kind.getTacticalSectionConstant(), graph_index, graph))
         else: assert False
@@ -1277,7 +1278,7 @@ cdef class OnlineDefinitionsReader:
     cdef GraphIndex graph_index
 
     @staticmethod
-    cdef init(GraphIndex graph_index, C_PredictionProtocol_Request_Initialize_Reader init):
+    cdef init(GraphIndex graph_index, C_GlobalContextAddition_Reader init):
         cdef OnlineDefinitionsReader wrapper = OnlineDefinitionsReader.__new__(OnlineDefinitionsReader)
 
         graph_index.nodes.push_back(init.getGraph().getNodes())
@@ -1359,9 +1360,13 @@ cdef class OnlineDefinitionsReader:
         """
         return Definition._group_by_clusters(self.definitions(full))
 
+    def node_by_id(self, nodeid: NodeId) -> Node:
+        """Lookup a node inside of this reader by it's local node-id. This is a low-level function."""
+        return Node.init(self.graph_index.nodes.size() - 1, nodeid, &self.graph_index)
+
 @contextmanager
 def online_definitions_initialize(OnlineDefinitionsReader stack,
-                                  PredictionProtocol_Request_Initialize_Reader init) -> Generator[OnlineDefinitionsReader, None, None]:
+                                  GlobalContextAddition_Reader init) -> Generator[OnlineDefinitionsReader, None, None]:
     """Given a new initialization message sent by Coq, construct a
     `OnlineDefinitiosnReader` object. This can be used to inspect the
     definitions currently available. Additionally, using `online_data_predict`
@@ -1384,7 +1389,7 @@ def empty_online_definitions_initialize() -> OnlineDefinitionsReader:
 
 @contextmanager
 def online_data_predict(OnlineDefinitionsReader base,
-                        PredictionProtocol_Request_Predict_Reader predict) -> Generator[ProofState, None, None]:
+                        PredictionRequest_Reader predict) -> Generator[ProofState, None, None]:
     """Given a `OnlineDefinitionsReader` instance constructed through
     `online_data_initialize`, and a prediction message sent by Coq, construct a
     `ProofState` object that represents the current proof state in Coq.
@@ -1397,7 +1402,7 @@ def online_data_predict(OnlineDefinitionsReader base,
     # If the Python runtime ever becomes clever and eliminates this variable, a different
     # method of keeping the object around should be found.A
     # This makes a copy
-    cdef C_PredictionProtocol_Request_Predict_Reader p = predict.source
+    cdef C_PredictionRequest_Reader p = predict.source
     cdef GraphIndex graph_index = base.graph_index
     graph_index.nodes.push_back(p.getGraph().getNodes())
     graph_index.edges.push_back(p.getGraph().getEdges())
@@ -1445,12 +1450,22 @@ class GlobalContextMessage:
     """An annotation representing the current position of Coq in a source
     document. For logging and debugging purposes."""
 
-    prediction_requests : Generator[GlobalContextMessage | ProofState | CheckAlignmentMessage,
-                                    None | TacticPredictionsGraph | TacticPredictionsText | CheckAlignmentResponse,
-                                    None]
+    prediction_requests : AsyncGenerator[
+        GlobalContextMessage | ProofState | CheckAlignmentMessage,
+        None | TacticPredictionsGraph | TacticPredictionsText | CheckAlignmentResponse,
+        None]
     """A sub-generator that produces new requests from Coq that are based on or
     extend the global context of the current message. Once the sub-generator
     runs out, the parent generator continues."""
+
+    redirect_exceptions : Callable[[BaseException,...], Generator[None, None, None]]
+    """A contextmanager used to catch and redirect the specified exceptions back to Coq.
+
+    In addition to the specified exceptions, this manager also takes care of
+    `CancelledError`s thrown as a result of Coq cancelling a request. Instead of terminating
+    the entire program, such a cancellation should only stop the iteration of the prediction
+    loop. Otherwise, the loop should continue to respond to requests from Coq.
+    """
 
 def _convert_predictions(preds, stack_size):
     if isinstance(preds, TacticPredictionsText):
@@ -1467,48 +1482,27 @@ def _convert_predictions(preds, stack_size):
     else:
         raise Exception("Incorrect predictions received")
 
-def capnp_message_generator_lowlevel(socket: socket.socket) -> (
-        Generator[apic.PredictionProtocol_Request_Reader,
-                  capnp.lib.capnp._DynamicStructBuilder, None]):
+async def capnp_message_generator_lowlevel(stream: capnp.AsyncIoStream) -> (
+        AsyncGenerator[apic.PredictionProtocol_Request_Reader,
+                       capnp.lib.capnp._DynamicStructBuilder, None]):
     """A generator that facilitates communication between a prediction server and a Coq process.
 
-    Given a `socket`, this function creates a generator that yields messages of type
+    Given a `stream`, this function creates a generator that yields messages of type
     `pytact.graph_api_capnp_cython.PredictionProtocol_Request_Reader` after which a
     `capnp.lib.capnp._DynamicStructBuilder` message needs to be `send` back.
     """
-    reader = graph_api_capnp.PredictionProtocol.Request.read_multiple_packed(
-        socket, traversal_limit_in_words=2**64-1)
-    def next_disabled_sigint():
-        """
-        A variant of `next` that disables Python's sigkill signal handler while waiting for new messages.
-        Without this, the reader will block and can't be killed with Cntl+C until it receives a message.
-
-        See the following upstream capnp issue for further explanations:
-        https://github.com/capnproto/capnproto/issues/1542
-
-        Note that the proper solution to this is to read messages in async mode, but pycapnp currently doesn't
-        support this.
-        """
-        if threading.current_thread() is threading.main_thread():
-            prev_sig = signal.signal(signal.SIGINT, signal.SIG_DFL)  # SIGINT catching OFF
-            msg = next(reader, None)
-            signal.signal(signal.SIGINT, prev_sig)  # SIGINT catching ON
-            return msg
-        else:
-            return next(reader, None)
-    msg = next_disabled_sigint()
-    while msg is not None:
+    while (msg := await graph_api_capnp.PredictionProtocol.Request.read_async(
+            stream, traversal_limit_in_words=2**64-1)) is not None:
         cython_msg = PredictionProtocol_Request_Reader(msg)
         response = yield cython_msg
-        response.write_packed(socket)
+        await response.write_async(stream)
         yield
-        msg = next_disabled_sigint()
 
-def capnp_message_generator_from_file_lowlevel(
+async def capnp_message_generator_from_file_lowlevel(
         message_file: BinaryIO,
         check : Callable[[Any, Any, Any], None] | None = None) -> (
-        Generator[apic.PredictionProtocol_Request_Reader,
-                  capnp.lib.capnp._DynamicStructBuilder, None]):
+        AsyncGenerator[apic.PredictionProtocol_Request_Reader,
+                       capnp.lib.capnp._DynamicStructBuilder, None]):
     """Replay and verify a pre-recorded communication sequence between Coq and a prediction server.
 
     Lowlevel variant of `capnp_message_generator_from_file`.
@@ -1536,78 +1530,209 @@ def capnp_message_generator_from_file_lowlevel(
             check(cython_msg, response, recorded_response)
         yield
 
-def record_lowlevel_generator(
+async def record_lowlevel_generator(
         record_file: BinaryIO,
-        gen: Generator[apic.PredictionProtocol_Request_Reader,
-                       capnp.lib.capnp._DynamicStructBuilder, None]) -> (
-                           Generator[apic.PredictionProtocol_Request_Reader,
-                                     capnp.lib.capnp._DynamicStructBuilder, None]):
+        gen: AsyncGenerator[apic.PredictionProtocol_Request_Reader,
+                            capnp.lib.capnp._DynamicStructBuilder, None]) -> (
+                                AsyncGenerator[apic.PredictionProtocol_Request_Reader,
+                                               capnp.lib.capnp._DynamicStructBuilder, None]):
     """Record a trace of the full interaction of a lowlevel generator to a file
 
     Wrap a lowlevel generator (such as from `capnp_message_generator_lowlevel`) and dump all exchanged messages
     to the given file. The file can later be replayed with `capnp_message_generator_from_file_lowlevel`.
     """
-    for msg in gen:
+    async for msg in gen:
         msg.dynamic.as_builder().write_packed(record_file)
         response = yield msg
-        gen.send(response)
+        await gen.asend(response)
         response.clear_write_flag()
         response.write_packed(record_file)
         yield
 
-def prediction_generator(
-        lgenerator: Generator[apic.PredictionProtocol_Request_Reader,
-                              capnp.lib.capnp._DynamicStructBuilder, None],
-        OnlineDefinitionsReader defs):
+# Taken from https://github.com/python/cpython/pull/8895
+# Can be removed once python 3.9 is no longer supported
+if sys.version_info.major == 3 and sys.version_info.minor < 10:
+    _NOT_PROVIDED = object()
+    async def anext(async_iterator, default=_NOT_PROVIDED):
+        """anext(async_iterator[, default])
+        Return the next item from the async iterator.
+        If default is given and the iterator is exhausted,
+        it is returned instead of raising StopAsyncIteration.
+        """
+        from collections.abc import AsyncIterator
+        if not isinstance(async_iterator, AsyncIterator):
+            raise TypeError(f'anext expected an AsyncIterator, got {type(async_iterator)}')
+        anxt = type(async_iterator).__anext__
+        try:
+            return await anxt(async_iterator)
+        except StopAsyncIteration:
+            if default is _NOT_PROVIDED:
+                raise
+            return default
+
+@dataclass
+class _MutableBox:
+    contents: Any
+
+async def prediction_generator(lgenerator, OnlineDefinitionsReader defs, mutret, redirect_exceptions):
     """Given the current global context stack `defs`, convert a low-level
     generator to a high-level `GlobalContextMessage`"""
-    msg = next(lgenerator, None)
+    msg = await anext(lgenerator, None)
     while msg is not None:
-        if msg.is_synchronize:
-            response = graph_api_capnp.PredictionProtocol.Response.new_message(synchronized=msg.synchronize)
-            lgenerator.send(response)
-            msg = next(lgenerator, None)
-        elif msg.is_initialize:
-            init = msg.initialize
-            if init.data_version.major != graph_api_capnp.currentVersion.major:
-                raise ValueError(
-                    f"This library is compiled for a dataset containing data versioned as "
-                    f"{graph_api_capnp.currentVersion} but file Coq sent a message versioned as "
-                    f"{init.data_version}.")
-            if init.stack_size != defs.graph_index.nodes.size():
-                return msg
+        try:
+            if msg.is_initialize:
+                init = msg.initialize
+                their_version = init.data_version
+                our_version = graph_api_capnp.currentVersion
+                if their_version.major != our_version.major or their_version.minor != our_version.minor:
+                    raise ValueError(
+                        f"This library is compiled for a dataset containing data versioned as "
+                        f"{graph_api_capnp.currentVersion} but file Coq sent a message versioned as "
+                        f"{init.data_version.dynamic}.")
+                if init.stack_size != defs.graph_index.nodes.size():
+                    mutret.contents = msg
+                    return
+                else:
+                    response = graph_api_capnp.PredictionProtocol.Response.new_message(initialized=None)
+                    await lgenerator.asend(response)
+                    with online_definitions_initialize(defs, init) as definitions:
+                        msgm = _MutableBox(None)
+                        pg = prediction_generator(lgenerator, definitions, msgm, redirect_exceptions)
+                        yield GlobalContextMessage(definitions, init.tactics, init.log_annotation, pg,
+                                                partial(redirect_exceptions, pg))
+                        if await anext(pg, None) is not None:
+                            raise Exception("Not all prediction requests were consumed")
+                        msg = msgm.contents
+            elif msg.is_predict:
+                with online_data_predict(defs, msg.predict) as proof_state:
+                    preds = yield proof_state
+                    response = _convert_predictions(preds, defs.graph_index.nodes.size())
+                await lgenerator.asend(response)
+                yield
+                msg = await anext(lgenerator, None)
+            elif msg.is_check_alignment:
+                alignment = yield CheckAlignmentMessage()
+                alignment = {'unalignedTactics': alignment.unknown_tactics,
+                             'unalignedDefinitions':
+                             [{'depIndex': defs.graph_index.nodes.size() - 1 - d.node.graph, 'nodeIndex': d.node.nodeid}
+                            for d in alignment.unknown_definitions]}
+                response = graph_api_capnp.PredictionProtocol.Response.new_message(alignment=alignment)
+                await lgenerator.asend(response)
+                yield
+                msg = await anext(lgenerator, None)
             else:
-                response = graph_api_capnp.PredictionProtocol.Response.new_message(initialized=None)
-                lgenerator.send(response)
-                with online_definitions_initialize(defs, init) as definitions:
-                    def prediction_generator_sub():
-                        nonlocal msg
-                        msg = yield from prediction_generator(lgenerator, definitions)
-                    pg = prediction_generator_sub()
-                    yield GlobalContextMessage(definitions, init.tactics, init.log_annotation, pg)
-                    if next(pg, None) is not None:
-                        raise Exception("Not all prediction requests were consumed")
-        elif msg.is_predict:
-            with online_data_predict(defs, msg.predict) as proof_state:
-                preds = yield proof_state
-                response = _convert_predictions(preds, defs.graph_index.nodes.size())
-            lgenerator.send(response)
+                raise Exception(f"Capnp protocol error: Received unknown message type {type(msg)}")
+        except (Exception, CancelledError) as e:
+            if isinstance(e, CancelledError) and "ClientCancellation" not in str(e):
+                raise
+            await lgenerator.athrow(e)
             yield
-            msg = next(lgenerator, None)
-        elif msg.is_check_alignment:
-            alignment = yield CheckAlignmentMessage()
-            alignment = {'unalignedTactics': alignment.unknown_tactics,
-                         'unalignedDefinitions':
-                         [{'depIndex': defs.graph_index.nodes.size() - 1 - d.node.graph, 'nodeIndex': d.node.nodeid}
-                           for d in alignment.unknown_definitions]}
-            response = graph_api_capnp.PredictionProtocol.Response.new_message(alignment=alignment)
-            lgenerator.send(response)
-            yield
-            msg = next(lgenerator, None)
-        else:
-            raise Exception("Capnp protocol error")
+            msg = await anext(lgenerator, None)
 
-def capnp_message_generator(socket: socket.socket, record: BinaryIO | None = None) -> GlobalContextMessage:
+@asynccontextmanager
+async def redirect_exceptions(gen, *excs: BaseException) -> AsyncGenerator[None, None, None]:
+    try:
+        yield
+    except excs as e:
+        await gen.athrow(e)
+    except CancelledError as e:
+        if "ClientCancellation" in str(e):
+            task = asyncio.current_task()
+            if hasattr(task, "uncancel"): # Uncancel was introduced in Python 3.11
+                task.uncancel()
+                await gen.athrow(e)
+        else:
+            raise
+
+@asynccontextmanager
+async def fake_redirect_exceptions(gen, *execs: BaseException) -> AsyncGenerator[None, None, None]:
+    yield
+
+class _Server2Generator(graph_api_capnp.PredictionServer.Server):
+
+    def __init__(self):
+        self.request_event = asyncio.Event()
+        self.response_event = asyncio.Event()
+        self.lock = asyncio.Lock()
+        self.main_task = asyncio.current_task()
+
+    def disconnected(self):
+        self.message = None
+        self.request_event.set()
+
+    async def get_request(self):
+        await self.request_event.wait()
+        request = self.message
+        self.request_event.clear()
+        return request
+
+    def put_response(self, response):
+        self.message = response
+        self.response_event.set()
+
+    async def _communicate(self, request):
+        async with self.lock:
+            self.message = request
+            self.request_event.set()
+            try:
+                await self.response_event.wait()
+            except asyncio.CancelledError:
+                self.request_event.clear()
+                self.main_task.cancel("ClientCancellation")
+                await self.response_event.wait()
+                response = self.message
+                self.response_event.clear()
+                if isinstance(response, BaseException):
+                    raise response
+                raise
+            else:
+                response = self.message
+                self.response_event.clear()
+                if isinstance(response, BaseException):
+                    raise response
+                return response
+
+    async def addGlobalContext_context(self, _context):
+        await self._communicate(apic.PredictionProtocol_Request_Reader(
+            graph_api_capnp.PredictionProtocol.Request.new_message(initialize=_context.params).as_reader()))
+
+    async def requestPrediction_context(self, _context):
+        response = await self._communicate(apic.PredictionProtocol_Request_Reader(
+            graph_api_capnp.PredictionProtocol.Request.new_message(predict=_context.params).as_reader()))
+        _context.results.predictions = response.prediction # TODO: Avoid copying operation
+
+    async def requestTextPrediction_context(self, _context):
+        response = await self._communicate(apic.PredictionProtocol_Request_Reader(
+            graph_api_capnp.PredictionProtocol.Request.new_message(predict=_context.params).as_reader()))
+        _context.results.predictions = response.textPrediction # TODO: Avoid copying operation
+
+    async def checkAlignment_context(self, _context):
+        response = await self._communicate(apic.PredictionProtocol_Request_Reader(
+            graph_api_capnp.PredictionProtocol.Request.new_message(checkAlignment=None).as_reader()))
+        _context.results.unalignedTactics = response.alignment.unalignedTactics # TODO: Avoid copying
+        _context.results.unalignedDefinitions = response.alignment.unalignedDefinitions # TODO: Avoid copying
+
+async def capnp_rpc_message_generator_lowlevel(stream):
+    server = _Server2Generator()
+    async def server_task():
+        await capnp.TwoPartyServer(stream, bootstrap=server).on_disconnect()
+        server.disconnected()
+    task = asyncio.ensure_future(server_task())
+    while (request := await server.get_request()) is not None:
+        try:
+            response = yield request
+            server.put_response(response)
+            yield
+        except (Exception, CancelledError) as e:
+            if isinstance(e, CancelledError) and "ClientCancellation" not in str(e):
+                raise
+            server.put_response(e)
+            yield
+    await task
+
+def capnp_message_generator(stream: capnp.AsyncIoStream,
+                            rpc : bool = False,
+                            record: BinaryIO | None = None) -> GlobalContextMessage:
     """A generator that facilitates communication between a prediction server and a Coq process.
 
     Given a `socket`, this function creates a `GlobalContextMessage` `context`. This message contains an
@@ -1626,12 +1751,17 @@ def capnp_message_generator(socket: socket.socket, record: BinaryIO | None = Non
     When `record` is passed a file descriptor, all received and sent messages will be dumped into that file
     descriptor. These messages can then be replayed later using `capnp_message_generator_from_file`.
     """
-    lgenerator = capnp_message_generator_lowlevel(socket)
+    if rpc:
+        lgenerator = capnp_rpc_message_generator_lowlevel(stream)
+        redirect = redirect_exceptions
+    else:
+        lgenerator = capnp_message_generator_lowlevel(stream)
+        redirect = fake_redirect_exceptions
     if record is not None:
         lgenerator = record_lowlevel_generator(record, lgenerator)
     defs = OnlineDefinitionsReader.init_empty()
-    pg = prediction_generator(lgenerator, defs)
-    return GlobalContextMessage(defs, [], None, pg)
+    pg = prediction_generator(lgenerator, defs, _MutableBox(None), redirect)
+    return GlobalContextMessage(defs, [], None, pg, partial(redirect, pg))
 
 def capnp_message_generator_from_file(message_file: BinaryIO,
                                       check : Callable[[Any, Any, Any], None] | None = None,
@@ -1655,8 +1785,8 @@ def capnp_message_generator_from_file(message_file: BinaryIO,
     if record is not None:
         lgenerator = record_lowlevel_generator(record, lgenerator)
     defs = OnlineDefinitionsReader.init_empty()
-    pg = prediction_generator(lgenerator, defs)
-    return GlobalContextMessage(defs, [], None, pg)
+    pg = prediction_generator(lgenerator, defs, _MutableBox(None), fake_redirect_exceptions)
+    return GlobalContextMessage(defs, [], None, pg, partial(fake_redirect_exceptions, pg))
 
 
 @contextmanager

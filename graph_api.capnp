@@ -9,12 +9,13 @@
 # 1. A schema for graph-based dataset exported from Coq. The entry-point for this is the `Dataset`
 #    struct. That is, every file in the dataset contains a message conforming to this struct.
 #
-# 2. A communication protocol for proof exploration. Depending on who initiates the exploration
-#    (Coq or the learning agent), the entry-point for this is respectively the `PushReinforce` or
-#    the `PullReinforce` interface.
+# 2. A communication protocol for proof synthesis with Tactician. There are two protocols for this:
+#    - A simple, linear message exchange protocol, specified by the `PredictionProtocol` struct.
+#    - An RPC based protocol, specified by the `PredictionServer` interface.
 #
-# 3. A communication protocol for proof synthesis with Tactician. The entry-point of this
-#    protocol is the `PredictionProtocol` struct.
+# 2. A communication protocol for proof exploration by a client. Proof exploration is started through
+#    the `explore` function of the `PredictionServer` interface.
+#
 #
 # All these three entry-points share a common base, which encodes the notion of graphs, terms,
 # tactics and more.
@@ -78,7 +79,7 @@ struct Graph {
 
     label :union { # Inlined for efficiency purposes
       # Proof state
-      # Hash a unique id (evar) for the proof state that distinquishes proof states with identical
+      # Has a unique id (evar) for the proof state that distinquishes proof states with identical
       # contents but do not point to the same object nonetheless
       proofState @0 :ProofStateIdP;
 
@@ -421,17 +422,18 @@ struct Definition {
 }
 
 struct DataVersion {
-  # Version info of a dataset.
+  # Version info for the data schema. A version `x.y` has a major component and a minor component.
+  # The major component `x` will be incremented to `x+1` when there are incompatible changes in the
+  # schema that affect the `Dataset` struct.
+  # The minor component `y` will be incremented to `y+1` when there are incompatible changes in the
+  # communication protocol with Coq, but the dataset format remains unaffected.
 
   major @0 :Int64;
-  # Currently we only have a major version. Any change to the graph format, Cap'n Proto schema or
-  # communication protocol is considered a breaking change and will increment the major version number.
-  # Note that currently we don't distinquish backwards-compatible Cap'n Proto schema changes from
-  # non-backwards-compatible changes. The schema might change in a non-compatible way without notice.
-  # In the future, a minor version id might be introduced.
+
+  minor @1 :Int64;
 }
 
-const currentVersion :DataVersion = ( major = 15 );
+const currentVersion :DataVersion = ( major = 16, minor = 0 );
 
 
 ######################################################################################################
@@ -474,7 +476,102 @@ struct Dataset {
 
 ######################################################################################################
 #
-#             The schema for proof exploration
+#             The schema for interacting through basic messages
+#
+######################################################################################################
+
+struct GlobalContextAddition {
+    # Start a context for making tactical predictions for proof search. The context includes the tactics
+    # that are currently available, the definitions that are available.
+
+    dataVersion @0 :DataVersion;
+    # TODO: Move to a handshake message
+    # The version number this message and subsequent messages is compatible with.
+
+    stackSize @1 :Int32;
+    # GlobalContextAddition messages can depend on previously sent GlobalContextAddition messages. These
+    # messages form a stack. This field indicates the size of the stack that this message depends on (if
+    # a message has no dependencies, this field is zero). If the current stack is larger than the stack
+    # size of this message, then the items excess items on the stack should be discarded before adding
+    # the current message to the stack. It is guaranteed that the excess items will never be referenced
+    # again.
+    #
+    # The dependency indices of nodes contained in the graphs of the stack are indexed as follows:
+    # A dependency index `i` found in the graph at stack height `j` is resolved to the graph at stack height
+    # `j - i`. (This scheme keeps the guarantee that dependency index `0` always points to the current graph.)
+
+    tactics @2 :List(AbstractTactic);
+    # TODO: Move to a separate message
+    # A list of tactics that Coq currently knows about.
+
+    graph @3 :Graph;
+    # The graph of this message. See `stackSize` on how to resolve dependency indexes in this graph.
+
+    logAnnotation @4 :Text;
+    # An annotation containing file and line information on where Coq is currently processing.
+
+    representative @5 :NodeIndex;
+    # Points to the last definition of the global context. All other definitions can be accessed by following
+    # the `Definition.previous` chain starting from this definition. If the global context is empty
+    # this is equal to `len(graph.nodes)`.
+}
+
+struct PredictionRequest {
+  # Request a list of tactic predictions given the graph of a proof state.
+
+  graph @0 :Graph;
+  # The graph may reference definitions present in the stack of initialize messages. See
+  # `GlobalContextAddition.stackSize` on how dependency indices can be resolved to a graph in the stack.
+
+  state @1 :ProofState;
+  # The proof state for which a prediction is requested.
+}
+
+struct Prediction {
+  tactic @0 :Tactic;
+  arguments @1 :List(Argument);
+  confidence @2 :Float64;
+}
+struct TextPrediction {
+  tacticText @0 :Text;
+  confidence @1 :Float64;
+}
+
+struct PredictionProtocol {
+  # This protocol works by exchanging raw messages over a socket. The protocol is fully linear.
+  # Coq sends a `Request` and waits for a corresponding `Response` message. A message of a given
+  # type should be responded with using the obviously corresponding response type.
+
+  struct Request {
+    union {
+      initialize @0 :GlobalContextAddition;
+      predict @1 :PredictionRequest;
+      checkAlignment @2 :Void;
+      # Request for the server to align the given tactics and definition to it's internal knowledge
+      # and report back any tactics and definitions that were not found
+    }
+  }
+  struct Response {
+    # See Request for documentation.
+    union {
+      initialized @0 :Void;
+      prediction @1 :List(Prediction);
+      textPrediction @2 :List(TextPrediction);
+      # Output is a list of predictions with a confidence. The list is expected to be
+      # sorted by decreasing confidence.
+
+      alignment :group {
+        unalignedTactics @3 :List(TacticId);
+        unalignedDefinitions @4 :List(Node);
+      }
+    }
+  }
+}
+
+
+######################################################################################################
+#
+#             The schema for RPC-based interaction
 #
 ######################################################################################################
 
@@ -512,126 +609,22 @@ struct ExecutionResult {
 }
 
 interface ProofObject {
-  # Represents a particular proof state.
+  # Represents a single proof object (usually part of ExecutionResult) on which tactics can be executed.
+
   runTactic @0 (tactic: Tactic, arguments: List(Argument)) -> (result: ExecutionResult);
   runTextTactic @1 (tactic :Text) -> (result: ExecutionResult);
   # Run a tactic on the proof state. This function can be called repeatedly, and the given tactic will always be
   # executed on the same proof state.
 }
 
-interface AvailableTactics {
-  # A way of receiving information about available tactics in a exploration session.
-  tactics @0 () -> (tactics :List(AbstractTactic));
-  printTactic @1 (tactic :TacticId) -> (tactic :Text);
-}
-
-interface PullReinforce {
-  reinforce @0 (lemma :Text) -> (available :AvailableTactics, result :ExecutionResult);
-  # An interface allowing a proof exploration session to be initiated by the agent.
-  # The `lemma` argument is the statement the agent wants to prove. As a response, Coq sends the available
-  # tactics that can be used during the proof and the execution result that represents the opening of the
-  # session.
-}
-
-interface PushReinforce {
-  reinforce @0 (result :ExecutionResult);
+interface PredictionServer {
+  addGlobalContext @0 GlobalContextAddition -> ();
+  requestPrediction @1 PredictionRequest -> (predictions :List(Prediction));
+  requestTextPrediction @2 PredictionRequest -> (predictions :List(TextPrediction));
+  checkAlignment @3 () -> (unalignedTactics :List(TacticId), unalignedDefinitions :List(Node));
+  explore @4 (result :ExecutionResult);
   # An interface allowing a proof exploration session to be initiated by Coq. In this case, Coq decides
   # what lemma should be proved and immediately presents the agent with the initial execution result.
-}
-
-
-######################################################################################################
-#
-#             The schema for synthesizing proofs using the 'synth' tactic
-#
-######################################################################################################
-
-struct PredictionProtocol {
-  # This protocol works by exchanging raw messages over a socket. The protocol is fully linear.
-  # Coq sends a `Request` and waits for a corresponding `Response` message. A message of a given
-  # type should be responded with using the obviously corresponding response type.
-
-  struct Request {
-    union {
-      initialize :group {
-        # Start a context for making tactical predictions for proof search. The context includes the tactics
-        # that are currently available, the definitions that are available.
-
-        dataVersion @0 :DataVersion;
-        # The version number this message and subsequent messages is compatible with.
-
-        stackSize @1 :Int32;
-        # Initialize messages can depend on previously sent initialize messages. These messages form a stack.
-        # This field indicates the size of the stack that this message depends on (if a message has no
-        # dependencies, this field is zero). If the current stack is larger than the stack size of this message,
-        # then the items excess items on the stack should be discarded before adding the current message to the
-        # stack. It is guaranteed that the excess items will never be referenced again.
-        #
-        # The dependency indices of nodes contained in the graphs of the stack are indexed as follows:
-        # A dependency index `i` found in the graph at stack height `j` is resolved to the graph at stack height
-        # `j - i`. (This scheme keeps the guarantee that dependency index `0` always points to the current graph.)
-
-        tactics @2 :List(AbstractTactic);
-        # A list of tactics that Coq currently knows about.
-
-        graph @3 :Graph;
-        # The graph of this message. See `stackSize` on how to resolve dependency indexes in this graph.
-
-        logAnnotation @4 :Text;
-        # An annotation containing file and line information on where Coq is currently processing.
-
-        representative @5 :NodeIndex;
-        # Points to the last definition of the global context. All other definitions can be accessed by following
-        # the `Definition.previous` chain starting from this definition. If the global context is empty
-        # this is equal to `len(graph.nodes)`.
-      }
-      predict :group {
-        # Request a list of tactic predictions given the graph of a proof state.
-
-        graph @6 :Graph;
-        # The graph may reference definitions present in the stack of initialize messages. See
-        # `initialize.stackSize` on how dependency indices can be resolved to a graph in the stack.
-
-        state @7 :ProofState;
-        # The proof state for which a prediction is requested.
-      }
-      synchronize @8 :UInt64;
-      # TODO: Get rid of this in next version, no longer used.
-      # Coq uses this message to synchronize the state of the protocol when exceptions have occurred.
-      # The contract is that the given integer needs to be echo'd back verbatim.
-
-      checkAlignment @9 :Void;
-      # Request for the server to align the given tactics and definition to it's internal knowledge
-      # and report back any tactics and definitions that were not found
-    }
-  }
-  struct Prediction {
-    tactic @0 :Tactic;
-    arguments @1 :List(Argument);
-    confidence @2 :Float64;
-  }
-  struct TextPrediction {
-    tacticText @0 :Text;
-    confidence @1 :Float64;
-  }
-  struct Response {
-    # See Request for documentation.
-    union {
-      initialized @0 :Void;
-      prediction @1 :List(Prediction);
-      textPrediction @2 :List(TextPrediction);
-      # Output is a list of predictions with a confidence. The list is expected to be
-      # sorted by decreasing confidence.
-
-      synchronized @3 :UInt64;
-      # TODO: Get rid of this in next version, no longer used.
-
-      alignment :group {
-        unalignedTactics @4 :List(TacticId);
-        unalignedDefinitions @5 :List(Node);
-      }
-    }
-  }
 }
 
 

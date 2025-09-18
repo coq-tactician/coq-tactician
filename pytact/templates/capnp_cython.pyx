@@ -9,6 +9,15 @@
 import os
 import capnp
 import pytact.graph_api_capnp
+from capnp.lib.capnp cimport SchemaParser
+
+def loadCompiledTypes(SchemaParser schema_parser):
+    cdef C_SchemaParser* c_schema_parser = <C_SchemaParser*>schema_parser.thisptr
+    {%- for c in classes %}
+    c_schema_parser.loadCompiledTypeAndDependencies{{ c.cython_name }}()
+    {%- endfor %}
+
+loadCompiledTypes(capnp.lib.capnp._global_schema_parser)
 
 {%- for c in classes %}
 
@@ -77,10 +86,6 @@ cdef class {{ c.cython_name }}_Reader:
         return self.source.has{{ field.cpp_name }}()
     {%- endif %}
     {%- endfor %}
-
-{%- if not c.is_group %}
-pytact.graph_api_capnp.{{ c.pycapnp_name }}.schema = _Schema()._init(get{{ c.cython_name }}_Schema()).as_struct()
-{%- endif %}
 {%- endfor %}
 
 

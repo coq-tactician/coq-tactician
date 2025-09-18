@@ -1,18 +1,18 @@
 from capnp.includes.types cimport *
 from capnp cimport helpers
-from capnp.includes.capnp_cpp cimport DynamicValue, Schema, StringPtr
-from capnp.lib.capnp cimport _DynamicStructReader, to_python_reader, _Schema
+from capnp.includes.capnp_cpp cimport DynamicValue, StringPtr
+from capnp.lib.capnp cimport _DynamicStructReader, to_python_reader, reraise_kj_exception
 
-from capnp.helpers.non_circular cimport reraise_kj_exception
-
-cdef extern from "capnp/helpers/capabilityHelper.cpp":
-    pass
+cdef extern from "capnp/schema-parser.h" namespace " ::capnp":
+    cdef cppclass C_SchemaParser"capnp::SchemaParser" nogil:
+        {%- for c in classes %}
+        void loadCompiledTypeAndDependencies{{ c.cython_name }}"loadCompiledTypeAndDependencies<{{ c.cpp_name }}>"()
+        {%- endfor %}
 
 cdef extern from "graph_api.capnp.h":
 
     {%- for c in classes %}
 
-    Schema get{{ c.cython_name }}_Schema"capnp::Schema::from<{{ c.cpp_name }}>"()
     cdef cppclass C_{{ c.cython_name }}_Reader "{{ c.cpp_name }}::Reader":
         {%- if c.fields == [] %}
         pass

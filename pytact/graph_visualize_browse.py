@@ -62,9 +62,14 @@ class GraphVisualizationData:
     graphid2path: List[Path] = field(init=False)
 
     def __post_init__(self):
-        self.trans_deps = transitive_closure({d.filename: list(d.dependencies)
-                                              for d in self.data.values()})
-        self.graphid2path = [d.filename for d in sorted(self.data.values(), key=lambda d: d.graph)]
+        if len(self.data.values()) == 0: return
+        if hasattr(list(self.data.values())[0], "dependencies"):
+            self.trans_deps = transitive_closure({d.filename: list(d.dependencies)
+                                                  for d in self.data.values()})
+            self.graphid2path = [d.filename for d in sorted(self.data.values(), key=lambda d: d.graph)]
+        else:
+            self.trans_deps = { p : set() for p in self.data.keys()}
+            self.graphid2path = list(self.data.keys())
 
 @dataclass
 class GraphVisualizationOutput:
@@ -126,6 +131,12 @@ def render_proof_state_text(ps: ProofState):
     return ('<br>'.join(ps.context_text) +
             '<br>----------------------<br>' + ps.conclusion_text +
             '<br><br>Raw: ' + ps.text)
+
+def mn(dataset):
+    if hasattr(dataset, "module_name"):
+        return dataset.module_name
+    else:
+        return ""
 
 class GraphVisualizator:
     def __init__(self, data: GraphVisualizationData, url_maker: UrlMaker, settings: Settings = Settings()):
@@ -191,7 +202,7 @@ class GraphVisualizator:
 
         dataset = self.data[fname]
         representative = dataset.representative
-        module_name = dataset.module_name
+        module_name = mn(dataset)
 
         def render_def(dot2, d: Definition):
             label = make_label(module_name, d.name)
@@ -221,7 +232,7 @@ class GraphVisualizator:
                         dot.edge(id, id2,
                                  arrowtail="odot", dir="both", constraint="false", style="dashed")
 
-        for cluster in dataset.clustered_definitions():
+        for cluster in dataset.clustered_definitions(full=False):
 
             start = str(cluster[0].node)
             ltail = None
@@ -349,7 +360,7 @@ class GraphVisualizator:
                 proof = [("Proof", self.url_maker.proof(fname, definition))]
         ext_location = (
             location +
-            [(make_label(self.data[fname].module_name, label),
+            [(make_label(mn(self.data[fname]), label),
               self.url_maker.definition(fname, definition))] +
             proof)
         return GraphVisualizationOutput(dot.source, ext_location, len(location), text)
@@ -405,7 +416,7 @@ class GraphVisualizator:
                         dot.edge(before_id, qedid)
 
         location = (self.path2location(fname) +
-                    [(make_label(self.data[fname].module_name, d.name),
+                    [(make_label(mn(self.data[fname]), d.name),
                       self.url_maker.definition(fname, definition)),
                      ("Proof", self.url_maker.proof(fname, definition))])
         return GraphVisualizationOutput(dot.source, location, len(location) - 1)
@@ -508,7 +519,7 @@ class GraphVisualizator:
                 dot2.edge('artificial-root', id)
 
         location = (self.path2location(fname) +
-                    [(make_label(self.data[fname].module_name, d.name),
+                    [(make_label(mn(self.data[fname]), d.name),
                       self.url_maker.definition(fname, definition)),
                      ("Proof", self.url_maker.proof(fname, definition)),
                      (f"Step {stepi} outcome {outcomei}",
