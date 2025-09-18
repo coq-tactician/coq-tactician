@@ -1,0 +1,568 @@
+open Tactician_ltac1_record_plugin
+open Tactic_learner
+open Names
+open Graph_extractor
+open Graph_def
+
+module OList = CList
+
+let dirpath = Global.current_dirpath ()
+let dirpath_hash = DirPath.hash dirpath
+
+module type Hashable = sig
+  type t
+  val hash : t -> int64
+end
+
+module GlobalCICGraph(S : Hashable) = struct
+  module Hasher = XXHasher
+  module HashMap = Hashtbl.Make(XXHasher)
+  type lnode = S.t * (bool * int)
+  include GlobalGraph(S)(
+    struct
+      type edge_label = edge_type
+      type node_label = lnode node_type
+      let is_definition = function
+        | Definition _ -> true
+        | _ -> false
+    end)
+  let lower n = n, Int64.of_int 0
+  let transform_node_type n = n, Int64.of_int 0
+  type 'a repr_t =
+    lnode HashMap.t -> builder -> S.t -> 'a * builder
+  let run m _ b e = run m b e
+end
+
+module rec GlobalHashedCICGraph : functor (S : Hashable) -> sig
+  type node' = GlobalHashedCICGraph(S).node
+  type lnode = S.t * (bool * int)
+  type nonrec builder = (node' node_type * int64, edge_type, lnode) builder
+  module Hasher : Map.OrderedType
+  module HashMap : Hashtbl.S with type key = Hasher.t
+  include GraphMonadType
+    with type node_label = node' node_type
+     and type edge_label = edge_type
+     and type 'a repr_t = lnode HashMap.t -> builder -> S.t -> 'a * builder
+  val lower : node -> lnode * int64
+  val builder_nil : builder
+  val transform_node_type : 'a -> 'a
+end = functor (S : Hashable) -> struct
+  type node' = GlobalHashedCICGraph(S).node
+  type lnode = S.t * (bool * int)
+  module rec GG
+    : sig
+      type node' = S.t * (bool * int)
+      type nonrec builder = (GH.node node_type * int64, edge_label, node') builder
+      val builder_nil : builder
+      include GraphMonadType
+        with type node_label = GH.node node_type * int64
+         and type edge_label = edge_label
+         and type node = node'
+         and type 'a repr_t = builder -> S.t -> 'a * builder
+      val node_location : node' -> int64
+    end
+    = struct
+      include GlobalGraph(S)(
+        struct
+          type edge_label = edge_type
+          type node_label = GH.node node_type * int64
+          let is_definition (d, _) = match d with
+            | Definition _ -> true
+            | _ -> false
+        end)
+      let node_location (p, _) = S.hash p
+    end
+  and Hasher :
+    CICHasherType with type t = int64
+                   and type node_label = GH.node node_type
+                   and type edge_label = edge_label =
+    CICHasher(XXHasher)
+      (struct
+        type node = GH.node
+        let node_hash n = GH.physical_hash n
+      end)
+  and HashMap : Hashtbl.S with type key = Hasher.t = Hashtbl.Make(Hasher)
+  and GH : sig
+    include GraphMonadType
+      with type node_label = GH.node node_type
+       and type edge_label = edge_type
+       and type 'a repr_t = lnode HashMap.t -> GG.builder -> S.t -> 'a * GG.builder
+    val lower : GH.node -> lnode * int64
+    val physical_hash : GH.node -> int64
+  end
+    = GraphHasher
+      (struct
+        type node_label = GH.node node_type
+        type edge_label = edge_type
+      end)
+      (Hasher)(HashMap)(GG)
+  type builder = GG.builder
+  let builder_nil = GG.builder_nil
+  include GH
+  let transform_node_type n = n
+end
+
+module HashDirPath = struct
+  type t = int
+  let hash p = Int64.of_int p
+end
+(* module G = GlobalCICGraph(HashDirPath) *)
+module G = GlobalHashedCICGraph(HashDirPath)
+module CICGraphMonad = struct
+  include CICGraphMonad(G)
+  type node' = node
+end
+module GB = GraphBuilder(CICGraphMonad)
+
+module ConvertStructures(TS : TacticianStructures) = struct
+  open TS
+  let mk_single_proof_state ps : Graph_extractor.single_proof_state =
+    let concl = proof_state_goal ps in
+    let hyps = proof_state_hypotheses ps in
+    let evar = proof_state_evar ps in
+    List.map (map_named term_repr) hyps, term_repr concl, evar
+  let mk_proof_state ps : Graph_extractor.proof_state =
+    let sigma = proof_state_sigma ps in
+    let f e =
+      let d = proof_state_dependent ps e in
+      mk_single_proof_state d in
+    sigma, f, mk_single_proof_state ps
+  let mk_outcome before result =
+    let f e =
+      let d = tactic_result_dependent result e in
+      mk_single_proof_state d in
+    mk_proof_state before, term_repr @@ tactic_result_term result, tactic_result_sigma result, f,
+    List.map mk_proof_state @@ tactic_result_states result
+
+  end
+
+module GraphGeneratorLearner : TacticianOnlineLearnerType = functor (TS : TacticianStructures) -> struct
+  module LH = Learner_helper.L(TS)
+  open TS
+  open ConvertStructures(TS)
+
+  type model = (((proof_state * tactic_result) list * tactic option) list * data_status * KerName.t) list
+
+  let last_model = Summary.ref ~name:"dataset-generator-learner-lastmodel" []
+
+  let cache_type kn =
+    let dirp = Global.current_dirpath () in
+    let kn_dirp =
+      let rec get_dirpath = function
+        | MPfile dp -> dp
+        | MPbound b ->
+          let (_, id, dp) = MBId.repr b in
+          dp
+        | MPdot (mp, l) -> get_dirpath mp in
+      get_dirpath @@ KerName.modpath kn in
+    if DirPath.equal dirp kn_dirp then `File else `Dependency
+
+  let empty () = []
+  let learn db (kn, path, status) outcomes tac =
+    match cache_type kn, status with
+    | `File, (QedTime | Discharged _ | Substituted _)  ->
+      let proof_states = List.map (fun x ->
+          x.before, x.result) outcomes in
+      let db = match db with
+        | (ls, pstatus, pkn)::data when KerName.equal kn pkn ->
+          ((proof_states, tac)::ls, pstatus, pkn)::data
+        | _ -> ([proof_states, tac], status, kn)::db in
+      last_model := db;
+      db
+    | (`Dependency, _) | (`File, Original) -> db
+  let predict db situations = IStream.empty
+  let evaluate db _ _ = 0., db
+
+  type glob_ref2 =
+    | GConstant of constant
+    | GInductive of inductive
+    | GConstructor of constructor
+    | GProjection of Projection.Repr.t
+
+  open CICGraphMonad
+
+  (* Global state of the graph generator *)
+  let graph_builder = ref G.builder_nil
+  let node_hashes = G.HashMap.create 100
+  let definition_nodes = ref Int.Set.empty
+  let dependencies = Summary.ref ~name:"TacticianGraphDependencies" Int.Map.empty
+  let section_nodes = Summary.ref ~name:"TacticianGraphSectionNodes" Id.Map.empty
+  let global_nodes = Summary.ref ~name:"TacticianGraphGlobalNodes"
+      { constants = Cmap.empty
+      ; inductives = Indmap.empty
+      ; constructors = Constrmap.empty
+      ; projections = ProjMap.empty }
+  let previous_definition = Summary.ref ~name:"TacticianGraphPreviousDefinition" None
+  let external_previous_definitions = Summary.ref ~name:"TacticianGraphExternalPreviousDefinition" Int.Map.empty
+  let known_external_previous_definitions =
+    Summary.ref ~name:"TacticianGraphKnownExternalPreviousDefinition" Int.Map.empty
+  let definition_ordering = Summary.ref ~name:"TacticianGraphDefinitionOrdering" GlobRef.Map.empty
+  let definition_ordering_counter = Summary.ref ~name:"TacticianGraphDefinitionOrderingCounter" 0
+
+  let update_error p ns n = function
+    | None -> Some (ns, n)
+    | Some ((NActual, _) as x) ->
+      (match ns with
+       | NSubstituted ->
+         (* This is valid and can happen when the substitution of a constant is a null-op. We want to ignore these. *)
+         Some x
+       | _ ->
+         CErrors.anomaly Pp.(str "Map update attempt while key already existed: " ++ p))
+    | Some ((NDischarged | NSubstituted), _) -> Some (ns, n)
+  let in_global_nodes : node_status * glob_ref2 -> Libobject.obj =
+    Libobject.(declare_object @@ superglobal_object "LTACRECORDGRAPHNODES"
+                 ~cache:(fun ((fp, kn), ((ns, n), gr)) ->
+                     let gn = !global_nodes in
+                     global_nodes := match gr with
+                       | GConstant c ->
+                         { gn with constants = Cmap.update c (update_error (Constant.print c) ns n) gn.constants }
+                       | GInductive i ->
+                         { gn with inductives = Indmap.update i (update_error (Pp.str "ind") ns n) gn.inductives }
+                       | GConstructor c ->
+                         { gn with constructors = Constrmap.update c (update_error (Pp.str "constr") ns n) gn.constructors }
+                       | GProjection p ->
+                         { gn with projections = ProjMap.update p (update_error (Pp.str "proj") ns n) gn.projections }
+                   )
+                 ~subst:(Some (fun (o, ((_, n), gr)) ->
+                     (NSubstituted, n), match gr with
+                     | GConstant c ->
+                       GConstant (Mod_subst.subst_constant o c)
+                     | GInductive i -> GInductive (Mod_subst.subst_ind o i)
+                     | GConstructor (i, n) -> GConstructor (Mod_subst.subst_ind o i, n)
+                     | GProjection p -> GProjection (Mod_subst.subst_proj_repr o p)
+                   ))
+                 ~discharge:(fun (_, ((_, n), gr)) -> Some ((NDischarged, n), gr)))
+
+  let in_definition_ordering : GlobRef.t -> Libobject.obj =
+    Libobject.(declare_object @@ superglobal_object "LTACRECORDGRAPHDEFINITIONORDERING"
+                 ~cache:(fun (_, gr) ->
+                     definition_ordering := GlobRef.Map.add gr !definition_ordering_counter !definition_ordering;
+                     definition_ordering_counter := !definition_ordering_counter + 1)
+                 ~subst:(Some (fun (subst, gr) -> Globnames.subst_global_reference subst gr))
+                 ~discharge:(fun (_, gr) -> match gr with
+                     | GlobRef.VarRef _ -> None
+                     | _ -> Some gr))
+  let in_dependencies : (int * string * int * Int.Set.t) -> Libobject.obj =
+    Libobject.(declare_object @@ superglobal_object_nodischarge "LTACRECORDGRAPHDEPS"
+        ~cache:(fun (_, (path, bin, def_count, deps)) ->
+                 dependencies := Int.Map.add path (bin, def_count, deps) !dependencies)
+        ~subst:None)
+  let in_previous_definition : node option -> Libobject.obj =
+    Libobject.(declare_object @@ superglobal_object_nodischarge "LTACRECORDGRAPHPREVIOUS"
+                 ~cache:(fun (_, prev) ->
+                     match prev with
+                     | None -> ()
+                     | Some prev ->
+                       let ((d, n), _) = G.lower prev in
+                       if d == dirpath_hash then
+                         previous_definition := Some prev
+                       else
+                         external_previous_definitions := Int.Map.add d prev !external_previous_definitions)
+                 ~subst:(Some (fun (_, _) -> None)))
+  let in_node_hashes : (G.Hasher.t * G.lnode) array -> Libobject.obj =
+    Libobject.(declare_object @@ superglobal_object_nodischarge "LTACRECORDGRAPHNODEHASHES"
+                 ~cache:(fun (_, hm) ->
+                     Array.iter (fun (k, v) -> G.HashMap.replace node_hashes k v) hm)
+                 ~subst:None)
+  let in_known_external_previous_definition : node option -> Libobject.obj =
+    Libobject.(declare_object @@ superglobal_object_nodischarge "LTACRECORDGRAPHKNOWNEXTERNAL"
+                 ~cache:(fun (_, prev) ->
+                     match prev with
+                     | None -> ()
+                     | Some prev ->
+                       let ((d, n), _) = G.lower prev in
+                       known_external_previous_definitions := Int.Map.add d prev !known_external_previous_definitions)
+                 ~subst:(Some (fun (_, _) -> None)))
+
+  open GB
+
+  let grandfathered_constants =
+    [ match Coqlib.lib_ref "tactician.private_constant_placeholder" with
+      | Names.GlobRef.ConstRef const -> const
+      | _ -> assert false
+    ]
+
+  let update_graph () =
+    let err_msg c = Pp.(str "Unexpected definition" ++ ws 1 ++ c ++ ws 1 ++ str "encountered. " ++
+                        str "Did you forget to inject Tactician while installing a dependency?") in
+    let globrefs = Environ.Globals.view (Global.env ()).env_globals in
+    let section_vars = Id.Set.of_list @@
+      List.map Context.Named.Declaration.get_id @@ Environ.named_context @@ Global.env () in
+    let constants = Cmap_env.filter
+        (fun c _ ->
+           (not @@ List.exists (Constant.CanOrd.equal c) grandfathered_constants) &&
+           match Cmap.find_opt c !global_nodes.constants with
+           | Some (NActual, _) -> false
+           | None | Some ((NSubstituted | NDischarged), _) -> true
+        ) globrefs.constants in
+    (* We are only interested in canonical constants *)
+    let constants = Cmap_env.fold (fun c _ m ->
+        let c = Constant.make1 @@ Constant.canonical c in
+        if not @@ DirPath.equal dirpath @@ ModPath.dp @@ Constant.modpath c then
+          CErrors.user_err (err_msg (Constant.print c));
+        Cset.add c m) constants Cset.empty in
+    let minductives = Mindmap_env.filter
+        (fun m _ ->
+           match Indmap.find_opt (m, 0) !global_nodes.inductives with
+           | Some (NActual, _) -> false
+           | None | Some ((NSubstituted | NDischarged), _) -> true) globrefs.inductives in
+    (* We are only interested in canonical inductives *)
+    let minductives = Mindmap_env.fold (fun c _ m ->
+        let c = MutInd.make1 @@ MutInd.canonical c in
+        if not @@ DirPath.equal dirpath @@ ModPath.dp @@ MutInd.modpath c then
+          CErrors.user_err (err_msg (MutInd.print c));
+        Mindset.add c m) minductives Mindset.empty in
+    let open Monad_util.WithMonadNotations(CICGraphMonad) in
+    let open Monad.Make(CICGraphMonad) in
+
+    let proof_states = OList.map (fun (prf, status, c) -> OList.rev prf, status, c) @@ OList.rev !last_model in
+
+    (* Correctness check *)
+    let lemmas = OList.filter_map (function (_, Discharged _, _) -> None | (_, _, x) -> Some x) proof_states in
+    let global_context =
+      KNset.elements @@ Cmap_env.fold (fun c _ m ->
+        let c = Constant.canonical c in
+        KNset.add c m) globrefs.constants KNset.empty in
+    let lemmas = OList.filter (fun x ->
+        (not @@ OList.exists (KerName.equal x) global_context) &&
+        (not @@ Id.Set.mem (Label.to_id @@ KerName.label x) section_vars)
+      ) lemmas in
+    OList.iter (fun x ->
+        let base = Label.to_id @@ KerName.label x in
+        let candidates = OList.filter (fun x -> Names.Id.equal (Label.to_id @@ KerName.label x) base ) global_context in
+        Feedback.msg_warning Pp.(str "Unknown lemma: " ++ KerName.print x ++ str "\nAlternatives:\n" ++
+                            prlist_with_sep (fun () -> str "\n") KerName.print candidates)) lemmas;
+    (* End correctness check *)
+
+    let env = Global.env () in
+    let env_extra_const = Cset.fold (fun c m ->
+        let path = Constant.canonical c in
+        let proof = OList.find_opt (fun (p, _, path2) -> KerName.equal path path2) proof_states in
+        let proof = Option.map (fun (p, _, _) -> p) proof in
+        let proof = Option.map (OList.map (fun (pss, tac) ->
+            OList.map (fun (before, result) -> mk_outcome before result) pss,
+            Option.map tactic_repr tac)) proof in
+        Option.fold_left (fun m proof -> Cmap.add c proof m) m proof
+      ) constants Cmap.empty in
+    let env_extra_var = Id.Set.fold (fun id m ->
+        let proof = OList.find_opt (fun (_, _, path) -> Id.equal id @@ Label.to_id @@ KerName.label path) proof_states in
+        let proof = Option.map (fun (p, _, _) -> p) proof in
+        let proof = Option.map (OList.map (fun (pss, tac) ->
+            OList.map (fun (before, result) -> mk_outcome before result) pss,
+            Option.map tactic_repr tac)) proof in
+        Option.fold_left (fun m proof -> Id.Map.add id proof m) m proof
+      ) section_vars Id.Map.empty in
+    let env_extra = env_extra_var, env_extra_const in
+
+    (* We want to order definition by the order in which they were inputted by the user. This is important
+       during section closing and module instantiation, because then we just get a bunch of unsorted definitions
+       all at once. Hence, we remember the information about their original ordering inside the
+       section or module functor. *)
+    let globrefs = (OList.map (fun id -> GlobRef.VarRef id) @@ Id.Set.elements section_vars) @
+                   (OList.map (fun c -> GlobRef.ConstRef c) @@ Cset.elements constants) @
+                   (OList.map (fun m -> GlobRef.IndRef (m, 0)) @@ Mindset.elements minductives) in
+    OList.iter (fun gr -> Lib.add_anonymous_leaf @@ in_definition_ordering gr) @@
+    Definition_order.order env @@ OList.fold_left (fun set gr ->
+        if GlobRef.Map.mem gr !definition_ordering then set else GlobRef.Set.add gr set)
+      GlobRef.Set.empty globrefs;
+    let globrefs = OList.sort (fun gr1 gr2 ->
+        Int.compare
+          (GlobRef.Map.find gr1 !definition_ordering)
+          (GlobRef.Map.find gr2 !definition_ordering)) globrefs in
+
+    let updater =
+      List.iter (fun gr -> map (fun _ -> ()) @@ gen_globref env env_extra gr) globrefs
+    in
+    let known = Int.Map.domain !known_external_previous_definitions in
+    let external_previous = OList.map snd @@ Int.Map.bindings @@
+      Int.Map.filter (fun p _ -> not @@ Int.Set.mem p known) !external_previous_definitions in
+    let (new_state, ()), builder =
+      CICGraphMonad.run ~include_metadata:true ~state:{ previous = !previous_definition
+                          ; external_previous
+                          ; section_nodes = !section_nodes
+                          ; definition_nodes = !global_nodes }
+        updater node_hashes !graph_builder dirpath_hash in
+    graph_builder := builder;
+    section_nodes := new_state.section_nodes;
+    definition_nodes := Id.Map.fold (fun _ n s ->
+        let ((path, (def, n)), _) = G.lower n in
+        if path != dirpath_hash then CErrors.anomaly Pp.(str "Local node expected");
+        assert def;
+        Int.Set.add n s) new_state.section_nodes !definition_nodes;
+    definition_nodes := Cmap.fold (fun _  (_status, n) s ->
+        let ((path, (def, n)), _) = G.lower n in
+        assert def;
+        if path = dirpath_hash then Int.Set.add n s else s)
+        new_state.definition_nodes.constants !definition_nodes;
+    definition_nodes := Indmap.fold (fun _ (_status, n) s ->
+        let ((path, (def, n)), _) = G.lower n in
+        assert def;
+        if path = dirpath_hash then Int.Set.add n s else s)
+        new_state.definition_nodes.inductives !definition_nodes;
+    definition_nodes := Constrmap.fold (fun _ (_status, n) s ->
+        let ((path, (def, n)), _) = G.lower n in
+        assert def;
+        if path = dirpath_hash then Int.Set.add n s else s)
+        new_state.definition_nodes.constructors !definition_nodes;
+    definition_nodes := ProjMap.fold (fun _ (_status, n) s ->
+        let ((path, (def, n)), _) = G.lower n in
+        assert def;
+        if path = dirpath_hash then Int.Set.add n s else s)
+        new_state.definition_nodes.projections !definition_nodes;
+
+    let new_known = Int.Map.filter
+        (fun p _ ->
+           (not @@ Int.Set.mem p known) &&
+           (not @@ OList.exists (fun n ->
+                let ((p', _), _) = G.lower n in
+                p = p') new_state.external_previous))
+        !external_previous_definitions in
+    Int.Map.iter (fun _ n -> Lib.add_anonymous_leaf @@ in_known_external_previous_definition (Some n)) new_known;
+
+    Lib.add_anonymous_leaf @@ in_previous_definition new_state.previous;
+
+    let update_definitions iter find defs wrap check =
+      iter
+        (fun c (ns, n) ->
+           match ns with
+           | NDischarged | NSubstituted -> ()
+           | NActual ->
+             match find c with
+             | None ->
+               check c;
+               Lib.add_anonymous_leaf @@ in_global_nodes ((NActual, n), wrap c)
+             | Some (NActual, _) -> ()
+             | Some ((NDischarged | NSubstituted), _) ->
+               Lib.add_anonymous_leaf @@ in_global_nodes ((NActual, n), wrap c)
+        ) defs in
+    update_definitions Cmap.iter (fun c -> Cmap.find_opt c !global_nodes.constants)
+      new_state.definition_nodes.constants (fun c -> GConstant c)
+      (fun c ->
+         if (not @@ CList.exists (Constant.CanOrd.equal c) grandfathered_constants) &&
+            (not @@ Cset.mem c constants) then
+           CErrors.user_err (err_msg @@ Constant.print c));
+    update_definitions Indmap.iter (fun i -> Indmap.find_opt i !global_nodes.inductives)
+      new_state.definition_nodes.inductives (fun i -> GInductive i)
+      (fun i ->
+         if not @@ Mindset.mem (fst i) minductives then
+           CErrors.user_err (err_msg @@  MutInd.print (fst i)));
+    update_definitions Constrmap.iter (fun c -> Constrmap.find_opt c !global_nodes.constructors)
+      new_state.definition_nodes.constructors (fun c -> GConstructor c)
+      (fun c ->
+         if not @@ Mindset.mem (fst (fst c)) minductives then
+           CErrors.user_err (err_msg @@  MutInd.print (fst (fst c))));
+    update_definitions ProjMap.iter (fun p -> ProjMap.find_opt p !global_nodes.projections)
+      new_state.definition_nodes.projections (fun p -> GProjection p)
+      (fun p ->
+         if not @@ Mindset.mem (Projection.Repr.mind p) minductives then
+           CErrors.user_err (err_msg @@  MutInd.print (Projection.Repr.mind p)))
+
+  let () = Hook.set Stm.document_add_hook (fun _ _ -> update_graph ())
+
+  let resolve_dependencies deps =
+    let absolute_deps = List.map (fun p ->
+        match Int.Map.find_opt p !dependencies with
+        | None -> CErrors.anomaly Pp.(str "Dependency was not resolvable: " ++ int p)
+        | Some (f, _, _) -> f
+      ) deps in
+    let pwd = Sys.getcwd () in
+    (match Sys.getenv_opt "OPAM_PACKAGE_NAME" with
+     | None -> ()
+     | Some _ ->
+       let (/) = Filename.concat in
+       let prefix = "%{prefix}%" in
+       let build_dir = prefix/".opam-switch"/"build" in
+       match CString.is_sub build_dir pwd 0 with
+       | false -> ()
+       | true -> Sys.chdir build_dir);
+    let relative_deps = List.map (fun f ->
+        let f = CUnix.strip_path f in
+        if not @@ Filename.is_relative f then
+          Feedback.msg_warning
+            Pp.(str "Dependency could not be relativized w.r.t. a common root. " ++
+                str "An absolute path was inserted into the dataset: " ++ str f);
+        f
+      ) absolute_deps in
+    Sys.chdir pwd;
+    relative_deps
+
+  module K = Graph_api.Make(Capnp.BytesMessage)
+  module W = Graph_capnp_generator.Writer(K)
+  let write_graph { def_count; node_count; edge_count; defs; nodes; edges }
+      definition_nodes representative minimum_deps data_file =
+    let path_def_count = Int.Map.map (fun (_, c, _) -> c) !dependencies in
+    let g = K.Builder.Dataset.init_root () in
+    ignore(K.Builder.Dataset.data_version_set_reader g K.Reader.current_version);
+    (match representative with
+     | None ->
+       K.Builder.Dataset.representative_set_int_exn g (def_count + node_count)
+     | Some representative ->
+       let ((rp, (def, representative)), _) = G.lower representative in
+       assert def;
+       if rp != dirpath_hash then
+         CErrors.anomaly Pp.(str "Representative is not from the current file: " ++ int rp);
+       K.Builder.Dataset.representative_set_int_exn g representative);
+    let _ = K.Builder.Dataset.definitions_set_list g @@
+      List.map (fun n -> Stdint.Uint32.of_int @@ n) @@ Int.Set.elements definition_nodes in
+    let node_dep_index, depslist =
+      let counter = ref 0 in
+      let path_index_map = ref @@ CList.fold_left_i (fun i map p ->
+          counter := !counter + 1;
+          Int.Map.add p i map) 0 Int.Map.empty @@
+      dirpath_hash::(Int.Set.elements @@ Int.Set.remove dirpath_hash minimum_deps) in
+      let node_dep_index (p, _) =
+        match Int.Map.find_opt p !path_index_map with
+        | Some i -> i
+        | None ->
+          let c = !counter in
+          path_index_map := Int.Map.add p c !path_index_map;
+          counter := c + 1;
+          c in
+      let depslist () = List.map fst @@ List.sort (fun (_, i1) (_, i2) -> Int.compare i1 i2) @@
+        Int.Map.bindings !path_index_map in
+      node_dep_index, depslist in
+    let node_local_index (p, (def, i)) =
+      if def then i else Int.Map.find p path_def_count + i in
+    let node_hash n = snd @@ G.transform_node_type n in
+    let node_label n = fst @@ G.transform_node_type n in
+    let capnp_graph = K.Builder.Dataset.graph_init g in
+    W.write_graph ~include_metadata:true
+      ~node_hash ~node_label ~node_lower:(fun n -> fst @@ G.lower n)
+      ~node_dep_index ~node_local_index
+      ~node_count:(def_count + node_count) ~edge_count (AList.append defs nodes) edges capnp_graph;
+    let _ = K.Builder.Dataset.dependencies_set_list g @@ resolve_dependencies @@ depslist () in
+    K.Builder.Dataset.module_name_set g @@ DirPath.to_string dirpath;
+    Capnp_unix.IO.write_message_to_file ~compression:`None (K.Builder.Dataset.to_message g) data_file
+
+  let () = Declaremods.append_end_library_hook @@ fun () ->
+    print_endline "writing";
+    update_graph ();
+    let source = Tactician_util.try_locate_absolute_library dirpath in
+    let source = match source with
+    | Some s -> s
+    | None ->
+      let doc = Stm.get_doc 0 in
+      match Stm.(get_ast ~doc (get_current_state ~doc)) with
+      | Some CAst.{ loc = Some Loc.{ fname = InFile f; _ }; _ } ->
+        let f = CUnix.remove_path_dot f in
+        if Filename.is_relative f then CUnix.correct_path f (Sys.getcwd ()) else f
+      | _ -> CErrors.anomaly Pp.(str "Source file location could not be found") in
+    let data_file = Filename.remove_extension source ^ ".bin" in
+
+    (* We want the dependencies of the graph to contain any non-transitive imports *)
+    let second_level_deps = Int.Map.fold (fun _ (_, _, s') s -> Int.Set.union s s') !dependencies Int.Set.empty in
+    let non_trans_deps = Int.Set.filter (fun d -> not @@ Int.Set.mem d second_level_deps) @@ Int.Map.domain !dependencies in
+
+    let graph_builder = !graph_builder in
+    Lib.add_anonymous_leaf @@
+    in_dependencies (dirpath_hash, data_file, graph_builder.def_count, Int.Map.domain !dependencies);
+    let local_node_array = Array.of_list @@ G.HashMap.fold (fun k (p, x) ls ->
+        if dirpath_hash = p then (k, (p, x))::ls else ls) node_hashes [] in
+    Lib.add_anonymous_leaf @@ in_node_hashes local_node_array;
+
+    write_graph graph_builder !definition_nodes !previous_definition non_trans_deps data_file
+
+end
+
+(* let () = register_online_learner "Dataset Generator Learner" (module GraphGeneratorLearner) *)
+(* let () = Tactic_learner_internal.disable_queue () *)

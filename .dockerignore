@@ -1,0 +1,8 @@
+.dockerignore
+_build/
+build/
+output/
+wheelhouse/
+pytact.egg-info/
+pytactician.egg-info/
+Dockerfile
