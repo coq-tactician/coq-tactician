@@ -1,0 +1,1 @@
+forall A: Prop, (((A->A)->A)->A)

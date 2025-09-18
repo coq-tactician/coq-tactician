@@ -1,0 +1,49 @@
+(coq.theory
+ (name TacticianApi)
+ (package coq-tactician-api)
+ (flags -q -noinit)
+ (modules TmpEmpty); TmpEmpty needed due to https://github.com/ocaml/dune/issues/11836
+ (libraries
+   coq-tactician-api.plugin
+))
+
+(include_subdirs qualified)
+
+(rule
+ (targets TacticianApiDepLoader.v injection-flags-dirs)
+ (deps   plugin_deps_generate_conf.ml ../src/dune )
+ (action (run ocaml -I %{lib:findlib:} str.cma findlib.cma
+              %{deps} %{targets})))
+
+(rule
+ (targets injection-flags-loader)
+ ; When installed through opam, we perform substitutions through the 'substs' directive in the opam file.
+ ; It also works using this rule, but running opam during an installation can be risky due to sandboxing issues.
+ (mode fallback)
+ (deps injection-flags-loader.in)
+ (action (run opam config subst %{targets})))
+
+(rule
+ (target injection-flags)
+ (deps injection-flags-dirs injection-flags-loader)
+ (action (with-stdout-to %{target}
+          (run cat injection-flags-dirs injection-flags-loader))))
+
+(install
+ (package coq-tactician-api)
+ (files (NNLearner.v as coq/user-contrib/TacticianApi/NNLearner.v)
+        (TacticianApiDepLoader.v as coq/user-contrib/TacticianApi/TacticianApiDepLoader.v))
+ (section lib_root)
+)
+
+(install
+ (package coq-tactician-api)
+ (files (../graph_api.capnp as graph_api.capnp))
+ (section share)
+)
+
+
+(install
+(package coq-tactician-api)
+(section (site (coq-tactician plugins)))
+(files (injection-flags as coq-tactician-api/injection-flags)))

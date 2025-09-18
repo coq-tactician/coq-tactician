@@ -1,0 +1,39 @@
+pin-depends: [
+  [
+    "coq-tactician.8.11.dev"
+    "git+https://github.com/coq-tactician/coq-tactician.git#9224b136ee7823d4776301035d9455f56c8c16b1"
+  ]
+]
+
+# we depend on META library name logs.fmt
+# provided by opam package logs if opam package fmt
+# is optionally present. Something in the
+# resolution chain of opam / META / our dependencies
+# dependencies didn't resolve properly depopts case
+# therefore we add it explicitly
+# commit 544cf04bac7e0d15a459395f5b43fa002ec52389
+
+
+depends: [
+  "ocamlfind"
+  "coq" {>= "8.11" & < "8.12~"}
+  "coq-tactician" {= "8.11.dev"}
+  "logs"
+  "fmt"
+  "capnp-rpc-unix"
+  "capnp-rpc-lwt"
+  "capnp" {>= "3.4.0"}
+  "ppx_deriving"
+  "ocamlgraph"
+  "xxhash"
+  "dune" {>= "2.9"}
+  "odoc" {with-doc}
+  # These constraints are to work around
+  # https://github.com/ocsigen/lwt/issues/764 and
+  # https://github.com/ocaml/ocaml/pull/9914
+  "ocaml" {>= "4.12~"} | ("ocaml" {< "4.12~"} & "lwt" {<= "5.1.1"})
+]
+substs: [
+  "src/graph_generator_learner.ml"
+  "theories/injection-flags-loader"
+]
