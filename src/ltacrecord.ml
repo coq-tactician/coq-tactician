@@ -1037,7 +1037,7 @@ let vernac_solve g info tcom with_end_tac id =
               try
                 ignore(Vernacstate.System.protect (
                     Declare.Proof.map ~f:(fun p ->
-                    fst @@ Proof.solve g None (benchmarkSearch path time deterministic) p)) pstate)
+                    fst @@ Proof.solve (Global.env ()) g None (benchmarkSearch path time deterministic) p)) pstate)
               with
               | Logic_monad.TacticFailure _ -> ()
               | e -> Feedback.msg_warning Pp.(str "Benchmarking error: " ++ CErrors.print e)
