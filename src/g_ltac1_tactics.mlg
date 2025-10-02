@@ -23,11 +23,11 @@ END
 VERNAC COMMAND EXTEND TacticianSuggest CLASSIFIED AS QUERY STATE proof_query
 | [ "Suggest" ]
   -> { fun ~pstate -> Declare.Proof.fold ~f:(fun p ->
-            ignore (Proof.solve (Goal_select.get_default_goal_selector ()) None
+            ignore (Proof.solve (Global.env ()) (Goal_select.get_default_goal_selector ()) None
          (Tactician_ltac1_record_plugin.Ltacrecord.userPredict false) p)) pstate }
 | [ "Debug" "Suggest" ]
   -> { fun ~pstate -> Declare.Proof.fold ~f:(fun p ->
-            ignore (Proof.solve (Goal_select.get_default_goal_selector ()) None
+            ignore (Proof.solve (Global.env ()) (Goal_select.get_default_goal_selector ()) None
          (Tactician_ltac1_record_plugin.Ltacrecord.userPredict true) p)) pstate }
 END
 
