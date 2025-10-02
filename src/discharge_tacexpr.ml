@@ -135,7 +135,7 @@ let mapper orig env evd worklist =
             let detyped = detype env evd bound (EConstr.of_constr typed) in
             return (detyped, None)
           with
-          | CErrors.Timeout as e ->
+          | Control.Timeout as e ->
             raise e
           | _ ->
             (* Feedback.msg_warning (Pp.(str "exception here")); *)
@@ -164,7 +164,7 @@ let mapper orig env evd worklist =
             let t = (pids, (r, None), uninst) in
             return t
           with
-          | CErrors.Timeout as e ->
+          | Control.Timeout as e ->
             raise e
           | _ ->
             warn env orig;
