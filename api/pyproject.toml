@@ -1,0 +1,80 @@
+[build-system]
+requires = [
+    "setuptools",
+    "wheel",
+    "Cython>=3.0.3",
+    "pycapnp==2.0.0",
+    "Jinja2",
+    "inflection"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pytactician"
+version = '16.0.0'
+description = "Python Library for interfacing with Coq and Tactician"
+authors = [
+    {name = "Lasse Blaauwbroek", email = "lasse@blaauwbroek.eu"},
+    {name = "Vasily Pestun", email = "vasily.pestun@gmail.com"},
+    {name = "Miroslav Olšák", email = "mirek@olsak.net"},
+]
+readme = "pytact/README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: C",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "pycapnp==2.0.0",
+    "immutables",
+    "graphviz",
+    "sanic==23.6.0",
+    "sanic-ext==23.6.0",
+    "Jinja2",
+    "inflection",
+    "importlib-resources;python_version<'3.9'",
+]
+
+[project.urls]
+Homepage = "https://coq-tactician.github.io"
+Documentation = "https://coq-tactician.github.io/api/pytactician-pdoc"
+Repository = "https://github.com/coq-tactician/coq-tactician-api"
+Changelog = "https://github.com/coq-tactician/coq-tactician-api/blob/coq8.11/CHANGELOG.md"
+
+[project.scripts]
+pytact-fake-coq = "pytact.fake_coq_client:main"
+pytact-server = "pytact.fake_python_server:main"
+pytact-oracle = "pytact.oracle_server:main"
+pytact-check = "pytact.graph_sanity_check:main"
+pytact-visualize = "pytact.visualisation_webserver:main"
+pytact-prover = "pytact.prover:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+
+[tool.setuptools.package-data]
+pytact = [
+    "graph_api.capnp",
+    "templates/visualizer.html",
+    "templates/capnp_cython.pyx",
+    "templates/capnp_cython.pxd",
+    "tests/TestReinforceStdin.v",
+    "tests/TestReinforceTcp.v",
+    "tests/prop4.txt",
+    "data_reader.pyx",
+    "graph_api_capnp_cython.pyx",
+    "graph_api_capnp_cython.pxd",
+    "data_reader.pyi",
+    "py.typed",
+]

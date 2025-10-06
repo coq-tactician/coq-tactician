@@ -1,0 +1,39 @@
+DECLARE PLUGIN "graph_plugin"
+
+{
+
+open Stdarg
+open Graph_visualizer
+
+}
+
+VERNAC COMMAND EXTEND LGraph CLASSIFIED AS QUERY
+| [ "Graph" "Ident" global(x) ] -> { SimpleViz.make_global_graph x }
+| [ "Shared" "Graph" "Ident" global(x) ] -> { SimpleHashedViz.make_global_graph x }
+| [ "Graph" "Depth" int(d) "Ident" global(x) ] -> { SimpleViz.make_global_graph ~def_depth:d x }
+| [ "Shared" "Graph" "Depth" int(d) "Ident" global(x) ] -> { SimpleHashedViz.make_global_graph ~def_depth:d x }
+| [ "Graph" "Term" constr(x) ] -> { SimpleViz.make_constr_graph x }
+| [ "Shared" "Graph" "Term" constr(x) ] -> { SimpleHashedViz.make_constr_graph x }
+| [ "Graph" "Depth" int(d) "Term" constr(x) ] -> { SimpleViz.make_constr_graph ~def_depth:d x }
+| [ "Shared" "Graph" "Depth" int(d) "Term" constr(x) ] -> { SimpleHashedViz.make_constr_graph ~def_depth:d x }
+END
+
+VERNAC COMMAND EXTEND LGraphProof CLASSIFIED AS QUERY STATE proof_query
+| [ "Graph" "Proof" ] -> { fun ~pstate -> SimpleViz.make_proof_graph pstate }
+| [ "Shared" "Graph" "Proof" ] -> { fun ~pstate -> SimpleHashedViz.make_proof_graph pstate }
+| [ "Graph" "Depth" int(d) "Proof" ] -> { fun ~pstate -> SimpleViz.make_proof_graph ~def_depth:d pstate }
+| [ "Shared" "Graph" "Depth" int(d) "Proof" ] -> { fun ~pstate -> SimpleHashedViz.make_proof_graph ~def_depth:d pstate }
+END
+
+VERNAC COMMAND EXTEND Explore CLASSIFIED AS QUERY
+| [ "Tactician" "Explore" ] -> { Explore.reinforce_stdin () }
+| [ "Tactician" "Explore" string(ip_addr) int(port) ] -> { Explore.reinforce_tcp ip_addr port }
+END
+
+VERNAC COMMAND EXTEND CheckNeuralAlignment CLASSIFIED AS QUERY
+| [ "Tactician" "Neural" "Alignment" ] -> { Neural_learner.check_neural_alignment () }
+END
+
+VERNAC COMMAND EXTEND TacticianNeuralCache CLASSIFIED AS SIDEFF
+| [ "Tactician" "Neural" "Cache" ] -> { Neural_learner.push_cache () }
+END

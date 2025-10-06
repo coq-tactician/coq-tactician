@@ -1,0 +1,49 @@
+(coq.pp (modules g_graph))
+(library
+ (name tactician_api_plugin)
+ (public_name coq-tactician-api.plugin)
+ (flags :standard -rectypes -w -27-53-55)
+ (modules (
+   "g_graph"
+    graph_extractor
+    graph_def
+    graph_visualizer
+    neural_learner
+    explore
+    graph_generator_learner
+    graph_capnp_generator
+    graph_api
+    definition_order
+    tactic_hash
+    symmetric_diff
+    ))
+  (libraries
+    ;please enter one library name per one line in between watermark lines
+    ;these watermarks are used to guide ../theories/plugin_deps_generate_conf
+    ;to scrape this dune file
+    ;__dep_extract_start__
+    logs.fmt
+    capnp
+    capnp.unix
+    capnp-rpc-unix
+    capnp-rpc-lwt
+    lwt.unix
+    ocamlgraph
+    xxhash
+    ;__dep_extract_finish__
+    coq-tactician.record-plugin)
+ (preprocess (staged_pps ppx_deriving.show))
+)
+
+(rule
+ (targets graph_api.ml graph_api.mli)
+ (deps    ../graph_api.capnp)
+ (action (run capnp compile -o %{bin:capnpc-ocaml} %{deps})))
+
+(rule
+ (targets graph_generator_learner.ml)
+ ; When installed through opam, we perform substitutions through the 'substs' directive in the opam file.
+ ; It also works using this rule, but running opam during an installation can be risky due to sandboxing issues.
+ (mode fallback)
+ (deps graph_generator_learner.ml.in)
+ (action (run opam config subst %{targets})))

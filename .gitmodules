@@ -1,0 +1,3 @@
+[submodule "coq-tactician"]
+	path = coq-tactician
+	url = https://github.com/coq-tactician/coq-tactician.git
