@@ -2,17 +2,20 @@ open Graph_extractor
 open Graph_def
 
 let order_option = Goptions.declare_bool_option_and_ref
-      ~depr:false ~name:"order graph nodes"
+      ~depr:false 
+      (* ~name:"order graph nodes" *)
       ~key:["Tactician"; "Neural"; "Visualize"; "Ordered"]
       ~value:true
 
 let label_option = Goptions.declare_bool_option_and_ref
-    ~depr:false ~name:"order graph nodes"
+    ~depr:false 
+    (* ~name:"order graph nodes" *)
     ~key:["Tactician"; "Neural"; "Visualize"; "Labels"]
     ~value:false
 
 let debug_option = Goptions.declare_bool_option_and_ref
-    ~depr:false ~name:"order graph nodes"
+    ~depr:false 
+    (* ~name:"order graph nodes" *)
     ~key:["Tactician"; "Neural"; "Visualize"; "Debug"]
     ~value:false
 

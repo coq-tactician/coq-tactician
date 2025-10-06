@@ -32,8 +32,8 @@ build: [
 dev-repo: "git+https://github.com/coq-tactician/coq-tactician-api.git"
 pin-depends: [
   [
-    "coq-tactician.8.11.dev"
-    "git+https://github.com/coq-tactician/coq-tactician.git#9224b136ee7823d4776301035d9455f56c8c16b1"
+    "coq-tactician.8.12.dev"
+    "git+https://github.com/coq-tactician/coq-tactician.git#8b2e96fc401bdb195ef0e5346f5eee05d43470dc"
   ]
 ]
 
@@ -48,8 +48,8 @@ pin-depends: [
 
 depends: [
   "ocamlfind"
-  "coq" {>= "8.11" & < "8.12~"}
-  "coq-tactician" {= "8.11.dev"}
+  "coq" {>= "8.12" & < "8.13~"}
+  "coq-tactician" {= "8.12.dev"}
   "logs"
   "fmt"
   "capnp-rpc-unix"

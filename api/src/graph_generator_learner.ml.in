@@ -564,5 +564,5 @@ module GraphGeneratorLearner : TacticianOnlineLearnerType = functor (TS : Tactic
 
 end
 
-(* let () = register_online_learner "Dataset Generator Learner" (module GraphGeneratorLearner) *)
-(* let () = Tactic_learner_internal.disable_queue () *)
+let () = register_online_learner "Dataset Generator Learner" (module GraphGeneratorLearner)
+let () = Tactic_learner_internal.disable_queue ()

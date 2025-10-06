@@ -34,8 +34,8 @@ let mutinductive_in_order_traverse env acc f g h m =
         Array.to_list mind_user_lc in
       let univs = Declareops.inductive_polymorphic_context mb in
       let inst = Univ.make_abstract_instance univs in
-      let env = Environ.push_context ~strict:false (Univ.AUContext.repr univs) env in
-      let typ = Inductive.type_of_inductive env ((mb, ib), inst) in
+      (* let env = Environ.push_context ~strict:false (Univ.AUContext.repr univs) env in *)
+      let typ = Inductive.type_of_inductive ((mb, ib), inst) in
       constr_in_order_traverse acc f g h typ
     ) acc inds
 

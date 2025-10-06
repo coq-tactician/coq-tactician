@@ -841,7 +841,7 @@ module NeuralLearner : TacticianOnlineLearnerType = functor (TS : TacticianStruc
   let autocache_option =
     let cache = ref false in
     Goptions.{ optdepr = false
-             ; optname = "Tactician Neural Autocache"
+             (* ; optname = "Tactician Neural Autocache" *)
              ; optkey = ["Tactician"; "Neural"; "Autocache"]
              ; optread = (fun () -> (if !cache then push_cache () else ()); !cache)
              ; optwrite = (fun v -> cache := v) }
@@ -849,4 +849,4 @@ module NeuralLearner : TacticianOnlineLearnerType = functor (TS : TacticianStruc
 
 end
 
-let () = register_online_learner "Neural Learner" (module NeuralLearner)
+(* let () = register_online_learner "Neural Learner" (module NeuralLearner) *)

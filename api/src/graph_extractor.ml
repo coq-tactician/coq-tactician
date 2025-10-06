@@ -9,7 +9,8 @@ open Tacexpr
 let declare_bool_option ~name ~default =
   let key = ["Tactician"; "Neural"; name] in
   Goptions.declare_bool_option_and_ref
-    ~depr:false ~name:(String.concat " " key)
+    ~depr:false 
+    (* ~name:(String.concat " " key) *)
     ~key ~value:default
 
 let declare_int_option ~name ~default =
@@ -20,7 +21,7 @@ let declare_int_option ~name ~default =
   let optread () = Some !r_opt in
   let _ = declare_int_option {
       optdepr = false;
-      optname = String.concat " " key;
+      (* optname = String.concat " " key; *)
       optkey = key;
       optread; optwrite
     } in
@@ -34,7 +35,7 @@ let declare_string_option ~name ~default =
   let optread () = !r_opt in
   let _ = declare_string_option {
       optdepr = false;
-      optname = String.concat " " key;
+      (* optname = String.concat " " key; *)
       optkey = key;
       optread; optwrite
     } in
@@ -516,8 +517,8 @@ end = struct
               Environ.lookup_mind m env in
             let univs = Declareops.inductive_polymorphic_context mb in
             let inst = Univ.make_abstract_instance univs in
-            let env = Environ.push_context ~strict:false (Univ.AUContext.repr univs) env in
-            let typ = Inductive.type_of_inductive env ((mb, Array.get mind_packets i), inst) in
+            (* let env = Environ.push_context ~strict:false (Univ.AUContext.repr univs) env in *)
+            let typ = Inductive.type_of_inductive ((mb, Array.get mind_packets i), inst) in
             print typ, None
           | Construct (_, ((m, i), c)) ->
             let ({ mind_packets; _ } as mb) =
@@ -624,7 +625,7 @@ end = struct
           aux c in
         if_metadata @@ fun () ->
           let env = Environ.push_named_context before_hyps @@ Environ.reset_context env in
-          let cexpr = beauti_evar @@ Constrextern.extern_constr false env term_sigma (EConstr.of_constr term) in
+          let cexpr = beauti_evar @@ Constrextern.extern_constr ~lax:false env term_sigma (EConstr.of_constr term) in
           Pp.string_of_ppcmds @@ Sexpr.format_oneline @@
           with_depth (fun () -> Ppconstr.pr_constr_expr env term_sigma cexpr) in
       let+ proof_states_after, proof_state_before, arguments, term =
@@ -803,8 +804,8 @@ end = struct
                 (IndConstruct, n) :: OList.map (fun pd -> IndProjection, pd) prim_defs) constructs in
             let univs = Declareops.inductive_polymorphic_context mb in
             let inst = Univ.make_abstract_instance univs in
-            let env = Environ.push_context ~strict:false (Univ.AUContext.repr univs) env in
-            let typ = Inductive.type_of_inductive env ((mb, ib), inst) in
+            (* let env = Environ.push_context ~strict:false (Univ.AUContext.repr univs) env in *)
+            let typ = Inductive.type_of_inductive ((mb, ib), inst) in
             let+ n = gen_constr typ in
             (IndType, n) :: OList.concat cstrs in
           let+ _, def = mk_definition (Ind (representative, (m, i))) (GlobRef.IndRef (m, i)) (fun d -> return n) in
@@ -894,11 +895,11 @@ end = struct
       CErrors.anomaly (Pp.str "Unexpected meta")
     | Evar (ev, substs) ->
       let* n, ctx = gen_evar ev in
-      if not (Array.length ctx = Array.length substs) then
+      if not (Array.length ctx = Array.length @@ Array.of_list substs) then
         CErrors.anomaly Pp.(str "Array length difference " ++
-                            int (Array.length ctx) ++ str " " ++ int (Array.length substs));
+                            int (Array.length ctx) ++ str " " ++ int (Array.length @@ Array.of_list substs));
       let substs = OList.filter_map (fun (x, y) -> Option.map (fun y -> x, y) y) @@
-        OList.combine (Array.to_list substs) (Array.to_list ctx) in
+        OList.combine (substs) (Array.to_list ctx) in
       let* substs = List.map (fun (c, t) ->
           let* valid = match Constr.kind c with
             | Constr.Rel i ->

@@ -117,7 +117,7 @@ let rec proof_object env state tacs context_map =
           Feedback.msg_notice @@ Pp.(str "run tactic " ++ prtac);
 
           let tac = Ltacrecord.parse_tac tac in
-          let nosuchgoal = Proofview.tclZERO (Proof_bullet.SuggestNoSuchGoals (1, state)) in
+          let nosuchgoal = Proofview.tclZERO (Proof.SuggestNoSuchGoals (1, state)) in
           let tac = Proofview.tclFOCUS ~nosuchgoal 1 1 tac in
           try
             let state', _safe = Pfedit.solve Goal_select.SelectAll None tac state in
@@ -148,7 +148,7 @@ let rec proof_object env state tacs context_map =
             Tacinterp.interp @@ Pcoq.parse_string Pltac.tactic_eoi tac
           with e when CErrors.noncritical e ->
             raise NoSuchTactic in
-          let nosuchgoal = Proofview.tclZERO (Proof_bullet.SuggestNoSuchGoals (1, state)) in
+          let nosuchgoal = Proofview.tclZERO (Proof.SuggestNoSuchGoals (1, state)) in
           let tac = Proofview.tclFOCUS ~nosuchgoal 1 1 tac in
           try
             let state', _safe = Pfedit.solve Goal_select.SelectAll None tac state in
