@@ -86,8 +86,8 @@ let evars_equal evd1 evd2 (equal : (Evar.t * Evar.t) list) =
     let t1 = EConstr.Unsafe.to_constr t1
     and t2 = EConstr.Unsafe.to_constr t2 in
     let eq_universes _ u1 u2 =
-      let u1 = normalize_universe_instance !evd_common u1 in
-      let u2 = normalize_universe_instance !evd_common u2 in
+      let u1 = EConstr.EInstance.(kind !evd_common (make u1)) in
+      let u2 = EConstr.EInstance.(kind !evd_common (make u2)) in
       try evd_common := add_universe_constraints !evd_common
             UnivProblem.(enforce_eq_instances_univs false u1 u2 Set.empty); true
       with UniversesDiffer -> false
