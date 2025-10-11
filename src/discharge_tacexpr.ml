@@ -5,12 +5,14 @@ open Names
 open Map_all_the_things
 (* open Cooking *)
 
+module Mindset_env = Set.Make(MutInd.UserOrd)
+
 module CookTacticDef = struct
   module M = ReaderWriterMonad
-      (struct type w = Id.Set.t * Cset.t * Mindset.t
-        let id = Id.Set.empty, Cset.empty, Mindset.empty
+      (struct type w = Id.Set.t * Cset_env.t * Mindset_env.t
+        let id = Id.Set.empty, Cset_env.empty, Mindset_env.empty
         let comb (ids1, cs1, is1) (ids2, cs2, is2) =
-          Id.Set.union ids1 ids2, Cset.union cs1 cs2, Mindset.union is1 is2 end)
+          Id.Set.union ids1 ids2, Cset_env.union cs1 cs2, Mindset_env.union is1 is2 end)
       (struct type r = Id.Set.t end)
   include MapDefTemplate (M)
   let map_sort = "cook-tactic"
@@ -27,9 +29,9 @@ end
 module CookTacticMapper = MakeMapper(CookTacticDef)
 open CookTacticDef
 
-let tell_id id = M.tell (Id.Set.singleton id, Cset.empty, Mindset.empty)
-let tell_const c = M.tell (Id.Set.empty, Cset.singleton c, Mindset.empty)
-let tell_ind m = M.tell (Id.Set.empty, Cset.empty, Mindset.singleton m)
+let tell_id id = M.tell (Id.Set.singleton id, Cset_env.empty, Mindset_env.empty)
+let tell_const c = M.tell (Id.Set.empty, Cset_env.singleton c, Mindset_env.empty)
+let tell_ind m = M.tell (Id.Set.empty, Cset_env.empty, Mindset_env.singleton m)
 
 let empty_ltac_context =
   Ltac_pretype.{ ltac_constrs = Id.Map.empty
@@ -118,8 +120,8 @@ let mapper orig env evd worklist =
   ; glob_constr_and_expr = (fun t c -> 
       let* bound = M.ask in
       let* a, (ids, cs, is) = M.listen (c t) in
-      (* if (not @@ Cset.is_empty @@ Cset.inter cook_cs cs ||
-          not @@ Mindset.is_empty @@ Mindset.inter cook_is is) then *)
+      (* if (not @@ Cset_env.is_empty @@ Cset_env.inter cook_cs cs ||
+          not @@ Mindset_env.is_empty @@ Mindset_env.inter cook_is is) then *)
         if not @@ Id.Set.disjoint bound ids then
           (warn env orig;
            (* Feedback.msg_warning (Pp.(str "normal here")); *)
@@ -147,8 +149,8 @@ let mapper orig env evd worklist =
       let* bound = M.ask in
       let* a, (ids, cs, is) = M.listen (c t) in
       let (pids, (r, _), _) = t in
-      (* if (not @@ Cset.is_empty @@ Cset.inter cook_cs cs ||
-          not @@ Mindset.is_empty @@ Mindset.inter cook_is is) then *)
+      (* if (not @@ Cset_env.is_empty @@ Cset_env.inter cook_cs cs ||
+          not @@ Mindset_env.is_empty @@ Mindset_env.inter cook_is is) then *)
         if not @@ Id.Set.disjoint bound ids then
           (warn env orig;
            return a) else
