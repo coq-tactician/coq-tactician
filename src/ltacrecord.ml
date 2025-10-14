@@ -1318,7 +1318,7 @@ let vernac_solve g info tcom with_end_tac id =
       save_db env sideff.seff_private data;
       pstate
     with
-    | e when CErrors.noncritical e || e = CErrors.Timeout ->
+    | e when CErrors.noncritical e ->
       (match Hashtbl.find_opt int64_to_knn id with
        | Some (v, None, sideff) -> Hashtbl.replace int64_to_knn id (v, Some e, sideff)
        | _ -> assert false (* Should not happen *));
