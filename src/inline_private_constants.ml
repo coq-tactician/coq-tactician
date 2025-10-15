@@ -27,7 +27,7 @@ let inline_tactic env t =
                  glob_constr = (fun t c ->
                      let t = match t with
                      | GRef (ConstRef const, l) when not @@ Environ.mem_constant const env ->
-                       GRef (VarRef (Names.Label.to_id @@ Names.Constant.label const), l)
+                       GRef (VarRef (Names.Constant.label const), l)
                      | _ -> t in
                      c t)
                ; constant = (fun const ->
@@ -43,7 +43,7 @@ let inline env extra_ctx extra_deps { outcomes; tactic; name; status; path; sec_
   let rec inline_constr sigma extra_substs_map c = match Constr.kind c with
     | Const (const, _u) ->
       if Environ.mem_constant const env then c else
-        Constr.mkVar (Names.Label.to_id @@ Names.Constant.label const)
+        Constr.mkVar (Names.Constant.label const)
     | Evar (ev, substs) ->
       let extra_substs = Evar.Map.find ev extra_substs_map in
       (* Introduced in 8.17: SList adaptation *)
@@ -103,7 +103,7 @@ let inline env sideff t =
   if sideff = Safe_typing.empty_private_constants then t else
     let consts, senv = Safe_typing.export_private_constants sideff (Global.safe_env ()) in
     let extra_ctx = List.map (fun (c, _) ->
-        let id = Context.annotR @@ Label.to_id @@ Constant.label c in
+        let id = Context.annotR @@ Constant.label c in
         let { const_body; const_type; _ } = Environ.lookup_constant c @@ Safe_typing.env_of_safe_env senv in
         match const_body with
         | Primitive _ | Symbol _ | Undef _ ->
