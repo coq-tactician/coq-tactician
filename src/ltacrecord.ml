@@ -82,8 +82,8 @@ let subst_outcomes (s, { outcomes; tactic; name; status=_; path; sec_vars }) =
       | MPbound b ->
         let (_, id, dp) = MBId.repr b in
         id :: DirPath.repr dp
-      | MPdot (mp, l) -> Label.to_id l :: modpath_to_dirpath mp in
-    Libnames.make_path (DirPath.make @@ modpath_to_dirpath mp) @@ Label.to_id id in
+      | MPdot (mp, l) -> l :: modpath_to_dirpath mp in
+    Libnames.make_path (DirPath.make @@ modpath_to_dirpath mp) id in
   { outcomes; name; tactic = Option.map subst_tac tactic
   ; status = Substituted path; path = path'; sec_vars }
 
@@ -95,7 +95,7 @@ let in_section_ltac_defs : (Names.KerName.t * glob_tactic_expr) list -> Libobjec
 
 let rec with_let_prefix ltac_defs tac =
   let ids, tac = rebuild tac in
-  let kername_tolname id = CAst.make (Names.(Name.mk_name (Label.to_id (KerName.label id)))) in
+  let kername_tolname id = CAst.make (Names.(Name.mk_name (KerName.label id))) in
   let ltac_to_let rem_defs ltacset int =
     CAst.make @@ TacLetIn (true,
               List.map (fun (id, tac) -> (kername_tolname id, Tacexp (with_let_prefix rem_defs tac))) ltacset,
@@ -152,13 +152,13 @@ let discharge_outcomes senv { outcomes; tactic; name; status; path; sec_vars } =
          removes unneeded hypotheses. This can make the discharging information unsuitable.
          As a hacky workaround, we instead use the discharging information of the constant that
          generated the obligation. *)
-      let name_str = Names.Label.to_string @@ Names.Constant.label name in
+      let name_str = Names.Id.to_string @@ Names.Constant.label name in
       if Str.string_match (Str.regexp "^\\(.*\\)_obligation_[0-9]*$") name_str 0 then
         let obligation_parent = Str.matched_group 1 name_str in
         let obligation_parent =
           if Str.string_match (Str.regexp "^\\(.*\\)_obligations$") obligation_parent 0 then
             Str.matched_group 1 obligation_parent else obligation_parent in
-        let obligation_parent = Names.Constant.change_label name @@ Names.Label.make obligation_parent in
+        let obligation_parent = Names.Constant.change_label name @@ Names.Id.of_string obligation_parent in
         if Environ.mem_constant obligation_parent env then
           obligation_parent
         else name
@@ -324,7 +324,7 @@ let in_db : id -> data_in -> Libobject.obj =
                             })
 
 let add_to_db (x : data_in) =
-  ignore(Lib.add_leaf (in_db (Names.Label.to_id @@ Names.Constant.label x.name) x))
+  ignore(Lib.add_leaf (in_db (Names.Constant.label x.name) x))
 
 (* Types and accessors for state in the proof monad *)
 type localdb = ((Proofview.Goal.t * EConstr.t * Evd.evar_map * Proofview.Goal.t list) list * glob_tactic_expr option) list
@@ -384,7 +384,7 @@ let set_name n =
   modify_field name_field (fun _ -> n, ())
     (fun () ->
        let id = Names.Id.of_string "__tactician__" in
-       Names.Constant.make2 (Global.current_modpath ()) (Names.Label.of_id id), Lib.make_path @@ id)
+       Names.Constant.make2 (Global.current_modpath ()) id, Lib.make_path @@ id)
 
 let get_record () =
   modify_field record_field (fun b -> b, b) (fun () -> true)
@@ -393,7 +393,7 @@ let get_name () =
   modify_field name_field (fun n -> n, n)
     (fun () ->
        let id = Names.Id.of_string "__tactician__" in
-       Names.Constant.make2 (Global.current_modpath ()) (Names.Label.of_id id), Lib.make_path @@ id)
+       Names.Constant.make2 (Global.current_modpath ()) id, Lib.make_path @@ id)
 
 let push_localdb x =
   modify_field localdb_field (fun db -> x::db, ()) (fun () -> [])
@@ -1166,7 +1166,7 @@ let vernac_solve g info tcom with_end_tac id =
   | Some result -> Vernactypes.vtdefault (fun () -> register_tactic_execution_data result)
   | None -> Vernactypes.vtmodifyproof @@ fun ~pstate ->
     let name = Declare.Proof.get_name pstate in
-    let const = Names.Constant.make2 (Global.current_modpath ()) (Names.Label.of_id name) in
+    let const = Names.Constant.make2 (Global.current_modpath ()) name in
     let path = Lib.make_path name in    
     let save_db env sideff (db : localdb) =
       let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic env t) in

@@ -17,7 +17,7 @@ let correct_kername id =
   try
     let _ = Tacenv.interp_ltac id in return (ArgArg (None, id))
   with Not_found ->
-    let kername_tolname id = CAst.make (Label.to_id (KerName.label id)) in
+    let kername_tolname id = CAst.make (KerName.label id) in
     let+ () = M.tell (KerName.Set.singleton id) in
     ArgVar (kername_tolname id)
 
@@ -39,7 +39,7 @@ let mapper = { CookTacticDef.default_mapper with
                      match t with
                      | TacAlias (id, args) ->
                        if Tacenv.check_alias id then return t else
-                         let lid = CAst.make (Label.to_id (KerName.label id)) in
+                         let lid = CAst.make (KerName.label id) in
                          let+ () = M.tell (KerName.Set.singleton id) in
                          TacArg (TacCall (CAst.make (ArgVar lid, args)))
                      | _ -> return t) }
