@@ -1286,8 +1286,8 @@ let vernac_solve g info tcom with_end_tac id =
                   (set_benchmarked () <*>
                   hide_interp_t global tcom with_end_tac
                     (fun t -> record_tac_complete (Some t) t) const path) p in *)
-              let seff1 = (Evd.eval_side_effects (Proof.data @@ Declare.Proof.get pstate).sigma).seff_private in
-              let seff2 = (Evd.eval_side_effects (Proof.data @@ Declare.Proof.get pstate1).sigma).seff_private in
+              let seff1 = Evd.seff_private (Evd.eval_side_effects (Proof.data @@ Declare.Proof.get pstate).sigma) in
+              let seff2 = Evd.seff_private (Evd.eval_side_effects (Proof.data @@ Declare.Proof.get pstate1).sigma) in
               if seff1 <> seff2 then
                 pstate1 else
               if Proof_equality.pstate_equal ~pstate1:(Declare.Proof.get pstate1) ~pstate2:(Declare.Proof.get pstate2) then
@@ -1315,7 +1315,7 @@ let vernac_solve g info tcom with_end_tac id =
       let sideff = Evd.eval_side_effects sigma in
       let store = Evd.get_extra_data sigma in
       let data = Option.get @@ Evd.Store.get store localdb_field in
-      save_db env sideff.seff_private data;
+      save_db env (Evd.seff_private sideff) data;
       pstate
     with
     | e when CErrors.noncritical e ->
