@@ -85,7 +85,7 @@ let mapper env evd avoid f =
             | None -> return c
             | Some c ->
               let c = detype env evd avoid c in
-              let c = extern_glob_constr (avoid, UnivNames.empty_binders) c in
+              let c = extern_glob_constr {vars = avoid; uvars = UnivNames.empty_binders;} c in
               return @@ CAst.(c.v)))
       | _ ->
         cont c
