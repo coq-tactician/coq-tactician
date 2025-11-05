@@ -31,7 +31,7 @@ let detype env evd avoid c =
   (* ~avoid:(nm, avoid) introduced in 9.0 *)
   (Detyping.detype Detyping.Now ~isgoal:true ~avoid:(nm, avoid) env) evd c
 let extern_glob_constr avoid c =
-  Flags.with_options Constrextern.[ print_implicits; print_coercions; print_universes; print_no_symbol ]
+  Flags.with_options Constrextern.[ print_implicits; print_coercions; print_no_symbol ]
   (Constrextern.extern_glob_constr avoid) c
 
 let unsolvable = "__tactician_unsolvable__"
