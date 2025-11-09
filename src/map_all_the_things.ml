@@ -69,8 +69,8 @@ module type MapDef = sig
     ; qualid_map : Libnames.qualid map
     ; globref_map : GlobRef.t map
     ; quantified_hypothesis_map : quantified_hypothesis map
-    ; red_expr_gen_map : 'a 'b 'c 'occvar. 'a map -> 'b map -> 'c map -> 'occvar map ->
-        ('a, 'b, 'c, 'occvar) red_expr_gen map
+    ; red_expr_gen_map : 'a 'b 'c 'occvar 'l. 'a map -> 'b map -> 'c map -> 'occvar map ->
+        ('a, 'b, 'c, 'occvar, 'l) red_expr_gen map
     }
 
   type ('raw, 'glb) gen_map =
@@ -155,8 +155,8 @@ module MapDefTemplate (M: Monad.Def) = struct
     ; qualid_map : Libnames.qualid map
     ; globref_map : GlobRef.t map
     ; quantified_hypothesis_map : quantified_hypothesis map
-    ; red_expr_gen_map : 'a 'b 'c 'occvar. 'a map -> 'b map -> 'c map -> 'occvar map ->
-        ('a, 'b, 'c, 'occvar) red_expr_gen map
+    ; red_expr_gen_map : 'a 'b 'c 'occvar 'l. 'a map -> 'b map -> 'c map -> 'occvar map ->
+        ('a, 'b, 'c, 'occvar, 'l) red_expr_gen map
     }
   type ('raw, 'glb) gen_map =
     { raw : recursor -> 'raw map
@@ -612,6 +612,7 @@ module MakeMapper (M: MapDef) = struct
     | CbvNative x ->
       let+ x = red_context_map g h i x in
       CbvNative x
+    | UserRed r -> return (UserRed r)
 
   let glob_red_flag_map f ({ rConst; _ } as flg) =
     let+ rConst = List.map f rConst in
