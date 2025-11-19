@@ -52,7 +52,7 @@ let detype env evd avoid c =
   let evd', _ = add_names (evd, 0) c in
   (* modified in 8.18 *)
   (* ~avoid:(Namegen.Generator.idset,avoid) introduced in 9.0 *)
-  let c = Detyping.detype Detyping.Now ~isgoal:true ~avoid:(Namegen.Generator.idset,avoid) env evd' c in
+  let c = Detyping.detype ~flags:(PrintingFlags.Detype.current()) Detyping.Now ~isgoal:true ~avoid:(Namegen.Generator.idset,avoid) env evd' c in
   let rec evar_to_hole c = match DAst.get c with
     | Glob_term.GEvar (id, _) ->
       (try

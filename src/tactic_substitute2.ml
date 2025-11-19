@@ -26,13 +26,16 @@ open SubstituteDef
 
 let detype env evd avoid c =
   let nm = (Namegen.Generator.idset) in
-  Flags.with_option Detyping.print_universes
+  let flags = PrintingFlags.Detype.current() in
+  let flags = { flags with universes = true } in
   (* Modified in 8.18 *)
   (* ~avoid:(nm, avoid) introduced in 9.0 *)
-  (Detyping.detype Detyping.Now ~isgoal:true ~avoid:(nm, avoid) env) evd c
+  (Detyping.detype ~flags Detyping.Now ~isgoal:true ~avoid:(nm, avoid) env) evd c
 let extern_glob_constr avoid c =
-  Flags.with_options Constrextern.[ print_implicits; print_coercions; print_no_symbol ]
-  (Constrextern.extern_glob_constr avoid) c
+  let flags = PrintingFlags.Extern.current() in
+  let flags = { flags with implicits = true; coercions = true; notations = false } in
+  let eenv = { Constrextern.vars = avoid; uvars = UnivNames.empty_binders; flags } in
+  Constrextern.extern_glob_constr eenv c
 
 let unsolvable = "__tactician_unsolvable__"
 let mk_unsolvable id =
@@ -85,7 +88,7 @@ let mapper env evd avoid f =
             | None -> return c
             | Some c ->
               let c = detype env evd avoid c in
-              let c = extern_glob_constr {vars = avoid; uvars = UnivNames.empty_binders;} c in
+              let c = extern_glob_constr avoid c in
               return @@ CAst.(c.v)))
       | _ ->
         cont c
