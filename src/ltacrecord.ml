@@ -1343,7 +1343,7 @@ let subst_one dep_proof_ok x (hyp,rhs,dir) =
   let open EConstr in
   Proofview.Goal.enter begin fun gl ->
   let env = Proofview.Goal.env gl in
-  let sigma = Tacmach.project gl in
+  let sigma = Proofview.Goal.sigma gl in
   let hyps = Proofview.Goal.hyps gl in
   let concl = Proofview.Goal.concl gl in
   (* The set of hypotheses using x *)
