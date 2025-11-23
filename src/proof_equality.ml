@@ -88,7 +88,7 @@ let evars_equal evd1 evd2 (equal : (Evar.t * Evar.t) list) =
     let eq_universes _ u1 u2 =
       let u1 = EConstr.EInstance.(kind !evd_common (make u1)) in
       let u2 = EConstr.EInstance.(kind !evd_common (make u2)) in
-      try evd_common := add_universe_constraints !evd_common
+      try evd_common := add_constraints !evd_common
             UnivProblem.(enforce_eq_instances_univs false u1 u2 Set.empty); true
       with UniversesDiffer -> false
       (* Univ.UniverseInconsistency is gone in 8.16 *)
@@ -100,7 +100,7 @@ let evars_equal evd1 evd2 (equal : (Evar.t * Evar.t) list) =
         (* let u1 = univ_of_sort s1 and u2 = univ_of_sort s2 in *)
         (* try evd_common := add_universe_constraints !evd_common UnivProblem.(Set.singleton (UEq (u1, u2))); true *)
         (* UEq takes sorts instead of universes in 8.16 *)
-        try evd_common := add_universe_constraints !evd_common UnivProblem.(Set.singleton (UEq (s1, s2))); true
+        try evd_common := add_constraints !evd_common UnivProblem.(Set.singleton (UEq (s1, s2))); true
         with UniversesDiffer -> false
         (* with Univ.UniverseInconsistency _ | UniversesDiffer -> false *)
     in
