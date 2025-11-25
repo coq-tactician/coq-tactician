@@ -46,7 +46,7 @@ let detype env evd avoid c =
     | Constr.Evar (e, _) ->
       (match Evd.evar_ident e evd with
        | None ->
-         Evd.rename e (Id.of_string_soft ("__hole_evar" ^ string_of_int idc)) evd, (idc + 1)
+         Evd.add_name e (Id.of_string_soft ("__hole_evar" ^ string_of_int idc)) evd, (idc + 1)
        | Some _ -> evd, idc)
     | _ -> EConstr.fold evd add_names (evd, idc) c in
   let evd', _ = add_names (evd, 0) c in
