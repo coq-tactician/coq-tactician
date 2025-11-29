@@ -2,7 +2,7 @@
 (library
  (name tactician_ltac1_record_plugin)
  (public_name coq-tactician.record-plugin)
- (flags :standard -rectypes -w -27)
+ (flags :standard -rectypes -w -27 -w -3)
  (modules (
    "g_ltac1_record"
    ltacrecord
