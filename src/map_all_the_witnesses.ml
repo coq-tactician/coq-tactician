@@ -204,7 +204,7 @@ let _ = register_generic_map wit_occurrences (module struct
     end
   end)
 
-let _ = register_generic_map wit_intro_pattern (module struct
+let _ = register_generic_map wit_intropattern (module struct
     type raw = constr_expr intro_pattern_expr CAst.t
     type glob = glob_constr_and_expr intro_pattern_expr CAst.t
     module M = functor (M : MapDef) -> struct
