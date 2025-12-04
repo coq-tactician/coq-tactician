@@ -27,7 +27,7 @@ automation.")
     (ocaml (>= 4.08))
     dune
     (dune-site (>= 2.9.1))
-    (opam-client (>= 2.1.0))
+    (opam-client (and (>= 2.1.0) (< 2.5.0)))
     (cmdliner (>= 1.1.0))
     (coq (and (>= 8.11.0) (< 8.12~)))
     conf-git
