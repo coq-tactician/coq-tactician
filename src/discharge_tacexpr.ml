@@ -55,12 +55,13 @@ let detype env evd avoid c =
   let c = Detyping.detype ~flags:(PrintingFlags.Detype.current()) Detyping.Now ~isgoal:true ~avoid:(Namegen.Generator.idset,avoid) env evd' c in
   let rec evar_to_hole c = match DAst.get c with
     | Glob_term.GEvar (id, _) ->
+      let id = Libnames.make_qualid DirPath.empty id.v in
       (try
-        let _ = Evd.evar_key id.v evd in
+        let _ = Evd.evar_key id evd in
         c
       with Not_found ->
         (* Introduced in 8.17: (Evd.find evd' (Evd.evar_key id.v evd')) is a evar_info *)
-        match Evd.find evd' (Evd.evar_key id.v evd') with 
+        match Evd.find evd' (Evd.evar_key id evd') with
         | EvarInfo ei -> 
           (* Introduced in 8.18 *)
           (* DAst.make (Glob_term.GHole (snd @@ Evd.evar_source ei,

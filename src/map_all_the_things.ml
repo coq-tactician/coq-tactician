@@ -678,8 +678,8 @@ module MakeMapper (M: MapDef) = struct
 
   let goal_select_map m = function
     | SelectList [IdSelector id] ->
-      let+ id = m.variable id in
-      SelectList [IdSelector id]
+      let+ id = m.variable (Libnames.qualid_basename id) in
+      SelectList [IdSelector (Libnames.make_qualid DirPath.empty id)]
     | x -> return x
 
   let message_token_map f = function
