@@ -230,6 +230,12 @@ let make_result before term sigma pss =
   let term = EConstr.to_constr ~abort_on_undefined_evars:false sigma term in
   term, evars, Evd.evar_universe_context sigma, List.map (fun ps -> Evar.Map.find (Goal.goal ps) evars) pss
 
+let make_result_dummy (_before : Proofview.Goal.t) (term : EConstr.t)
+    (sigma : Evd.evar_map) (_pss : Proofview.Goal.t list) =
+  let term = EConstr.to_constr ~abort_on_undefined_evars:false sigma term in
+  let ustate = Evd.evar_universe_context sigma in
+  (term, Evar.Map.empty, ustate, [])
+
 type data_status =
   | Original
   | QedTime

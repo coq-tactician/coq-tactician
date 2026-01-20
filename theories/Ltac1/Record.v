@@ -64,3 +64,5 @@ Tactician Record Change Keep.
 Tactician Record Rewrite Keep.
 Tactician Record RewriteMulti Keep.
 Tactician Record Inversion Keep.
+
+Export Set Tactician RecordProofTerms.
