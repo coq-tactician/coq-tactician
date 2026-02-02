@@ -387,7 +387,7 @@ let _ = register_generic_map wit_with_names (module struct
     end
   end)
 
-let at wit = register_generic_map wit (module struct
+let () = register_generic_map wit_tactic (module struct
     type raw = raw_tactic_expr
     type glob = glob_tactic_expr
     module M = functor (M : MapDef) -> struct
@@ -396,8 +396,6 @@ let at wit = register_generic_map wit (module struct
       let glob_map m = m.glob_tactic_expr_map
     end
   end)
-
-let _ = [at wit_tactic; at wit_ltac]
 
 let _ = register_generic_map wit_by_arg_tac (module struct
     type raw = raw_tactic_expr option
