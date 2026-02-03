@@ -819,9 +819,9 @@ module MakeMapper (M: MapDef) = struct
        (* TODO: Sometime we have to deal with some of these evar kinds *)
        let+ k = glob_evar_kind_map m k in
        GHole k
-     | GGenarg gen ->
-       let+ gen = generic_glob_map (r m) gen in
-       GGenarg gen
+     | GGenarg _ as c ->
+       (* TODO genconstr mappings (ltac and ltac2 in terms) *)
+       return c
      | GCast (c1, k, c3) ->
        let+ c1 = glob_constr_map c1
        and+ c3 = glob_constr_map c3 in
@@ -1018,12 +1018,9 @@ module MakeMapper (M: MapDef) = struct
       (* TODO: At some point we have to deal with some of these evar kinds *)
       let+ k = option_map (fun k -> glob_evar_kind_map m k) k in
       CHole k
-    | CGenarg gen ->
-      let+ gen = generic_raw_map (r m) gen in
-      CGenarg gen
-    | CGenargGlob gen ->
-      let+ gen = generic_glob_map (r m) gen in
-      CGenargGlob gen
+    | CGenargGlob _ | CGenarg _ as c ->
+      (* TODO genconstr mappings *)
+      return c
     | CPatVar _ as x -> (* Not regarded as a variable*)
       return x
     | CEvar (e, xs) ->
