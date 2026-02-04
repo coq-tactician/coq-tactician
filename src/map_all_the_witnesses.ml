@@ -303,17 +303,17 @@ let _ = register_generic_map wit_rewstrategy (module struct
       open Rewrite
       open M
       open Monad.Make(M)
-      let rec strategy_map f g h = function
+      let rec strategy_map f g h i j = function
         | StratId | StratFail | StratRefl as s -> return s
         | StratUnary (s, str) ->
-          let+ str = strategy_map f g h str in
+          let+ str = strategy_map f g h i j str in
           StratUnary (s, str)
         | StratBinary (s, str, str') ->
-          let+ str = strategy_map f g h str
-          and+ str' = strategy_map f g h str' in
+          let+ str = strategy_map f g h i j str
+          and+ str' = strategy_map f g h i j str' in
           StratBinary (s, str, str')
         | StratNAry (s, strs) ->
-          let+ strs = List.map (strategy_map f g h) strs in
+          let+ strs = List.map (strategy_map f g h i j) strs in
           StratNAry (s, strs)
         | StratConstr (c, b) ->
           let+ c = f c in
@@ -333,8 +333,14 @@ let _ = register_generic_map wit_rewstrategy (module struct
           StratVar v
         | StratFix (x, str) ->
           let+ x = h x
-          and+ str = strategy_map f g h str in
+          and+ str = strategy_map f g h i j str in
           StratFix (x, str)
+        | StratMatches p ->
+           let+ p = i p in
+           StratMatches p
+        | StratTactic t ->
+           let+ t = j t in
+           StratTactic t
       let or_by_notation_r_map f = function
         | AN x -> let+ x = f x in AN x
         | ByNotation x -> return (ByNotation x)
@@ -358,12 +364,16 @@ let _ = register_generic_map wit_rewstrategy (module struct
              m.constr_expr_map
              (m.or_var_map (fun x -> return x)))
           (m.cast_map m.variable_map)
+          m.constr_expr_map
+          m.raw_tactic_expr_map
       let glob_map m = strategy_map m.glob_constr_and_expr_map
           (m.red_expr_gen_map m.glob_constr_and_expr_map
              (m.or_var_map (and_short_name_map m (evaluable_global_reference_map m)))
              m.glob_constr_and_expr_map
              (m.or_var_map (fun x -> return x)))
           m.variable_map
+          m.glob_constr_pattern_and_expr_map
+          m.glob_tactic_expr_map
     end
   end)
 
