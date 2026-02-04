@@ -300,7 +300,7 @@ let _ = register_generic_map wit_rewstrategy (module struct
     type raw = raw_strategy
     type glob = glob_strategy
     module M = functor (M : MapDef) -> struct
-      open Rewrite
+      open RewriteStratAst
       open M
       open Monad.Make(M)
       let rec strategy_map f g h i j = function
