@@ -154,7 +154,7 @@ let register_interp0 wit f =
   let interp ist v =
     f ist v >>= fun v -> Ftactic.return (Val.inject (val_tag wit) v)
   in
-  Geninterp.register_interp0 wit interp
+  Tacinterp.Register.register_interp0 wit interp
 
 let wit_glbtactic : (Empty.t, glob_tactic_expr, glob_tactic_expr) Genarg.genarg_type =
   let wit = Genarg.create_arg "glbtactic" in
