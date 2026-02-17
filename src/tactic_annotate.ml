@@ -80,11 +80,11 @@ let inner_record ast = match ast_setting_lookup ast with
   | Decompose | Both -> true
   | Keep | Discard -> false
 
-let with_runtime_info : (Geninterp.interp_sign -> unit Proofview.tactic) -> glob_tactic_expr =
+let with_runtime_info : (Tacinterp.interp_sign -> unit Proofview.tactic) -> glob_tactic_expr =
   let wit_runtime_info :
     (Util.Empty.t,
-     Geninterp.interp_sign -> unit Proofview.tactic,
-     Geninterp.interp_sign -> unit Proofview.tactic) Genarg.genarg_type =
+     Tacinterp.interp_sign -> unit Proofview.tactic,
+     Tacinterp.interp_sign -> unit Proofview.tactic) Genarg.genarg_type =
     let wit = Genarg.create_arg "wit_runtime_info" in
     let () = Geninterp.register_val0 wit None in
     Tactician_util.register_interp0 wit (fun ist v -> Ftactic.return v);
