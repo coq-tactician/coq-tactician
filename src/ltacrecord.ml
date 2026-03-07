@@ -1060,18 +1060,19 @@ let record_tac_complete_ml orig tac =
 let hide_interp_t (global, t, rtac, const, path) =
   let open Proofview in
   let open Notations in
-  let hide_interp env =
-    let ist = Genintern.empty_glob_sign ~strict:false env in
+  let hide_interp env sigma =
+    let ist = Genintern.empty_glob_sign ~strict:false env (Evd.universe_binders sigma) in
     let t = Tacintern.intern_pure_tactic ist t in
     let t = Tacinterp.eval_tactic @@ rtac t in
     set_benchmarked () >>= fun () -> empty_localdb () >>= fun _ -> set_name (const, path) <*> t
   in
   if global then
     Proofview.tclENV >>= fun env ->
-    hide_interp env
+    Proofview.tclEVARMAP >>= fun sigma ->
+    hide_interp env sigma
   else
     Proofview.Goal.enter begin fun gl ->
-      hide_interp (Proofview.Goal.env gl)
+      hide_interp (Proofview.Goal.env gl) (Proofview.Goal.sigma gl)
     end
 
 let ComTactic.Interpreter hide_interp_t = ComTactic.register_tactic_interpreter "tactician-ltac1" hide_interp_t
@@ -1087,7 +1088,8 @@ let vernac_solve g info tcom with_end_tac id =
     let tac =
       let open Proofview in
       Proofview.tclENV >>= fun env ->
-      let ist = Genintern.empty_glob_sign ~strict:false env in
+      Proofview.tclEVARMAP >>= fun sigma ->
+      let ist = Genintern.empty_glob_sign ~strict:false env (Evd.universe_binders sigma) in
       let t1 = Tacintern.intern_pure_tactic ist tcom in
       let t2 = decompose_annotate t1 (fun _ t -> t) in
       Goal.goals >>= record_map (fun x -> x) >>= fun gls ->
@@ -1242,7 +1244,7 @@ let vernac_solve g info tcom with_end_tac id =
           let is_synth =
             try
               let tac_pp t = Sexpr.format_oneline (Pptactic.pr_glob_tactic (Global.env ()) t) in
-              let ist = Genintern.empty_glob_sign ~strict:false (Global.env ()) in
+              let ist = Genintern.empty_glob_sign ~strict:false (Global.env ()) UnivNames.empty_binders in
               let tcom = Tacintern.intern_pure_tactic ist tcom in
               let s = Pp.string_of_ppcmds (tac_pp tcom) in
             String.equal s "debug synth" || String.equal s "synth"
