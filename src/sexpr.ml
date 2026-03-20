@@ -41,7 +41,10 @@ let sorts2s = function
   | Set    -> [s2s "Set"]
   | Type l -> [s2s "Type"; (* TODO: Printing is not optimal here *)
                s2s (Pp.string_of_ppcmds (format_oneline (Univ.Universe.raw_pr l)))]
-  | QSort (v, l) -> [s2s "QSort";
+  | GSort (v, l) -> [s2s "GSort";
+                     s2s (QGlobal.to_string v);
+                     s2s (Pp.string_of_ppcmds (format_oneline (Univ.Universe.raw_pr l)))]
+  | VSort (v, l) -> [s2s "VSort";
                      s2s (Pp.string_of_ppcmds (QVar.raw_pr v));
                      s2s (Pp.string_of_ppcmds (format_oneline (Univ.Universe.raw_pr l)))]
 
