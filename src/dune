@@ -58,10 +58,10 @@
    tactic_substitution_check_learner
  ))
  (libraries
-   coq-core.stm
-   coq-core.plugins.ltac
-   coq-core.plugins.firstorder
-   coq-core.plugins.funind
+   rocq-runtime.stm
+   rocq-runtime.plugins.ltac
+   rocq-runtime.plugins.firstorder
+   rocq-runtime.plugins.funind
  )
 )
 (library
@@ -73,9 +73,9 @@
   ;  ssr_ast_cata
  ))
  (libraries
-   coq-core.plugins.ltac
-   coq-core.plugins.ssrmatching
-   coq-core.plugins.ssreflect
+   rocq-runtime.plugins.ltac
+   rocq-runtime.plugins.ssrmatching
+   rocq-runtime.plugins.ssreflect
    coq-tactician.record-plugin
  )
 )

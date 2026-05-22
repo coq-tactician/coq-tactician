@@ -135,14 +135,14 @@ let recompile_packages no_pkgs_msg pkgs_msg confirm_msg =
       And (
         Atom Installed,
         Atom (Depends_on ({ default_dependency_toggles with recursive = true },
-                          [OpamPackage.Name.of_string "coq-core", None]))))) in
+                          [OpamPackage.Name.of_string "rocq-runtime", None]))))) in
   let tactician_packages = OpamListCommand.(filter ~base:st.packages st OpamFormula.(
       And (
         Atom Installed,
         Atom (Depends_on ({ default_dependency_toggles with recursive = true },
                           [OpamPackage.Name.of_string "coq-tactician", None]))))) in
   let blacklist = List.map OpamPackage.Name.of_string
-      ["coq"; "coq-core"; "coq-tactician-dummy"; "coqide"; "coqide-server"] in
+      ["coq"; "rocq-runtime"; "coq-tactician-dummy"; "coqide"; "coqide-server"] in
   let packages = OpamPackage.Set.diff coq_packages tactician_packages in
   let packages = OpamPackage.Set.filter
       (fun p -> not @@ List.exists (OpamPackage.Name.equal (OpamPackage.name p)) blacklist) packages in

@@ -285,7 +285,7 @@ let section_notation_helper prods _e =
 let load_plugins () =
   let open Mltop in
   let module_is_known p = Findlib.is_recorded_package p in
-  let plugins = [("coq-core.plugins.ssreflect", "coq-tactician.ssreflect-plugin")] in
+  let plugins = [("rocq-runtime.plugins.ssreflect", "coq-tactician.ssreflect-plugin")] in
   let load (dep, target) =
     if module_is_known dep && not (module_is_known target) then
       let interp = declare_ml_modules false [target] in
@@ -430,7 +430,7 @@ let warn tac =
     (* The unshelve tactic is the only tactic known to generate goals that do not inherit state from their
        parents (because those goals were on the shelf). We filter tactics expressions that contain this
        tactic out of the warning. *)
-    let unshelve_ml = Tacexpr.{ mltac_name = { mltac_plugin = "coq-core.plugins.ltac"; mltac_tactic = "unshelve" }
+    let unshelve_ml = Tacexpr.{ mltac_name = { mltac_plugin = "rocq-runtime.plugins.ltac"; mltac_tactic = "unshelve" }
                               ; mltac_index = 0 } in
     if not (Find_tactic_syntax.contains_ml_tactic unshelve_ml tac) then
       msg (tac_pp tac)
