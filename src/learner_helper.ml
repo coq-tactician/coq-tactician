@@ -48,7 +48,7 @@ module L (TS: TacticianStructures) = struct
   let proof_state_to_sexpr ps =
     let goal = proof_state_goal ps in
     let hyps = proof_state_hypotheses ps in
-    let hyps = List.map (function
+    let hyps = List.map (fun (_, d) -> match d with
         | Named.Declaration.LocalAssum (id, typ) ->
           Node (s2s (Names.Id.to_string id.binder_name) :: term_sexpr typ :: [])
         | Named.Declaration.LocalDef (id, term, typ) ->
@@ -62,7 +62,7 @@ module L (TS: TacticianStructures) = struct
     let goal = constr_str (proof_state_goal ps) in
     let hyps = proof_state_hypotheses ps in
     let id_str id = Names.Id.to_string id.binder_name in
-    let hyps = List.map (function
+    let hyps = List.map (fun (_, d) -> match d with
         | Named.Declaration.LocalAssum (id, typ) ->
           id_str id ^ " : " ^ constr_str typ
         | Named.Declaration.LocalDef (id, term, typ) ->

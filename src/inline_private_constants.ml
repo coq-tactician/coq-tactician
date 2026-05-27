@@ -56,7 +56,7 @@ let inline env extra_ctx extra_deps { outcomes; tactic; name; status; path; sec_
     let open Names in
     (* We filter any inlined constants that refer to a hypothesis that does not exist.
        Note that this can only happen when that hypothesis is a section variable/definition. *)
-    let all_vars = Id.Set.of_list @@ List.map get_id (extra_ctx @ hyps) in
+    let all_vars = Id.Set.of_list @@ (List.map get_id extra_ctx @ List.map (fun (_,d) -> get_id d) hyps) in
     let filtered_vars = List.fold_left (fun all (id, deps) ->
         if Id.Set.subset deps all then all else Id.Set.remove id all) all_vars extra_deps in
     let extra_ctx = List.rev @@ List.filter (fun pt -> Id.Set.mem (get_id pt) filtered_vars) extra_ctx in
@@ -65,8 +65,9 @@ let inline env extra_ctx extra_deps { outcomes; tactic; name; status; path; sec_
   let inline_single_proof_state sigma extra_substs_map extra_ctx { hyps; goal; evar; hyps_origin } =
     let open Context.Named.Declaration in
     let hyps, sec_hyps = CList.split_when
-        (fun pt -> Names.Id.Set.mem (Context.Named.Declaration.get_id pt) sec_vars) hyps in
-    let hyps = List.map (map_constr (inline_constr sigma extra_substs_map)) (hyps @ extra_ctx @ sec_hyps) in
+        (fun (_,pt) -> Names.Id.Set.mem (Context.Named.Declaration.get_id pt) sec_vars) hyps in
+    let extra_ctx = List.map (fun d -> Environ.ProofVar, d) extra_ctx in
+    let hyps = List.map (Util.on_snd @@ map_constr (inline_constr sigma extra_substs_map)) (hyps @ extra_ctx @ sec_hyps) in
     let goal = inline_constr sigma extra_substs_map goal in
     { hyps; goal; evar; hyps_origin } in
   let inline_map sigma map =

@@ -14,12 +14,13 @@ let tactic_make tac = tac, Lazy.from_val (Hashtbl.hash_param 255 255 (tactic_nor
 module type TacticianStructures = sig
   type term
   type relevance
+  type named_declaration = (term, term, relevance) Named.Declaration.pt
   type named_context = (term, term, relevance) Named.pt
   val term_sexpr : term -> sexpr
   val term_repr  : term -> constr
 
   type proof_state
-  val proof_state_hypotheses  : proof_state -> named_context
+  val proof_state_hypotheses  : proof_state -> (Environ.var_status * named_declaration) list
   val proof_state_goal        : proof_state -> term
   val proof_state_evar        : proof_state -> Evar.t
   val proof_state_sigma       : proof_state -> Evd.evar_map
@@ -70,13 +71,14 @@ module TS = struct
 
   type term = constr
   type relevance = Sorts.relevance
+  type named_declaration = Constr.named_declaration
   type named_context = Constr.named_context
   let term_sexpr t = constr2s t
   let term_repr t = t
 
   type hyps_origin = Id.t Id.Map.t
   type single_proof_state =
-    { hyps : named_context
+    { hyps : (Environ.var_status * named_declaration) list
     ; goal : term
     ; evar : Evar.t
     ; hyps_origin : hyps_origin }
@@ -202,8 +204,13 @@ let evar_to_proof_state sigma evar hyps_origin =
   (* let hyps = List.map (Tactician_util.map_named to_term) @@ Evd.evar_filtered_context info in *)
   let trans (e:Evd.erelevance) : Sorts.relevance = match Evd.MiniEConstr.unsafe_relevance_eq with
                                                    | Refl -> e
-                                                   in 
-  let hyps = List.map (Context.Named.Declaration.map_constr_het trans to_term) @@ Evd.evar_filtered_context info in
+  in
+  let hyps = Evd.evar_filtered_hyps info in
+  let hyps = List.map (fun d ->
+      Environ.var_status_ctxt (Context.Named.Declaration.get_id d) hyps,
+      Context.Named.Declaration.map_constr_het trans to_term d)
+      (EConstr.named_context_of_val hyps)
+  in
 
   let goal = to_term @@ Evd.evar_concl info in
   TS.{ hyps; goal; evar; hyps_origin }

@@ -46,7 +46,7 @@ let subst_outcomes (s, { outcomes; tactic; name; status=_; path; sec_vars }) =
   let subst_named_context =
     let open Mod_subst in
     let open Context in
-    List.map (function
+    List.map (Util.on_snd @@ function
         | Named.Declaration.LocalAssum (id, typ) ->
           Named.Declaration.LocalAssum (id, subst_mps s typ)
         | Named.Declaration.LocalDef (id, term, typ) ->
@@ -177,7 +177,7 @@ let discharge_outcomes senv { outcomes; tactic; name; status; path; sec_vars } =
       Option.default true @@ Option.map (fun orig ->
           not @@ Names.Id.Set.mem orig irrelevantctx) @@
       Names.Id.Map.find_opt (Context.Named.Declaration.get_id hyp) hyps_origin in
-    let mk_mask hyps_origin hyps = List.map (is_relevant hyps_origin) hyps in
+    let mk_mask hyps_origin hyps = List.map (fun (_,d) -> is_relevant hyps_origin d) hyps in
     let info = Section.segment_of_constant discharge_name @@ Option.get sections in
     let cache = Cooking.create_cache info in
     let discharge_constr sigma masks t =
@@ -195,8 +195,8 @@ let discharge_outcomes senv { outcomes; tactic; name; status; path; sec_vars } =
       let env = Environ.push_named_context ctx @@ Environ.reset_context env in
       tactic_make @@ Discharge_tacexpr.discharge t env evd cache in
     let discharge_single_proof_state sigma masks { hyps; goal; evar; hyps_origin } =
-      { hyps = List.map (Tactician_util.map_named (discharge_constr sigma masks)) @@
-           List.filter (is_relevant hyps_origin) hyps
+      { hyps = List.map (Util.on_snd @@ Tactician_util.map_named (discharge_constr sigma masks)) @@
+           List.filter (fun (_,d) -> is_relevant hyps_origin d) hyps
       ; goal = discharge_constr sigma masks goal 
       ; evar; hyps_origin } in
     let discharge_proof_state (map, ustate, { evar; _ }) =
