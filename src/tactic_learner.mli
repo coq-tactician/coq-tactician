@@ -11,12 +11,13 @@ type sexpr = Sexpr.sexpr = Node of sexpr list | Leaf of string
 module type TacticianStructures = sig
   type term
   type relevance
+  type named_declaration = (term, term, relevance) Context.Named.Declaration.pt
   type named_context = (term, term, relevance) Context.Named.pt
   val term_sexpr : term -> sexpr
   val term_repr  : term -> constr
 
   type proof_state
-  val proof_state_hypotheses  : proof_state -> named_context
+  val proof_state_hypotheses  : proof_state -> (Environ.var_status * named_declaration) list
   val proof_state_goal        : proof_state -> term
   val proof_state_evar        : proof_state -> Evar.t
   val proof_state_sigma       : proof_state -> Evd.evar_map

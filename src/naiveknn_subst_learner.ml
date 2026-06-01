@@ -54,7 +54,7 @@ module NaiveKnnSubst (SF : sig type second_feat end) = functor (TS : TacticianSt
 
     let add db b obj ps_to_feat ctx_to_feat =
       let feats = ps_to_feat b in
-      let ctx = ctx_to_feat (proof_state_hypotheses b) in
+      let ctx = ctx_to_feat (List.map snd @@ proof_state_hypotheses b) in
       let sh = tactic_simplified_hash ctx obj in
       let comb = {features = feats; context = ctx; obj = obj; substituted_hash = sh} in
       let newfreq = List.fold_left
@@ -100,7 +100,7 @@ module NaiveKnnSubst (SF : sig type second_feat end) = functor (TS : TacticianSt
     let predict db f ps_to_feat ctx_to_feat tfidf =
       if f = [] then IStream.empty else
         let ps = (List.hd f).state in
-        let ctx = ctx_to_feat (proof_state_hypotheses ps) in
+        let ctx = ctx_to_feat (List.map snd @@ proof_state_hypotheses ps) in
         let feats = ps_to_feat ps in
         let tdidfs = List.map
             (fun ent -> let x = tfidf db.length db.frequencies feats ent.features in (x, ent))

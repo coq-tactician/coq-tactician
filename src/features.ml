@@ -259,7 +259,7 @@ module F (TS: TacticianStructures) = struct
         ~gen_feat
         ~store_feat:(acc, add) max_length x in
     (* TODO: distinquish goal features from hyp features *)
-    let acc = List.fold_left (fun a b -> Named.Declaration.fold_constr mkfeats b a) acc hyps in
+    let acc = List.fold_left (fun acc (_,b) -> Named.Declaration.fold_constr mkfeats b acc) acc hyps in
     mkfeats goal acc
 
   let context_simple_ints ctx =
@@ -500,7 +500,7 @@ module F (TS: TacticianStructures) = struct
     let hyps = proof_state_hypotheses ps in
     let goal = proof_state_goal ps in
     let mkfeats prefix t acc = term_sexpr_to_complex_strings prefix max_length acc (term_repr t) in
-    let feats = List.fold_left (fun a b -> Named.Declaration.fold_constr (mkfeats "HYPS-") b a)
+    let feats = List.fold_left (fun a (_,b) -> Named.Declaration.fold_constr (mkfeats "HYPS-") b a)
         CString.Map.empty hyps in
     let feats = mkfeats "GOAL-" goal feats in
     let feats_with_count = CString.Map.fold
@@ -516,7 +516,7 @@ module F (TS: TacticianStructures) = struct
     let hyps = proof_state_hypotheses ps in
     let goal = proof_state_goal ps in
     let mkfeats prefix t acc = term_sexpr_to_complex_ints prefix max_length acc (term_repr t) in
-    let feats = List.fold_left (fun a b -> Named.Declaration.fold_constr (mkfeats (Int.hash 2000)) b a)
+    let feats = List.fold_left (fun a (_,b) -> Named.Declaration.fold_constr (mkfeats (Int.hash 2000)) b a)
         Int.Map.empty hyps in
     let feats = mkfeats (Int.hash 2001) goal feats in
     let feats_with_count = Int.Map.fold
@@ -532,7 +532,7 @@ module F (TS: TacticianStructures) = struct
     let hyps = proof_state_hypotheses ps in
     let goal = proof_state_goal ps in
     let mkfeats prefix t acc = term_sexpr_to_complex_ints_no_kind prefix max_length acc (term_repr t) in
-    let feats = List.fold_left (fun a b -> Named.Declaration.fold_constr (mkfeats (Int.hash 2000)) b a)
+    let feats = List.fold_left (fun a (_,b) -> Named.Declaration.fold_constr (mkfeats (Int.hash 2000)) b a)
         Int.Map.empty hyps in
     let feats = mkfeats (Int.hash 2001) goal feats in
     let feats_with_count = Int.Map.fold
