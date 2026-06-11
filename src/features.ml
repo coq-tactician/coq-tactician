@@ -237,7 +237,7 @@ module F (TS: TacticianStructures) = struct
 
       (* The golden path *)
       | Proj (proj, _, trm) ->
-        aux (add_atom (TConst (Projection.constant proj)) f) trm
+        aux f trm
       | App (head, args) ->
         let interm', _ as f' = aux f head in
         (* We reset back to `interm'` for every arg *)
@@ -415,8 +415,7 @@ module F (TS: TacticianStructures) = struct
 
         (* The golden path *)
         | Proj (p, _, term) ->
-          let p = Projection.constant p in
-          let features' = start_structure (add_atom (TConst p) features) TProj
+          let features' = start_structure features TProj
           in end_structure (aux features' term TProjTerm (depth + 1))
         | App (head, args) ->
           let walk = features.vertical in

@@ -65,6 +65,8 @@ let relevance2s = function
 
 let constant2s c = global2s (GlobRef.ConstRef c)
 
+let proj2s p = [global2s (GlobRef.IndRef (Projection.inductive p)); s2s (string_of_int (Projection.arg p))]
+
 let inductive2s i = global2s (GlobRef.IndRef i)
 
 let constructor2s c =
@@ -116,7 +118,7 @@ let constr2s t =
            :: Array.to_list (Array.map (aux ls) bodies))
     | Fix (_, pd) -> Node (s2s "Fix" :: prec_declaration2s ls pd)
     | CoFix (_, pd) -> Node (s2s "CoFix" :: prec_declaration2s ls pd)
-    | Proj (proj, _, trm) -> Node [s2s "Proj"; constant2s (Projection.constant proj); aux ls trm] (* TODO: Improve *)
+    | Proj (proj, _, trm) -> Node (s2s "Proj" :: proj2s proj @ [aux ls trm]) (* TODO: Improve *)
     | Int n -> Node [s2s "Int"; s2s (Uint63.to_string n)]
     | Float n -> Node [s2s "Float"; s2s (Float64.to_string n)]
     | String s -> Node [s2s "String"; s2s (Pstring.to_string s)]
