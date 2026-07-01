@@ -325,11 +325,10 @@ module MakeMapper (M: MapDef) = struct
     | CPatOr pas ->
       CPatOr (OList.map cases_pattern_expr_id_map pas)
     (* kcas introduced in 8.19. Right now we do nothing with it here. *)
-    | CPatNotation (ns, n, (cas1, cas2, kcas), cas3) ->
-      let cas1 = OList.map cases_pattern_expr_id_map cas1 in
-      let cas2 = OList.map (OList.map cases_pattern_expr_id_map) cas2 in
+    | CPatNotation (ns, n, subst, cas3) ->
+      let subst = OList.map (notation_arg_type_map f) subst in
       let cas3 = OList.map cases_pattern_expr_id_map cas3 in
-      CPatNotation (ns, n, (cas1, cas2, kcas), cas3)
+      CPatNotation (ns, n, subst, cas3)
     | CPatPrim _ -> case
     | CPatRecord xs ->
       let xs = OList.map (fun (qu, ca) ->
@@ -343,6 +342,18 @@ module MakeMapper (M: MapDef) = struct
       CPatCast (cases_pattern_expr_id_map c1, c2)
   and cases_pattern_expr_id_map f c =
     CAst.map (cases_pattern_expr_r_id_map f) c
+  and kinded_cases_pattern_expr_id_map f (c, bk) =
+    let c = cases_pattern_expr_id_map f c in
+    (c, bk)
+  and notation_arg_kind_map f = function
+    | NtnTypeArgConstr a -> NtnTypeArgConstr a
+    | NtnTypeArgPattern pat -> NtnTypeArgPattern (kinded_cases_pattern_expr_id_map f pat)
+    | NtnTypeArgBinders binders -> NtnTypeArgBinders binders
+  and notation_arg_type_map f = function
+    | NtnTypeArg a -> NtnTypeArg (notation_arg_kind_map f a)
+    | NtnTypeArgList l -> NtnTypeArgList (OList.map (notation_arg_type_map f) l)
+    | NtnTypeArgTuple l -> NtnTypeArgTuple (OList.map (notation_arg_type_map f) l)
+
   (* Relevance info introduced in 8.20. Do nothing right now. *)
   let local_binder_expr_id_map f : local_binder_expr -> local_binder_expr = function
     | CLocalAssum (lis, r, bk, c) ->
