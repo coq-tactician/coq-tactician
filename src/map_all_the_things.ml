@@ -960,12 +960,13 @@ module MakeMapper (M: MapDef) = struct
         ) cs
       and+ c = constr_expr_map c in
       CProj (flgs, (q, ie), cs, c)
-    | CRecord xs ->
-      let+ xs = List.map (fun (l, c) ->
+    | CRecord (def,xs) ->
+      let+ def = option_map constr_expr_map def
+      and+ xs = List.map (fun (l, c) ->
         let+ l = qualid_map m l
         and+ c = constr_expr_map c in
         (l, c)) xs in
-      CRecord xs
+      CRecord (def,xs)
     | CCases (sty, c1, cs, bs) ->
       let* cs = List.map (fun (c, l, pat) ->
           let+ c = constr_expr_map c
