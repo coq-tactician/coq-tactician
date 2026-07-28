@@ -121,16 +121,16 @@ module SSRMap (M : MapDef) = struct
       let+ i = f i
       and+ t = g t in
       In_X_In_T (i, t)
-    | E_In_X_In_T (t1, i, t2) ->
+    | E_In_X_In_T (t1, (i, t2)) ->
       let+ t1 = g t1
       and+ i = f i
       and+ t2 = g t2 in
-      E_In_X_In_T (t1, i, t2)
-    | E_As_X_In_T (t1, i, t2) ->
+      E_In_X_In_T (t1, (i, t2))
+    | E_As_X_In_T (t1, (i, t2)) ->
       let+ t1 = g t1
       and+ i = f i
       and+ t2 = g t2 in
-      E_As_X_In_T (t1, i, t2)
+      E_As_X_In_T (t1, (i, t2))
 
   let rpattern_map m (p : rpattern) =
     ssrpattern_map (cpattern_map m) (cpattern_map m) p
