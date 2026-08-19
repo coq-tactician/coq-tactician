@@ -20,7 +20,7 @@ module DecompositionLearner : TacticianOnlineLearnerType = functor (TS : Tactici
   module Learner = Lshf_learner.ComplexLSHF
 
   type model = tactic list
-  let last_model : tactic list ref = Summary.ref ~name:"dataset-generator-learner-lastmodel" []
+  let last_model : tactic list Summary.Ref.t = Summary.ref ~name:"dataset-generator-learner-lastmodel" []
 
   let empty () = []
 
@@ -29,6 +29,7 @@ module DecompositionLearner : TacticianOnlineLearnerType = functor (TS : Tactici
     if Libnames.is_dirpath_prefix_of dirp (Libnames.dirpath_of_path name) then `File else `Dependency
 
   let learn db (kn, name, status) outcomes tac =
+    let open Summary.Ref in
     match tac with
     | None -> db
     | Some tac ->
@@ -72,6 +73,7 @@ module DecompositionLearner : TacticianOnlineLearnerType = functor (TS : Tactici
     output_string (data_file ()) (tachash ^ "\t" ^ tacstr ^ "\t" ^ tacsexpr ^ "\n")
 
   let endline_hook () = print_endline "writing";
+    let open Summary.Ref in
     let data = preprocess !last_model in
     ignore (List.iter generate_step data)
 

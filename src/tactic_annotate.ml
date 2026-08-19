@@ -28,21 +28,24 @@ let tac_ast_map_ref = Summary.ref TacAstMap.empty ~name:"DecompositionMap"
 let tac_ast_alias_map_ref = Summary.ref Names.KerName.Map.empty ~name:"AliasDecompositionMap"
 let internal_tactics_ref = Summary.ref StringMap.empty ~name:"InternalTacticsMap"
 
-let get_ast_settings () = !tac_ast_map_ref
-let get_ast_alias_settings () = !tac_ast_alias_map_ref
-let get_internal_tactics_settings () = !internal_tactics_ref
+let get_ast_settings () = Summary.Ref.(!tac_ast_map_ref)
+let get_ast_alias_settings () = Summary.Ref.(!tac_ast_alias_map_ref)
+let get_internal_tactics_settings () = Summary.Ref.(!internal_tactics_ref)
 
 let tac_ast_setting : tac_ast_map -> obj =
+  let open Summary.Ref in
   declare_object @@ global_object_nodischarge "TacticianDecompositionSetting"
     ~cache:(fun m -> tac_ast_map_ref := m)
     ~subst:None
 
 let tac_alias_ast_setting : tac_alias_ast_map -> obj =
+  let open Summary.Ref in
   declare_object @@ global_object_nodischarge "TacticianAliasDecompositionSetting"
     ~cache:(fun m -> tac_ast_alias_map_ref := m)
     ~subst:None
 
 let internal_tactics_setting : internal_tactics_map -> obj =
+  let open Summary.Ref in
   declare_object @@ global_object_nodischarge "TacticianInternalTacticsSetting"
     ~cache:(fun m -> internal_tactics_ref := m)
     ~subst:None

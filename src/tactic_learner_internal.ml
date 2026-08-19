@@ -327,25 +327,31 @@ let queue_enabled = Summary.ref ~name: "tactician-queue-enabled" true
 let queue = Summary.ref ~name:"tactician-queue" []
 
 let learner_learn status outcomes tactic =
+  let open Summary.Ref in
   current_learner := Lazy.from_val ((Lazy.force !current_learner).learn status outcomes tactic)
 
 let process_queue () =
+  let open Summary.Ref in
   List.iter (fun (s, o, t) -> learner_learn s o t) (List.rev !queue); queue := []
 
 let learner_get () =
+  let open Summary.Ref in
   process_queue ();
   Lazy.force !current_learner
 
 let learner_learn s o t =
+  let open Summary.Ref in
   if !queue_enabled then
     queue := (s, o, t)::!queue
   else
     learner_learn s o t
 
 let disable_queue () =
+  let open Summary.Ref in
   process_queue (); queue_enabled := false
 
 let register_online_learner name learner : unit =
+  let open Summary.Ref in
   current_learner := lazy (new_learner learner)
 
 let register_offline_learner _name _learner : unit = ()

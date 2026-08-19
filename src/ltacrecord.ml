@@ -89,6 +89,7 @@ let subst_outcomes (s, { outcomes; tactic; name; status=_; path; sec_vars }) =
 
 let tmp_ltac_defs = Summary.ref ~name:"TACTICIANTMPSECTION" []
 let in_section_ltac_defs : (Names.KerName.t * glob_tactic_expr) list -> Libobject.obj =
+  let open Summary.Ref in
   Libobject.(declare_object (local_object "LTACRECORDSECTIONLTACS"
                                ~cache:(fun p -> tmp_ltac_defs := p::!tmp_ltac_defs)
                                ~discharge:(fun p -> Some p)))
@@ -111,6 +112,7 @@ let rec with_let_prefix ltac_defs tac =
   prefix tac ltac_defs
 
 let rebuild_outcomes { outcomes; tactic; name; status=_; path; sec_vars } =
+  let open Summary.Ref in
   let sec_vars =
     Names.Id.Set.inter sec_vars @@
     Names.Id.Set.of_list @@
@@ -236,6 +238,7 @@ let discharge_outcomes senv { outcomes; tactic; name; status; path; sec_vars } =
     Some { outcomes; tactic; name; status; path; sec_vars }
 
 let section_ltac_helper bodies =
+  let open Summary.Ref in
   tmp_ltac_defs := []; (* Safe to discard tmp state from old section discharge *)
   let ist = Tacintern.make_empty_glob_sign ~strict:true in
   let intern t = Tacintern.intern_tactic_or_tacarg ist t in
@@ -262,7 +265,8 @@ let find_last_key : (string * string option) Tacentries.grammar_tactic_prod_item
     in
     let prods = String.concat "_" (List.map map prods) in
     let rec next () =
-      let cur = incr id; !id in
+      let open Summary.Ref in
+      let cur = id := !id + 1; !id in
       (* We embed the hash of the kernel name in the label so that the identifier
          should be mostly unique. This ensures that including two modules
          together won't confuse the corresponding labels. *)
@@ -273,6 +277,7 @@ let find_last_key : (string * string option) Tacentries.grammar_tactic_prod_item
     next ()
 
 let section_notation_helper prods _e =
+  let open Summary.Ref in
   tmp_ltac_defs := []; (* Safe to discard tmp state from old section discharge *)
   if Global.sections_are_opened () then
     let id = find_last_key prods in
