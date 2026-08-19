@@ -22,9 +22,9 @@ let withIsIndependent t =
 let tclUntilIndependent t =
   let rec aux t =
     tclCASE t >>= function
-    | Fail (e, info) -> tclZERO ~info e
-    | Next ((true, res), _) -> tclUNIT res
-    | Next ((false, res), cont) -> tclOR (tclUNIT res) (fun e -> aux @@ cont e)
+    | Error (e, info) -> tclZERO ~info e
+    | Ok ((true, res), _) -> tclUNIT res
+    | Ok ((false, res), cont) -> tclOR (tclUNIT res) (fun e -> aux @@ cont e)
   in
   aux @@ withIsIndependent t
 
