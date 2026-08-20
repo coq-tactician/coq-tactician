@@ -118,7 +118,7 @@ module OfflineEvaluationSimulatorLearner : TacticianOnlineLearnerType = functor 
         | (pstatus, pkn, ppath, ls)::data when Libnames.eq_full_path path ppath ->
           (pstatus, pkn, ppath, (outcomes, tac)::ls)::data
         | _ -> (status, kn, path, [outcomes, tac])::db.data in
-      last_model := data;
+      Summary.Ref.(last_model := data);
       (match cache_type path, status with
        | `File, Original ->
          persistent_data := List.map2 (fun pdata learner ->
@@ -156,7 +156,7 @@ module OfflineEvaluationSimulatorLearner : TacticianOnlineLearnerType = functor 
 
   let endline_hook () = print_endline "evaluating";
     let persistent_data = List.map List.rev !persistent_data in
-    let data = preprocess !last_model in
+    let data = preprocess Summary.Ref.(!last_model) in
     let eval_schemes = ["intra", eval_intra; "intrab", eval_intra_partial; "inter", eval_inter] in
     let eval = List.flatten @@ List.map2
         (fun (name, learner) persistent ->
