@@ -1086,6 +1086,23 @@ type aborted_or_should_inline =
   | Aborted
   | NotAborted of { should_inline : bool }
 
+let noop_formatter reset orig =
+  let outfs = Format.pp_get_formatter_out_functions orig () in
+  let outfs =
+    { outfs with
+      out_string = (fun _ _ _ -> reset ());
+      out_flush = (fun _ -> reset ());
+      out_newline = (fun _ -> reset ());
+      out_spaces = (fun _ -> reset ());
+      out_indent = (fun _ -> reset ());
+    } [@@warning "-useless-record-with"]
+  (* Field "out_width" only exists since ocaml 5.4 so we get
+     this warning with older versions. That function is
+     supposed to be pure returning int so is fine to leave as
+     original in ocaml >= 5.4. *)
+  in
+  Format.(formatter_of_out_functions outfs)
+
 let vernac_solve g info tcom with_end_tac id =
   let print_error ~pstate ~pstate1 ~pstate2 =
     let open Proofview in
@@ -1158,21 +1175,8 @@ let vernac_solve g info tcom with_end_tac id =
           This is extremely dangerous because it cannot be fully guaranteed that the formatter is being reset afterwards. *)
        let ignore_one_formatter original =
          let reset () = Topfmt.std_ft := original in
-         let outfs = Format.pp_get_formatter_out_functions original () in
-         let outfs =
-           { outfs with
-             out_string = (fun _ _ _ -> reset ());
-             out_flush = (fun _ -> reset ());
-             out_newline = (fun _ -> reset ());
-             out_spaces = (fun _ -> reset ());
-             out_indent = (fun _ -> reset ());
-           } [@@warning "-useless-record-with"]
-         (* Field "out_width" only exists since ocaml 5.4 so we get
-            this warning with older versions. That function is
-            supposed to be pure returning int so is fine to leave as
-            original in ocaml >= 5.4. *)
-         in
-         Format.(formatter_of_out_functions outfs) in
+         noop_formatter reset original
+       in
        if not !Flags.quiet || !Flags.test_mode then begin
          Topfmt.std_ft := ignore_one_formatter !Topfmt.std_ft;
          raise exn
@@ -1284,14 +1288,7 @@ let vernac_solve g info tcom with_end_tac id =
               (* TODO: Another dirty trick: We need to suppress any output generated during the
                   second run of the decomposed tactic. This is because some projects have IO-tests
                   that fail when things are printed twice. *)
-              let ignore_formatter () =
-                Format.(formatter_of_out_functions
-                          { out_string = (fun _ _ _ -> ())
-                          ; out_flush = (fun _ -> ())
-                          ; out_newline = (fun _ -> ())
-                          ; out_spaces = (fun _ -> ())
-                          ; out_indent = (fun _ -> ())
-                          }) in
+              let ignore_formatter () = noop_formatter ignore !Topfmt.std_ft in
               let original = !Topfmt.std_ft in
               Topfmt.std_ft := ignore_formatter ();
               Fun.protect ~finally:(fun () -> Topfmt.std_ft := original) @@ fun () ->
