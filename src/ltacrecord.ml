@@ -1158,13 +1158,21 @@ let vernac_solve g info tcom with_end_tac id =
           This is extremely dangerous because it cannot be fully guaranteed that the formatter is being reset afterwards. *)
        let ignore_one_formatter original =
          let reset () = Topfmt.std_ft := original in
-         Format.(formatter_of_out_functions
-	                 { out_string = (fun _ _ _ -> reset ())
-                   ; out_flush = (fun _ -> reset ())
-                   ; out_newline = (fun _ -> reset ())
-                   ; out_spaces = (fun _ -> reset ())
-                   ; out_indent = (fun _ -> reset ())
-                   }) in
+         let outfs = Format.pp_get_formatter_out_functions original () in
+         let outfs =
+           { outfs with
+             out_string = (fun _ _ _ -> reset ());
+             out_flush = (fun _ -> reset ());
+             out_newline = (fun _ -> reset ());
+             out_spaces = (fun _ -> reset ());
+             out_indent = (fun _ -> reset ());
+           } [@@warning "-useless-record-with"]
+         (* Field "out_width" only exists since ocaml 5.4 so we get
+            this warning with older versions. That function is
+            supposed to be pure returning int so is fine to leave as
+            original in ocaml >= 5.4. *)
+         in
+         Format.(formatter_of_out_functions outfs) in
        if not !Flags.quiet || !Flags.test_mode then begin
          Topfmt.std_ft := ignore_one_formatter !Topfmt.std_ft;
          raise exn
