@@ -60,6 +60,8 @@
  (modules ("tactician") coq_shim)
  (libraries
    unix
+   cmdliner
+   rresult
    opam-client
    dune-site
    bos
