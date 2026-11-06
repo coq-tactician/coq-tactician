@@ -733,10 +733,11 @@ module MakeMapper (M: MapDef) = struct
     m.glob_constr c' @@ function
      | GRef (r, l) ->
        let+ r = globref_map m r
-       and+ l = option_map (fun (qs,us) ->
+       and+ l = option_map (fun 
+          {qualities = qs;extensible_qualities;univlevels = us;extensible_univlevels} ->
            (* todo handle qualities *)
            let+ us = List.map (glob_level_map m) us in
-           qs, us)
+           {qualities = qs;extensible_qualities;univlevels = us;extensible_univlevels})
            l
        in
        GRef (r, l)
